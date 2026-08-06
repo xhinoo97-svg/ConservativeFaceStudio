@@ -8,7 +8,10 @@ from app.modules import discover_modules
 from app.restoration import (
     DeblurSettings,
     conservative_deblur,
+    conservative_fusion,
     conservative_upscale,
+    detect_occlusion_candidates,
+    identity_similarity_proxy,
     quality_enhance,
 )
 
@@ -34,6 +37,28 @@ def test_quality_enhance_preserves_shape() -> None:
     result = quality_enhance(image)
     assert result.shape == image.shape
     assert result.dtype == np.uint8
+
+
+def test_occlusion_candidates_returns_binary_mask() -> None:
+    mask = detect_occlusion_candidates(sample_image())
+    assert mask.shape == (96, 96)
+    assert mask.dtype == np.uint8
+    assert set(np.unique(mask)).issubset({0, 255})
+
+
+def test_conservative_fusion_uses_only_masked_reference_pixels() -> None:
+    base = np.zeros((8, 8, 3), dtype=np.uint8)
+    reference = np.full((8, 8, 3), 200, dtype=np.uint8)
+    mask = np.zeros((8, 8), dtype=np.uint8)
+    mask[2:6, 2:6] = 255
+    fused = conservative_fusion(base, reference, mask)
+    assert np.all(fused[:2] == 0)
+    assert np.all(fused[2:6, 2:6] == 200)
+
+
+def test_identity_proxy_is_maximal_for_same_image() -> None:
+    image = sample_image()
+    assert identity_similarity_proxy(image, image) == pytest.approx(1.0)
 
 
 def test_conservative_upscale_doubles_dimensions() -> None:
