@@ -31,11 +31,17 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
-      - name: Verify imports
-        run: python -c "import app; import cv2; import numpy; import PySide6; import app.project"
+      - name: Verify imports and model manifests
+        shell: pwsh
+        run: |
+          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; from app.model_registry import OFFICIAL_MODELS, validate_manifest; [validate_manifest(m) for m in OFFICIAL_MODELS]"
 
       - name: Run tests
         run: python -m pytest -q
+
+      - name: Export model registry
+        shell: pwsh
+        run: python -c "from app.model_registry import export_registry; export_registry('models/model-registry.json')"
 
       - name: Build Windows executable
         shell: pwsh
@@ -48,6 +54,9 @@ jobs:
           foreach ($dir in @('models','exports','projects')) {
             if (!(Test-Path "dist\ConservativeFaceStudio\$dir")) { throw "$dir directory missing" }
           }
+          if (!(Test-Path "dist\ConservativeFaceStudio\models\model-registry.json")) { throw "Model registry missing" }
+          $registry = Get-Content "dist\ConservativeFaceStudio\models\model-registry.json" -Raw | ConvertFrom-Json
+          if ($registry.Count -lt 4) { throw "Model registry incomplete" }
           $exe = Get-Item "dist\ConservativeFaceStudio\ConservativeFaceStudio.exe"
           if ($exe.Length -lt 1MB) { throw "Executable unexpectedly small" }
 
