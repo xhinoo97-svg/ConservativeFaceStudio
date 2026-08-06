@@ -38,6 +38,7 @@ class PipelineState:
     accepted: set[str] = field(default_factory=set)
     skipped: set[str] = field(default_factory=set)
     history: list[str] = field(default_factory=list)
+    redo_stack: list[tuple[str, str, int]] = field(default_factory=list)
 
     @property
     def current(self) -> BlockSpec:
@@ -52,6 +53,7 @@ class PipelineState:
         self.accepted.add(key)
         self.skipped.discard(key)
         self.history.append(key)
+        self.redo_stack.clear()
 
     def skip_current(self) -> None:
         if not self.current.optional:
@@ -60,6 +62,7 @@ class PipelineState:
         self.skipped.add(key)
         self.accepted.discard(key)
         self.history.append(key)
+        self.redo_stack.clear()
 
     def advance(self) -> BlockSpec:
         key = self.current.key
@@ -74,11 +77,49 @@ class PipelineState:
             self.current_index -= 1
         return self.current
 
+    def undo_last_decision(self) -> BlockSpec:
+        if not self.history:
+            raise RuntimeError("Nessuna decisione da annullare")
+        key = self.history.pop()
+        index = next(index for index, block in enumerate(self.blocks) if block.key == key)
+        if key in self.accepted:
+            decision = "accepted"
+            self.accepted.remove(key)
+        elif key in self.skipped:
+            decision = "skipped"
+            self.skipped.remove(key)
+        else:
+            raise RuntimeError(f"Cronologia incoerente per il blocco: {key}")
+        self.redo_stack.append((key, decision, self.current_index))
+        self.current_index = index
+        return self.current
+
+    def redo_last_decision(self) -> BlockSpec:
+        if not self.redo_stack:
+            raise RuntimeError("Nessuna decisione da ripristinare")
+        key, decision, previous_index = self.redo_stack.pop()
+        index = next(index for index, block in enumerate(self.blocks) if block.key == key)
+        self.current_index = index
+        if decision == "accepted":
+            self.accepted.add(key)
+            self.skipped.discard(key)
+        elif decision == "skipped":
+            if not self.current.optional:
+                raise RuntimeError(f"Decisione di salto non valida per: {key}")
+            self.skipped.add(key)
+            self.accepted.discard(key)
+        else:
+            raise RuntimeError(f"Decisione sconosciuta: {decision}")
+        self.history.append(key)
+        self.current_index = min(previous_index, len(self.blocks) - 1)
+        return self.current
+
     def reset_from_current(self) -> None:
         later = {block.key for block in self.blocks[self.current_index :]}
         self.accepted.difference_update(later)
         self.skipped.difference_update(later)
         self.history = [key for key in self.history if key not in later]
+        self.redo_stack.clear()
 
 
 def default_pipeline() -> tuple[BlockSpec, ...]:
