@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+import pytest
 
 from app.modules import discover_modules
-from app.restoration import DeblurSettings, conservative_deblur, quality_enhance
+from app.restoration import (
+    DeblurSettings,
+    conservative_deblur,
+    conservative_upscale,
+    quality_enhance,
+)
 
 
 def sample_image() -> np.ndarray:
@@ -28,6 +34,18 @@ def test_quality_enhance_preserves_shape() -> None:
     result = quality_enhance(image)
     assert result.shape == image.shape
     assert result.dtype == np.uint8
+
+
+def test_conservative_upscale_doubles_dimensions() -> None:
+    image = sample_image()
+    result = conservative_upscale(image, 2)
+    assert result.shape == (192, 192, 3)
+    assert result.dtype == np.uint8
+
+
+def test_conservative_upscale_rejects_invalid_scale() -> None:
+    with pytest.raises(ValueError):
+        conservative_upscale(sample_image(), 5)
 
 
 def test_png_export_roundtrip(tmp_path) -> None:
