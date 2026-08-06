@@ -63,3 +63,45 @@ def test_reset_from_current_discards_later_results() -> None:
     state.reset_from_current()
     assert state.accepted == {"import"}
     assert state.history == ["import"]
+    assert state.redo_stack == []
+
+
+def test_undo_and_redo_accepted_decision() -> None:
+    state = PipelineState(default_pipeline())
+    state.accept_current()
+    state.advance()
+    current = state.undo_last_decision()
+    assert current.key == "import"
+    assert "import" not in state.accepted
+    restored = state.redo_last_decision()
+    assert restored.key == "deblur"
+    assert "import" in state.accepted
+    assert state.history == ["import"]
+
+
+def test_undo_and_redo_skipped_optional_decision() -> None:
+    blocks = default_pipeline()
+    index = next(index for index, block in enumerate(blocks) if block.key == "inpaint")
+    state = PipelineState(blocks, current_index=index)
+    state.skip_current()
+    state.advance()
+    state.undo_last_decision()
+    assert state.current.key == "inpaint"
+    assert "inpaint" not in state.skipped
+    state.redo_last_decision()
+    assert state.current.key == "fusion"
+    assert "inpaint" in state.skipped
+
+
+def test_new_decision_clears_redo_stack() -> None:
+    state = PipelineState(default_pipeline())
+    state.accept_current()
+    state.undo_last_decision()
+    assert state.redo_stack
+    state.accept_current()
+    assert state.redo_stack == []
+
+
+def test_undo_without_history_fails() -> None:
+    with pytest.raises(RuntimeError):
+        PipelineState(default_pipeline()).undo_last_decision()
