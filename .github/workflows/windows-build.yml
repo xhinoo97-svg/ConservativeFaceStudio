@@ -10,7 +10,7 @@ on:
 jobs:
   test-and-build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       PYTHONPATH: ${{ github.workspace }}
       QT_QPA_PLATFORM: offscreen
@@ -32,7 +32,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
 
       - name: Verify imports
-        run: python -c "import app; import cv2; import numpy; import PySide6"
+        run: python -c "import app; import cv2; import numpy; import PySide6; import app.project"
 
       - name: Run tests
         run: python -m pytest -q
@@ -41,21 +41,36 @@ jobs:
         shell: pwsh
         run: .\scripts\build_windows.ps1
 
-      - name: Smoke test package
+      - name: Smoke test portable package
         shell: pwsh
         run: |
           if (!(Test-Path "dist\ConservativeFaceStudio\ConservativeFaceStudio.exe")) { throw "Executable missing" }
-          if (!(Test-Path "dist\ConservativeFaceStudio\models")) { throw "Models directory missing" }
-          if (!(Test-Path "dist\ConservativeFaceStudio\exports")) { throw "Exports directory missing" }
-          if (!(Test-Path "dist\ConservativeFaceStudio\projects")) { throw "Projects directory missing" }
+          foreach ($dir in @('models','exports','projects')) {
+            if (!(Test-Path "dist\ConservativeFaceStudio\$dir")) { throw "$dir directory missing" }
+          }
+          $exe = Get-Item "dist\ConservativeFaceStudio\ConservativeFaceStudio.exe"
+          if ($exe.Length -lt 1MB) { throw "Executable unexpectedly small" }
 
       - name: Create portable ZIP
         shell: pwsh
         run: Compress-Archive -Path dist\ConservativeFaceStudio\* -DestinationPath ConservativeFaceStudio-Windows-x64.zip -Force
 
-      - name: Upload portable package
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\ConservativeFaceStudio.iss"
+          if (!(Test-Path "dist-installer\ConservativeFaceStudio-Setup-x64.exe")) { throw "Installer missing" }
+          if ((Get-Item "dist-installer\ConservativeFaceStudio-Setup-x64.exe").Length -lt 1MB) { throw "Installer unexpectedly small" }
+
+      - name: Upload Windows packages
         uses: actions/upload-artifact@v4
         with:
           name: ConservativeFaceStudio-Windows-x64
-          path: ConservativeFaceStudio-Windows-x64.zip
+          path: |
+            ConservativeFaceStudio-Windows-x64.zip
+            dist-installer/ConservativeFaceStudio-Setup-x64.exe
           retention-days: 14
