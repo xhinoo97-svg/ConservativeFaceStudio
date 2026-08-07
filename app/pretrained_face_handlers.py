@@ -84,6 +84,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "primary_bbox": primary.bbox,
                     "primary_landmark_confidence": primary.score,
                     "reference_landmarks5": [None if item is None else item.landmarks5 for item in refs],
+                    "reference_bboxes": [None if item is None else item.bbox for item in refs],
                     "reference_landmark_confidence": [0.0 if item is None else item.score for item in refs],
                     "reference_identity_scores": identity_scores,
                     "reference_identity_verified": identity_verified,
@@ -105,6 +106,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "reference_faces": int(sum(item is not None for item in refs)),
                     "reference_identity_scores": identity_scores,
                     "reference_identity_verified": int(sum(identity_verified)),
+                    "reference_bbox_count": int(sum(item is not None for item in executor.workspace.metadata["reference_bboxes"])),
                     "sface_reference_threshold": FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
                 },
             )
