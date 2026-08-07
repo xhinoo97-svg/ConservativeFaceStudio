@@ -35,7 +35,13 @@ class ProductionModelBootstrap:
         return "head_pose_mobilenetv2_onnx" in self.paths
 
     @property
+    def inpaint_ready(self) -> bool:
+        return "opencv_lama_inpaint" in self.paths
+
+    @property
     def standard_ready(self) -> bool:
+        # "standard" means all strict/non-generative production models are present.
+        # LaMa is intentionally excluded because it is a generated-pixel fallback.
         return self.deblur_ready and self.semantic_ready and self.pose_ready
 
 
@@ -45,11 +51,11 @@ def ensure_production_pretrained_models(
     face_timeout_seconds: int = 15,
     restoration_timeout_seconds: int = 90,
 ) -> ProductionModelBootstrap:
-    """Ensure the verified non-generative pretrained production pack.
+    """Ensure verified pretrained production models.
 
-    Models are downloaded sequentially and checked by SHA-256. Network/model
-    failures remain non-fatal so the conservative deterministic fallbacks still
-    work offline. No training or fine-tuning occurs on the user's computer.
+    Downloads are sequential and SHA-256 checked. The normal strict path remains
+    usable when a model cannot be downloaded. LaMa may be present, but is never
+    treated as a conservative source of truth.
     """
     target_root = Path(root).resolve() if root is not None else models_root().resolve()
     core = ensure_core_pretrained_models(target_root, timeout_seconds=face_timeout_seconds)
