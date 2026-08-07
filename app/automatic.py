@@ -9,6 +9,7 @@ import numpy as np
 from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.pipeline import BlockKind
 from app.pretrained_face_handlers import install_pretrained_face_handlers
+from app.pretrained_inpaint_handler import install_verified_inpainting_handler
 from app.pretrained_restoration_handlers import install_pretrained_restoration_handlers
 from app.pretrained_semantic_handlers import install_pretrained_semantic_handlers
 from app.pretrained_values import RESTORATION_SAFETY_DEFAULTS
@@ -34,6 +35,7 @@ class AutomaticPipelineRunner:
             install_pretrained_face_handlers(self.executor, core_paths)
             install_pretrained_restoration_handlers(self.executor, core_paths)
             install_pretrained_semantic_handlers(self.executor, core_paths)
+            install_verified_inpainting_handler(self.executor, core_paths)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
@@ -46,6 +48,7 @@ class AutomaticPipelineRunner:
         if block.kind in {BlockKind.IMPORT, BlockKind.EXPORT, BlockKind.IDENTITY_CHECK}:
             return result
         anchors = list(self.executor.workspace.references) or [self._original_anchor]
+        identity_backend = self.executor.workspace.metadata.get("_identity_backend")
         decision = evaluate_identity_guardrail(
             before,
             result.image,
@@ -53,6 +56,7 @@ class AutomaticPipelineRunner:
             max_drop=RESTORATION_SAFETY_DEFAULTS.identity_max_drop,
             absolute_minimum=0.20,
             minimum_retention=RESTORATION_SAFETY_DEFAULTS.identity_minimum_retention,
+            backend=identity_backend,
         )
         details = dict(result.details)
         details["identity_guardrail"] = {
@@ -89,7 +93,7 @@ class AutomaticPipelineRunner:
             })
         return ExecutionResult(result.block, restored, details)
 
-    def run(self, output: str | Path, *, deblur: dict[str, Any] | None = None, upscale: int = 2, identity_minimum: float = 0.35) -> AutomaticRunResult:
+    def run(self, output: str | Path, *, deblur: dict[str, Any] | None = None, upscale: int = 2, identity_minimum: float = 0.363) -> AutomaticRunResult:
         output_path = Path(output)
         blocks = self.executor.pipeline.blocks
         results: list[ExecutionResult] = []
@@ -105,6 +109,13 @@ class AutomaticPipelineRunner:
             parameters: dict[str, Any] = {}
             if block.kind is BlockKind.DEBLUR:
                 parameters.update(deblur or {})
+            elif block.kind is BlockKind.INPAINT:
+                # Strict observed-reference transfer is always attempted. The verified
+                # LaMa checkpoint is allowed only for very small residual non-critical
+                # areas and remains fully marked in provenance.
+                parameters["allow_verified_generative"] = True
+                parameters["maximum_generated_face_fraction"] = 0.015
+                parameters["maximum_generated_target_fraction"] = 0.25
             elif block.kind is BlockKind.UPSCALE:
                 parameters["scale"] = upscale
             elif block.kind is BlockKind.IDENTITY_CHECK:
