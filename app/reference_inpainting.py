@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import cv2
@@ -23,6 +24,7 @@ class VerifiedReferenceRepairResult:
     context_scores: tuple[float, ...]
     agreement_rejected_pixels: int
     photometric_offsets_lab: tuple[tuple[float, float, float], ...] = ()
+    photometric_offsets_bgr: tuple[tuple[float, float, float], ...] = ()
 
 
 def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
@@ -161,28 +163,41 @@ def _match_local_photometry(
     reference_mask: np.ndarray,
     *,
     minimum_pixels: int = 64,
-    max_l_offset: float = 18.0,
-    max_chroma_offset: float = 8.0,
-) -> tuple[np.ndarray, tuple[float, float, float]]:
-    """Match local illumination without inventing structure.
+    max_channel_offset: float = 20.0,
+    max_l_offset: float = 22.0,
+    max_chroma_offset: float = 10.0,
+) -> tuple[np.ndarray, tuple[float, float, float], tuple[float, float, float]]:
+    """Remove local exposure/white-balance seams without changing facial structure.
 
-    A single robust LAB offset is estimated only from visible context around the
-    requested repair. The offset is deliberately clamped: it can remove a visible
-    exposure/white-balance seam but cannot reshape, sharpen or synthesize facial detail.
+    The estimate is taken only from visible context surrounding the requested repair.
+    The actual correction is a robust, clamped per-channel BGR translation. A direct
+    BGR translation is intentionally preferred over adding an offset in encoded 8-bit
+    LAB: the LAB round-trip is nonlinear and can amplify a small luminance correction
+    into a larger RGB error in dark/high-chroma facial pixels. LAB deltas are still
+    reported for audit/diagnostics. No gain, sharpening or spatial synthesis is used.
     """
     ring = (_context_ring(target_mask) > 0) & (reference_mask == 0)
     if int(np.count_nonzero(ring)) < int(minimum_pixels):
-        return reference.copy(), (0.0, 0.0, 0.0)
+        zero = (0.0, 0.0, 0.0)
+        return reference.copy(), zero, zero
+
+    base_bgr = primary.astype(np.float32)
+    ref_bgr = reference.astype(np.float32)
+    delta_bgr = np.median(base_bgr[ring] - ref_bgr[ring], axis=0).astype(np.float32)
+    delta_bgr = np.clip(delta_bgr, -float(max_channel_offset), float(max_channel_offset))
 
     base_lab = cv2.cvtColor(primary, cv2.COLOR_BGR2LAB).astype(np.float32)
     ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32)
-    delta = np.median(base_lab[ring] - ref_lab[ring], axis=0).astype(np.float32)
-    limits = np.asarray([max_l_offset, max_chroma_offset, max_chroma_offset], dtype=np.float32)
-    delta = np.clip(delta, -limits, limits)
+    delta_lab = np.median(base_lab[ring] - ref_lab[ring], axis=0).astype(np.float32)
+    lab_limits = np.asarray([max_l_offset, max_chroma_offset, max_chroma_offset], dtype=np.float32)
+    delta_lab = np.clip(delta_lab, -lab_limits, lab_limits)
 
-    adjusted_lab = np.clip(ref_lab + delta.reshape(1, 1, 3), 0.0, 255.0).astype(np.uint8)
-    adjusted = cv2.cvtColor(adjusted_lab, cv2.COLOR_LAB2BGR)
-    return adjusted, tuple(float(value) for value in delta.tolist())
+    adjusted = np.clip(ref_bgr + delta_bgr.reshape(1, 1, 3), 0.0, 255.0).astype(np.uint8)
+    return (
+        adjusted,
+        tuple(float(value) for value in delta_lab.tolist()),
+        tuple(float(value) for value in delta_bgr.tolist()),
+    )
 
 
 def _agreement_mask(
@@ -228,7 +243,8 @@ def _agreement_mask(
     values[~valid[..., None].repeat(3, axis=3)] = np.nan
     grad_values[~valid] = np.nan
 
-    with np.errstate(invalid="ignore"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
         median_lab = np.nanmedian(values, axis=0)
         lab_delta = np.mean(np.abs(values - median_lab[None, ...]), axis=3)
         lab_disagreement = np.nanmedian(lab_delta, axis=0)
@@ -281,7 +297,8 @@ def verified_reference_repair(
     original_indices: list[int] = []
     local_shifts: list[tuple[int, int]] = []
     context_scores: list[float] = []
-    photometric_offsets: list[tuple[float, float, float]] = []
+    photometric_offsets_lab: list[tuple[float, float, float]] = []
+    photometric_offsets_bgr: list[tuple[float, float, float]] = []
 
     for index, (reference, mask) in enumerate(zip(references, masks)):
         if reference.shape != primary.shape:
@@ -300,13 +317,19 @@ def verified_reference_repair(
         if context < minimum_context_score and np.count_nonzero(target) > 0:
             continue
         shifted, shifted_mask = _shift_reference(reference, mask, dx, dy)
-        normalized, offset = _match_local_photometry(primary, shifted, target, shifted_mask)
+        normalized, offset_lab, offset_bgr = _match_local_photometry(
+            primary,
+            shifted,
+            target,
+            shifted_mask,
+        )
         accepted_refs.append(normalized)
         accepted_masks.append(shifted_mask)
         original_indices.append(index)
         local_shifts.append((dx, dy))
         context_scores.append(context)
-        photometric_offsets.append(offset)
+        photometric_offsets_lab.append(offset_lab)
+        photometric_offsets_bgr.append(offset_bgr)
 
     requested = int(np.count_nonzero(target))
     if not accepted_refs or requested == 0:
@@ -324,7 +347,8 @@ def verified_reference_repair(
             tuple(local_shifts),
             tuple(context_scores),
             0,
-            tuple(photometric_offsets),
+            tuple(photometric_offsets_lab),
+            tuple(photometric_offsets_bgr),
         )
 
     agreed_target = _agreement_mask(
@@ -365,5 +389,6 @@ def verified_reference_repair(
         tuple(local_shifts),
         tuple(context_scores),
         agreement_rejected,
-        tuple(photometric_offsets),
+        tuple(photometric_offsets_lab),
+        tuple(photometric_offsets_bgr),
     )
