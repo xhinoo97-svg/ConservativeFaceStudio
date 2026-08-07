@@ -9,6 +9,7 @@ import numpy as np
 from app.execution import ExecutionResult
 from app.opencv_nafnet import NafNetDeblurEngine
 from app.pipeline import BlockKind, BlockSpec
+from app.pretrained_values import RESTORATION_SAFETY_DEFAULTS
 
 
 def _hardware_settings(workspace) -> tuple[str, int]:
@@ -41,12 +42,23 @@ def install_pretrained_restoration_handlers(executor, model_paths: dict[str, str
     def engine_for(requested_target: str) -> NafNetDeblurEngine:
         engine = engines.get(requested_target)
         if engine is None:
-            engine = NafNetDeblurEngine(model_path, target=requested_target, tile_size=tile_size)
+            engine = NafNetDeblurEngine(
+                model_path,
+                target=requested_target,
+                tile_size=tile_size,
+                overlap=RESTORATION_SAFETY_DEFAULTS.tile_overlap,
+            )
             engines[requested_target] = engine
         return engine
 
     def handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        strength = float(np.clip(parameters.get("pretrained_strength", 0.60), 0.0, 1.0))
+        strength = float(
+            np.clip(
+                parameters.get("pretrained_strength", RESTORATION_SAFETY_DEFAULTS.nafnet_observed_blend),
+                0.0,
+                1.0,
+            )
+        )
         requested_target = target
         try:
             learned = engine_for(requested_target).infer(executor.workspace.primary)
@@ -87,6 +99,7 @@ def install_pretrained_restoration_handlers(executor, model_paths: dict[str, str
                 "model": "deblurring_nafnet_2025may.onnx",
                 "backend": actual_target,
                 "tile_size": tile_size,
+                "tile_overlap": RESTORATION_SAFETY_DEFAULTS.tile_overlap,
                 "strength": strength,
                 "identity_guardrail_required": True,
             },
