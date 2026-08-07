@@ -25,7 +25,9 @@ if (!(Test-Path 'models/model-registry.json')) {
   python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-registry.json', all_model_manifests())"
 }
 
-Copy-Item 'models/README.md' "$package/models/README.md" -Force
-Copy-Item 'models/model-registry.json' "$package/models/model-registry.json" -Force
+# Ship the verified production checkpoints with the portable package/installer.
+# The application still keeps a writable per-user cache for future replacements,
+# but a first run must not depend on network availability.
+Copy-Item 'models/*' "$package/models" -Recurse -Force
 Copy-Item 'THIRD_PARTY_MODULES.md' "$package/THIRD_PARTY_MODULES.md" -Force
 Copy-Item 'README.md' "$package/README.md" -Force
