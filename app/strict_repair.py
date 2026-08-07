@@ -64,6 +64,13 @@ def face_support_mask(shape: tuple[int, int], bbox: tuple[int, int, int, int] | 
     return mask
 
 
+def _local_sharpness(image: np.ndarray) -> np.ndarray:
+    """Edge-energy locale normalizzata, usata solo per confermare blur relativo ai riferimenti."""
+    gray = cv2.cvtColor(_validate_bgr(image), cv2.COLOR_BGR2GRAY).astype(np.float32) / 255.0
+    laplacian = np.abs(cv2.Laplacian(gray, cv2.CV_32F))
+    return cv2.GaussianBlur(laplacian, (0, 0), 1.5)
+
+
 def reference_consensus_occlusion_mask(
     primary: np.ndarray,
     references: list[np.ndarray],
@@ -74,14 +81,20 @@ def reference_consensus_occlusion_mask(
     difference_threshold: float = 0.10,
     strong_difference_threshold: float = 0.20,
     agreement_threshold: float = 0.055,
+    blur_deficit_threshold: float = 0.035,
+    minimum_reference_sharpness: float = 0.020,
+    sharpness_agreement_threshold: float = 0.020,
     maximum_fraction: float = 0.25,
 ) -> np.ndarray:
     """Trova coperture solo quando foto reali allineate supportano la correzione.
 
     Con un solo riferimento richiede anche la maschera euristica. Con almeno due
     riferimenti accetta differenze forti soltanto quando i riferimenti concordano.
-    Se l'area candidata è troppo grande, il metodo si astiene anziché modificare
-    una porzione estesa del volto.
+    Rileva inoltre blur locale della primaria quando almeno due riferimenti concordano
+    su struttura nitida nella stessa zona. Questo evita di trattare un semplice volto
+    morbido come occlusione: il deficit deve essere relativo a fotografie della stessa
+    persona, localmente allineate e non mascherate. Se l'area candidata e troppo grande,
+    il metodo si astiene anziche modificare una porzione estesa del volto.
     """
     base = _validate_bgr(primary)
     if not references:
@@ -126,6 +139,36 @@ def reference_consensus_occlusion_mask(
             (hint & (primary_difference >= difference_threshold))
             | (primary_difference >= strong_difference_threshold)
         )
+
+        base_sharpness = _local_sharpness(base)
+        sharp_stack = np.stack([_local_sharpness(item) for item in references], axis=0)
+        sharp_values = sharp_stack.copy()
+        sharp_values[~valid] = np.nan
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            median_sharpness = np.nanmedian(sharp_values, axis=0)
+            sharpness_mad = np.nanmedian(
+                np.abs(sharp_values - median_sharpness[None, ...]), axis=0
+            )
+        blur_seed = (
+            (valid_count >= 2)
+            & (median_sharpness >= float(minimum_reference_sharpness))
+            & ((median_sharpness - base_sharpness) >= float(blur_deficit_threshold))
+            & (sharpness_mad <= float(sharpness_agreement_threshold))
+        )
+        blur_mask = blur_seed.astype(np.uint8) * 255
+        if np.any(blur_seed):
+            blur_mask = cv2.morphologyEx(
+                blur_mask, cv2.MORPH_CLOSE, np.ones((5, 5), dtype=np.uint8)
+            )
+            blur_mask = cv2.dilate(
+                blur_mask, np.ones((5, 5), dtype=np.uint8), iterations=1
+            )
+            blur_mask = cv2.morphologyEx(
+                blur_mask, cv2.MORPH_CLOSE, np.ones((7, 7), dtype=np.uint8)
+            )
+        candidate |= blur_mask > 0
+
     candidate &= support & np.isfinite(primary_difference)
 
     support_pixels = max(1, int(np.count_nonzero(support)))
@@ -156,7 +199,7 @@ def repair_from_observed_references(
     *,
     feather_sigma: float = 1.2,
 ) -> ReferenceRepairResult:
-    """Ripara soltanto con pixel di fotografie reali già allineate; nessun inpainting generativo."""
+    """Ripara soltanto con pixel di fotografie reali gia allineate; nessun inpainting generativo."""
     base = _validate_bgr(primary)
     if not references:
         raise ValueError("Serve almeno una fotografia di riferimento")
@@ -232,7 +275,7 @@ def conservative_roll_normalize(
     left_eye, right_eye = points[0], points[1]
     raw_angle = float(np.degrees(np.arctan2(right_eye[1] - left_eye[1], right_eye[0] - left_eye[0])))
     if abs(raw_angle) < minimum_angle:
-        return PoseNormalizationResult(source.copy(), False, raw_angle, 1.0, 1.0, "roll già entro soglia")
+        return PoseNormalizationResult(source.copy(), False, raw_angle, 1.0, 1.0, "roll gia entro soglia")
     if abs(raw_angle) > maximum_angle:
         return PoseNormalizationResult(source.copy(), False, raw_angle, 1.0, 1.0, "roll troppo ampio per una correzione conservativa")
 

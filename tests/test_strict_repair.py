@@ -39,6 +39,41 @@ def test_reference_consensus_repairs_only_supported_occlusion() -> None:
     )
 
 
+def test_reference_consensus_detects_local_blur_supported_by_two_sharp_references() -> None:
+    clean = clean_face()
+    primary = clean.copy()
+    region = primary[42:90, 40:88].copy()
+    primary[42:90, 40:88] = cv2.GaussianBlur(region, (0, 0), 5.0)
+    no_hint = np.zeros((128, 128), dtype=np.uint8)
+
+    target = reference_consensus_occlusion_mask(
+        primary,
+        [clean, clean.copy()],
+        no_hint,
+        maximum_fraction=0.35,
+    )
+
+    assert np.count_nonzero(target) > 0
+    detected_inside = np.count_nonzero(target[42:90, 40:88])
+    detected_total = np.count_nonzero(target)
+    assert detected_inside / max(1, detected_total) >= 0.70
+    repaired = repair_from_observed_references(
+        primary, [clean, clean.copy()], target, feather_sigma=0
+    )
+    before_error = np.mean(np.abs(primary.astype(np.int16) - clean.astype(np.int16)))
+    after_error = np.mean(np.abs(repaired.image.astype(np.int16) - clean.astype(np.int16)))
+    assert after_error < before_error
+
+
+def test_reference_consensus_does_not_mark_clean_face_as_blurred() -> None:
+    clean = clean_face()
+    no_hint = np.zeros((128, 128), dtype=np.uint8)
+    target = reference_consensus_occlusion_mask(
+        clean, [clean.copy(), clean.copy()], no_hint
+    )
+    assert np.count_nonzero(target) == 0
+
+
 def test_reference_consensus_abstains_when_references_disagree() -> None:
     clean = clean_face()
     primary = clean.copy()
