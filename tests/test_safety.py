@@ -46,6 +46,6 @@ def test_rejects_new_clipping() -> None:
     before = image(128)
     after = before.copy()
     after[:32] = 255
-    result = assess_transition(before, after)
+    result = assess_transition(before, after, max_luma_shift=255.0)
     assert not result.safe
     assert "clipping" in result.reason
