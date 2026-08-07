@@ -3,7 +3,11 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from app.frontalization import conservative_mild_frontal_affine, warp_auxiliary_map
+from app.frontalization import (
+    conservative_mild_frontal_affine,
+    select_more_frontal_reference,
+    warp_auxiliary_map,
+)
 
 
 def _face() -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]]:
@@ -61,3 +65,43 @@ def test_auxiliary_map_changes_only_where_image_transform_is_active() -> None:
     warped = warp_auxiliary_map(provenance, result.matrix, result.changed_mask)
     assert warped.dtype == provenance.dtype
     assert np.array_equal(warped[result.changed_mask == 0], provenance[result.changed_mask == 0])
+
+
+def test_reference_evidence_selects_verified_more_frontal_photo() -> None:
+    evidence = select_more_frontal_reference(
+        (3.0, 9.0, 1.0),
+        [(2.0, 7.0, 1.0), (0.8, 1.5, 0.5), (1.0, 0.8, 0.2)],
+        identity_scores=[0.81, 0.76, 0.72],
+        identity_verification_available=True,
+        identity_threshold=0.363,
+    )
+    assert evidence.accepted
+    assert evidence.selected_index == 2
+    assert evidence.reference_frontalness is not None
+    assert evidence.reference_frontalness < evidence.primary_frontalness
+    assert evidence.gain >= 1.5
+
+
+def test_reference_evidence_rejects_frontal_wrong_identity() -> None:
+    evidence = select_more_frontal_reference(
+        (2.0, 8.0, 0.5),
+        [(0.2, 0.4, 0.1), (1.0, 6.5, 0.5)],
+        identity_scores=[0.12, 0.80],
+        identity_verification_available=True,
+        identity_threshold=0.363,
+    )
+    assert evidence.accepted
+    assert evidence.selected_index == 1
+    assert evidence.selected_pose != (0.2, 0.4, 0.1)
+
+
+def test_reference_evidence_abstains_when_no_meaningful_pose_gain() -> None:
+    evidence = select_more_frontal_reference(
+        (1.0, 3.0, 0.5),
+        [(0.8, 2.8, 0.4), (1.0, 3.1, 0.2)],
+        identity_scores=[0.8, 0.8],
+        identity_verification_available=True,
+        minimum_gain=1.5,
+    )
+    assert not evidence.accepted
+    assert evidence.gain < 1.5
