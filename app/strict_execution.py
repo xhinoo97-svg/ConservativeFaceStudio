@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any
 
 import numpy as np
 
 from app.execution import BlockExecutionError, BlockExecutor, ExecutionResult
 from app.pipeline import BlockKind, BlockSpec
+from app.reference_memory import specific_reference_memory_fusion
 from app.restoration import detect_occlusion_candidates
 from app.strict_repair import (
     conservative_roll_normalize,
@@ -21,6 +23,7 @@ class StrictBlockExecutor(BlockExecutor):
     def __init__(self, workspace, *, history_limit: int = 12) -> None:
         super().__init__(workspace, history_limit=history_limit)
         self._handlers[BlockKind.OCCLUSION_MASK] = self._strict_occlusion
+        self._handlers[BlockKind.REGION_SELECT] = self._specific_memory_select
         self._handlers[BlockKind.INPAINT] = self._reference_repair
         self._handlers[BlockKind.FRONTALIZE] = self._pose_normalize
 
@@ -49,6 +52,52 @@ class StrictBlockExecutor(BlockExecutor):
             "consensus_pixels": int(np.count_nonzero(consensus)),
         })
         return ExecutionResult(block.key, base.image, details)
+
+    def _specific_memory_select(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        if not self.workspace.aligned_references:
+            raise BlockExecutionError("Nessun riferimento allineato disponibile per la memoria specifica")
+        landmarks = self.workspace.metadata.get("primary_landmarks5")
+        bbox = self.workspace.metadata.get("primary_bbox")
+        if landmarks is None or bbox is None:
+            fallback = super()._region_select(block, p)
+            details = dict(fallback.details)
+            details["memory_fallback"] = "landmark o bbox non disponibili"
+            return ExecutionResult(block.key, fallback.image, details)
+
+        images = [self.workspace.primary, *self.workspace.aligned_references]
+        masks = self.workspace.occlusion_masks or [
+            np.zeros(image.shape[:2], dtype=np.uint8) for image in images
+        ]
+        if len(masks) != len(images):
+            raise BlockExecutionError("Numero di maschere non compatibile con la memoria specifica")
+
+        memory = specific_reference_memory_fusion(
+            images,
+            masks,
+            landmarks,
+            tuple(int(v) for v in bbox),
+            top_k=int(p.get("top_k", 2)),
+            minimum_region_confidence=float(p.get("minimum_region_confidence", 0.64)),
+            minimum_quality_gain=float(p.get("minimum_quality_gain", 0.03)),
+            maximum_replace_fraction=float(p.get("maximum_replace_fraction", 0.35)),
+            agreement_colour_threshold=float(p.get("agreement_colour_threshold", 22.0)),
+        )
+        self.workspace.provenance_map = memory.provenance_map.copy()
+        self.workspace.metadata["specific_reference_confidence"] = memory.confidence_map.copy()
+        summary = [asdict(item) for item in memory.decisions]
+        self.workspace.metadata["specific_reference_memory"] = summary
+        return ExecutionResult(block.key, memory.image, {
+            "engine": "dmd-inspired-specific-memory",
+            "conservative": True,
+            "generic_dictionary_used": False,
+            "reference_count": len(self.workspace.aligned_references),
+            "top_k": int(p.get("top_k", 2)),
+            "transferred_pixels": memory.transferred_pixels,
+            "source_pixel_counts": np.bincount(
+                memory.provenance_map.ravel(), minlength=len(images)
+            ).tolist(),
+            "regions": summary,
+        })
 
     def _reference_repair(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         if not self.workspace.aligned_references:
