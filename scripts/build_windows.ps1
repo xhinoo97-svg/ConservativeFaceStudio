@@ -6,6 +6,7 @@ python -m PyInstaller `
   --windowed `
   --name ConservativeFaceStudio `
   --hidden-import cv2 `
+  --hidden-import onnxruntime `
   --hidden-import app.model_registry `
   --hidden-import app.standard_pretrained `
   --hidden-import app.opencv_nafnet `
