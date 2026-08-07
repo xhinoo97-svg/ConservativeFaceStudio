@@ -108,13 +108,27 @@ jobs:
           if (!(Test-Path "dist-installer\ConservativeFaceStudio-Setup-x64.exe")) { throw "Installer missing" }
           if ((Get-Item "dist-installer\ConservativeFaceStudio-Setup-x64.exe").Length -lt 1MB) { throw "Installer unexpectedly small" }
 
-      - name: Upload Windows packages
+      - name: Upload one-click Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: ConservativeFaceStudio-Windows-x64
+          name: ConservativeFaceStudio-Setup-Windows-x64
+          path: dist-installer/ConservativeFaceStudio-Setup-x64.exe
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload portable Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConservativeFaceStudio-Portable-Windows-x64
+          path: ConservativeFaceStudio-Windows-x64.zip
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload validation reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConservativeFaceStudio-Validation
           path: |
-            ConservativeFaceStudio-Windows-x64.zip
-            dist-installer/ConservativeFaceStudio-Setup-x64.exe
             benchmark-windows-ci.json
             validation-report.json
           retention-days: 14
