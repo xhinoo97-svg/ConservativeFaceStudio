@@ -75,9 +75,17 @@ jobs:
         run: |
           python -c "from app.production_models import ensure_production_pretrained_models; b=ensure_production_pretrained_models('.', face_timeout_seconds=60, restoration_timeout_seconds=180); print({k:str(v) for k,v in b.paths.items()}); print(b.errors); assert b.face_ready and b.standard_ready and b.inpaint_ready, b.errors"
 
-      - name: Real production-model CPU smoke tests
+      - name: Real NAFNet CPU smoke test
         shell: pwsh
-        run: python scripts/smoke_production_models.py
+        run: python scripts/smoke_production_models.py --only nafnet
+
+      - name: Real face-parsing CPU smoke test
+        shell: pwsh
+        run: python scripts/smoke_production_models.py --only parsing
+
+      - name: Real head-pose CPU smoke test
+        shell: pwsh
+        run: python scripts/smoke_production_models.py --only headpose
 
       - name: Real LaMa ONNX Runtime smoke test
         shell: pwsh
