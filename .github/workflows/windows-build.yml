@@ -35,10 +35,14 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q app tests
-          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; from app.model_registry import OFFICIAL_MODELS, validate_manifest; [validate_manifest(m) for m in OFFICIAL_MODELS]"
+          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; from app.model_registry import OFFICIAL_MODELS, validate_manifest; [validate_manifest(m) for m in OFFICIAL_MODELS]"
 
       - name: Run tests
         run: python -m pytest -q
+
+      - name: CPU smoke benchmark
+        shell: pwsh
+        run: python -m app.benchmark --width 768 --height 512 --output benchmark-windows-ci.json
 
       - name: Export model registry
         shell: pwsh
@@ -83,4 +87,5 @@ jobs:
           path: |
             ConservativeFaceStudio-Windows-x64.zip
             dist-installer/ConservativeFaceStudio-Setup-x64.exe
+            benchmark-windows-ci.json
           retention-days: 14
