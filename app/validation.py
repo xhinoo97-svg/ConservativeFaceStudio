@@ -22,28 +22,42 @@ class GuardrailDecision:
     minimum_retention: float = 0.95
 
 
-def _embedding_score(image: np.ndarray, anchors: Iterable[np.ndarray]) -> tuple[float, str] | None:
+def _embedding_score(
+    image: np.ndarray,
+    anchors: Iterable[np.ndarray],
+    *,
+    backend: object | None = None,
+) -> tuple[float, str] | None:
     try:
-        backend = choose_backend(prefer_embeddings=True)
-        analysed = backend.analyze(image)
+        analyser = backend if backend is not None else choose_backend(prefer_embeddings=True)
+        analysed = analyser.analyze(image)
         if analysed.embedding is None:
             return None
         scores: list[float] = []
         for anchor in anchors:
-            other = backend.analyze(anchor)
+            other = analyser.analyze(anchor)
             if other.embedding is not None:
                 scores.append(cosine_similarity(analysed.embedding, other.embedding))
         if scores:
-            return max(scores), backend.name
+            name = getattr(analyser, "name", None)
+            if name is None:
+                target = getattr(analyser, "target_name", "cpu")
+                name = f"opencv-zoo-sface-{target}"
+            return max(scores), str(name)
     except Exception:
         return None
     return None
 
 
-def identity_anchor_score(image: np.ndarray, anchors: list[np.ndarray]) -> tuple[float, str]:
+def identity_anchor_score(
+    image: np.ndarray,
+    anchors: list[np.ndarray],
+    *,
+    backend: object | None = None,
+) -> tuple[float, str]:
     if not anchors:
         return 1.0, "no-anchor"
-    embedded = _embedding_score(image, anchors)
+    embedded = _embedding_score(image, anchors, backend=backend)
     if embedded is not None:
         return embedded
     return max(identity_similarity_proxy(image, anchor) for anchor in anchors), "lab-histogram-proxy"
@@ -99,19 +113,18 @@ def evaluate_identity_guardrail(
     max_drop: float = 0.12,
     absolute_minimum: float = 0.25,
     minimum_retention: float = 0.95,
+    backend: object | None = None,
 ) -> GuardrailDecision:
     """Rifiuta trasformazioni che riducono troppo la coerenza con fotografie osservate.
 
-    ``minimum_retention`` confronta il candidato con il punteggio del blocco precedente:
-    0.95 significa che, quando il punteggio precedente e' sopra la soglia affidabile,
-    il candidato deve conservarne almeno il 95%. Non e' una percentuale assoluta di
-    identita', ma un guardrail relativo utile contro regressioni cumulative.
+    ``backend`` permette alla pipeline di riusare il modello SFace già caricato invece
+    di tentare un secondo backend o ricadere silenziosamente sul proxy LAB.
     """
     if before is None or before.size == 0 or candidate is None or candidate.size == 0:
         raise ValueError("Immagini non valide per il guardrail")
     effective = list(anchors) if anchors else [before]
-    before_score, before_engine = identity_anchor_score(before, effective)
-    after_score, after_engine = identity_anchor_score(candidate, effective)
+    before_score, before_engine = identity_anchor_score(before, effective, backend=backend)
+    after_score, after_engine = identity_anchor_score(candidate, effective, backend=backend)
     engine = after_engine if after_engine != "no-anchor" else before_engine
     return evaluate_identity_scores(
         before_score,
