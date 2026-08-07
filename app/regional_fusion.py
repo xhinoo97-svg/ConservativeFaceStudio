@@ -83,7 +83,12 @@ def regional_reference_fusion(
     *,
     minimum_improvement: float = 0.06,
 ) -> tuple[np.ndarray, np.ndarray, tuple[RegionDecision, ...]]:
-    """Sostituisce regioni solo quando una foto osservata è misurabilmente migliore della primaria."""
+    """Sostituisce regioni solo quando una foto osservata è misurabilmente migliore della primaria.
+
+    Ogni pixel modificato resta confinato alla maschera semantica della regione. Il feathering
+    non può fuoriuscire dalla regione: questo mantiene la provenance esatta e preserva i pixel
+    osservati esterni, requisito fondamentale della modalità conservativa.
+    """
     if len(images) < 2:
         raise ValueError("Servono almeno una primaria e un riferimento")
     if len(images) != len(occlusion_masks):
@@ -108,6 +113,10 @@ def regional_reference_fusion(
         area = int(np.count_nonzero(region_mask))
         if best_index > 0 and improvement >= minimum_improvement and area > 0:
             feather = cv2.GaussianBlur(region_mask, (0, 0), 2.0).astype(np.float32) / 255.0
+            # Gaussian blur normally leaks beyond the binary region boundary. That used to
+            # alter pixels with provenance=0. Clamp alpha strictly to the semantic region so
+            # every changed pixel is attributable to the selected real reference.
+            feather[region_mask == 0] = 0.0
             alpha = feather[..., None]
             output = np.clip(
                 output.astype(np.float32) * (1.0 - alpha)
