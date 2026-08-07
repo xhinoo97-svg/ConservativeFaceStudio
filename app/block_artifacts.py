@@ -9,7 +9,7 @@ import zipfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import cv2
 import numpy as np
@@ -28,6 +28,16 @@ class BlockSnapshot:
     height: int
     details: dict[str, Any]
     timestamp_utc: str
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 class BlockArtifactArchive:
@@ -53,21 +63,56 @@ class BlockArtifactArchive:
         safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", block).strip("_") or "block"
         filename = f"{order:02d}_{safe}.png"
         height, width = image.shape[:2]
-        snapshot = BlockSnapshot(order, block, title, filename, hashlib.sha256(payload).hexdigest(), int(width), int(height), dict(details or {}), datetime.now(timezone.utc).isoformat())
+        snapshot = BlockSnapshot(
+            order=order,
+            block=block,
+            title=title,
+            filename=filename,
+            sha256=hashlib.sha256(payload).hexdigest(),
+            width=int(width),
+            height=int(height),
+            details=dict(details or {}),
+            timestamp_utc=datetime.now(timezone.utc).isoformat(),
+        )
         self._entries.append((snapshot, payload))
         return snapshot
 
-    def export_zip(self, destination: str | Path, *, project: ProjectDocument | None = None) -> Path:
+    def export_zip(
+        self,
+        destination: str | Path,
+        *,
+        project: ProjectDocument | None = None,
+        attachments: Iterable[str | Path] = (),
+    ) -> Path:
         target = Path(destination)
         if target.suffix.lower() != ".zip":
             target = target.with_suffix(target.suffix + ".zip" if target.suffix else ".zip")
         target.parent.mkdir(parents=True, exist_ok=True)
+
+        attachment_paths: list[Path] = []
+        seen: set[Path] = set()
+        for item in attachments:
+            path = Path(item)
+            if path in seen or not path.is_file():
+                continue
+            seen.add(path)
+            attachment_paths.append(path)
+
         manifest: dict[str, Any] = {
             "format": "ConservativeFaceStudio block archive",
-            "version": 1,
+            "version": 2,
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "snapshot_count": len(self._entries),
             "snapshots": [asdict(item[0]) for item in self._entries],
+            "attachments": [
+                {
+                    "filename": path.name,
+                    "archive_path": f"results/{path.name}",
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "size_bytes": path.stat().st_size,
+                }
+                for path in attachment_paths
+            ],
         }
         if project is not None:
             manifest["project"] = asdict(project)
@@ -79,7 +124,12 @@ class BlockArtifactArchive:
             with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
                 for snapshot, payload in self._entries:
                     archive.writestr(f"blocks/{snapshot.filename}", payload)
-                archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+                for path in attachment_paths:
+                    archive.write(path, arcname=f"results/{path.name}")
+                archive.writestr(
+                    "manifest.json",
+                    json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default),
+                )
             with zipfile.ZipFile(temp_path, "r") as archive:
                 bad = archive.testzip()
                 if bad is not None:
