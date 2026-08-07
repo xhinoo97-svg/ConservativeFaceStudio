@@ -9,7 +9,7 @@ import numpy as np
 @dataclass(frozen=True)
 class DeblurSettings:
     denoise: int = 5
-    sharpen: float = 1.0
+    sharpen: float = 0.2
     contrast: float = 1.0
     preserve_edges: bool = True
 
@@ -46,13 +46,16 @@ def conservative_deblur(image: np.ndarray, settings: DeblurSettings) -> np.ndarr
     return cv2.convertScaleAbs(sharpened, alpha=contrast, beta=0)
 
 
-def quality_enhance(image: np.ndarray, clip_limit: float = 1.7) -> np.ndarray:
-    """Migliora solo la luminanza con CLAHE per limitare deviazioni cromatiche."""
+def quality_enhance(image: np.ndarray, clip_limit: float = 1.7, blend: float = 0.2) -> np.ndarray:
+    """Migliora la luminanza con CLAHE attenuato per evitare sovra-contrasto e falsi dettagli."""
     source = _ensure_bgr(image)
     lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB)
     lightness, a_channel, b_channel = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=float(np.clip(clip_limit, 1.0, 3.0)), tileGridSize=(8, 8))
     enhanced_l = clahe.apply(lightness)
+    mix = float(np.clip(blend, 0.0, 1.0))
+    if mix < 1.0:
+        enhanced_l = cv2.addWeighted(lightness, 1.0 - mix, enhanced_l, mix, 0)
     merged = cv2.merge((enhanced_l, a_channel, b_channel))
     return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
 
