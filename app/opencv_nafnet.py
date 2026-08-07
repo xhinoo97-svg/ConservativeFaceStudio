@@ -9,19 +9,27 @@ import numpy as np
 class NafNetDeblurEngine:
     """Low-memory wrapper for the official OpenCV Zoo NAFNet ONNX model.
 
-    OpenCV DNN is kept for the optional OpenCL path.  On CPU we prefer ONNX Runtime,
-    because OpenCV 5's new graph engine can currently throw an opaque C++ exception
-    for this NAFNet graph on Windows.  If OpenCL inference fails, the same engine
-    falls back to ONNX Runtime CPU automatically.  Inference remains tiled so the
-    EliteBook-class target does not need to hold a full-resolution activation graph.
+    OpenCV DNN is kept for the optional OpenCL path. On CPU we prefer ONNX Runtime,
+    because OpenCV 5's graph engine can currently throw opaque C++ exceptions for
+    some NAFNet graphs on Windows. If OpenCL inference fails, the same engine falls
+    back to ONNX Runtime CPU automatically.
+
+    The published NAFNet graph is not reliable on very small spatial tensors because
+    its Simple Channel Attention path eventually performs aggressive spatial
+    reduction. Production inference therefore pads every tile to at least 384x384,
+    while still cropping the result back to the exact requested region. This also
+    keeps the real-model smoke test representative of the runtime used by the app.
     """
+
+    MIN_INFERENCE_SIZE = 384
+    STRIDE = 32
 
     def __init__(self, model_path: str | Path, *, target: str = "cpu", tile_size: int = 384, overlap: int = 32) -> None:
         path = Path(model_path).resolve()
         if not path.is_file():
             raise RuntimeError(f"NAFNet non trovato: {path}")
         self.model_path = path
-        self.tile_size = max(128, int(tile_size))
+        self.tile_size = max(self.MIN_INFERENCE_SIZE, int(tile_size))
         self.overlap = max(0, min(int(overlap), self.tile_size // 3))
         self.net = None
         self._ort_session = None
@@ -94,16 +102,23 @@ class NafNetDeblurEngine:
                 return np.asarray(self.net.forward())
             except cv2.error:
                 # Driver/OpenCV graph-engine incompatibility: do not lose the entire
-                # restoration pipeline.  Release the OpenCV network and retry on the
+                # restoration pipeline. Release the OpenCV network and retry on the
                 # deterministic CPU provider already shipped with the application.
                 self.net = None
                 self.target = "cpu-onnxruntime-fallback"
         return self._forward_ort(blob)
 
+    @classmethod
+    def _padded_extent(cls, value: int) -> int:
+        value = max(cls.MIN_INFERENCE_SIZE, int(value))
+        return ((value + cls.STRIDE - 1) // cls.STRIDE) * cls.STRIDE
+
     def _infer_tile(self, image: np.ndarray) -> np.ndarray:
         h, w = image.shape[:2]
-        pad_h = (32 - h % 32) % 32
-        pad_w = (32 - w % 32) % 32
+        target_h = self._padded_extent(h)
+        target_w = self._padded_extent(w)
+        pad_h = target_h - h
+        pad_w = target_w - w
         padded = cv2.copyMakeBorder(image, 0, pad_h, 0, pad_w, cv2.BORDER_REFLECT_101)
         blob = self._blob(padded)
         output = self._forward(blob)
