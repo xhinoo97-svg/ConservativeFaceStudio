@@ -10,6 +10,8 @@ from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.pipeline import BlockKind
 from app.pretrained_face_handlers import install_pretrained_face_handlers
 from app.pretrained_restoration_handlers import install_pretrained_restoration_handlers
+from app.pretrained_semantic_handlers import install_pretrained_semantic_handlers
+from app.pretrained_values import RESTORATION_SAFETY_DEFAULTS
 from app.strict_execution import StrictBlockExecutor
 from app.validation import evaluate_identity_guardrail
 
@@ -31,6 +33,7 @@ class AutomaticPipelineRunner:
         if isinstance(core_paths, dict):
             install_pretrained_face_handlers(self.executor, core_paths)
             install_pretrained_restoration_handlers(self.executor, core_paths)
+            install_pretrained_semantic_handlers(self.executor, core_paths)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
@@ -47,9 +50,9 @@ class AutomaticPipelineRunner:
             before,
             result.image,
             anchors,
-            max_drop=0.05,
+            max_drop=RESTORATION_SAFETY_DEFAULTS.identity_max_drop,
             absolute_minimum=0.20,
-            minimum_retention=0.95,
+            minimum_retention=RESTORATION_SAFETY_DEFAULTS.identity_minimum_retention,
         )
         details = dict(result.details)
         details["identity_guardrail"] = {
