@@ -122,15 +122,33 @@ class BlockExecutor:
         return ExecutionResult(block.key, quality_enhance(self.workspace.primary, clip_limit=clip_limit, blend=blend), {"clip_limit": clip_limit, "blend": blend})
 
     def _landmarks(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
-        backend = choose_backend(prefer_embeddings=bool(p.get("prefer_model", True)))
-        primary = backend.analyze(self.workspace.primary)
+        try:
+            backend = choose_backend(prefer_embeddings=bool(p.get("prefer_model", True)))
+            primary = backend.analyze(self.workspace.primary)
+        except Exception as exc:
+            raise BlockExecutionError(f"Analisi facciale pretrained/fallback non disponibile: {exc}") from exc
+
         refs = []
         for image in self.workspace.references:
-            try: refs.append(backend.analyze(image))
-            except ValueError: refs.append(None)
-        self.workspace.metadata.update({"primary_landmarks5": primary.landmarks5, "primary_bbox": primary.bbox,
-                                        "reference_landmarks5": [None if x is None else x.landmarks5 for x in refs], "face_backend": primary.backend})
-        return ExecutionResult(block.key, self.workspace.copy_primary(), {"backend": primary.backend, "bbox": list(primary.bbox), "landmark_count": 5, "reference_faces": int(sum(x is not None for x in refs))})
+            try:
+                refs.append(backend.analyze(image))
+            except Exception:
+                refs.append(None)
+        self.workspace.metadata.update({
+            "primary_landmarks5": primary.landmarks5,
+            "primary_bbox": primary.bbox,
+            "primary_landmark_confidence": float(getattr(primary, "landmark_confidence", 0.5)),
+            "reference_landmarks5": [None if x is None else x.landmarks5 for x in refs],
+            "reference_landmark_confidence": [0.0 if x is None else float(getattr(x, "landmark_confidence", 0.5)) for x in refs],
+            "face_backend": primary.backend,
+        })
+        return ExecutionResult(block.key, self.workspace.copy_primary(), {
+            "backend": primary.backend,
+            "bbox": list(primary.bbox),
+            "landmark_count": 5,
+            "landmark_confidence": float(getattr(primary, "landmark_confidence", 0.5)),
+            "reference_faces": int(sum(x is not None for x in refs)),
+        })
 
     def _align(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         aligned, diagnostics = [], []
