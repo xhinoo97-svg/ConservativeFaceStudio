@@ -9,7 +9,6 @@ from app.regional_fusion import regional_reference_fusion
 def _inputs() -> tuple[np.ndarray, np.ndarray, np.ndarray, tuple[int, int, int, int]]:
     primary = np.full((128, 128, 3), 120, dtype=np.uint8)
     reference = primary.copy()
-    # High-frequency observed detail makes the reference region measurably sharper.
     for y in range(24, 104, 4):
         for x in range(24, 104, 4):
             value = 55 if ((x + y) // 4) % 2 else 205
@@ -31,6 +30,7 @@ def test_regional_fusion_never_rewrites_visible_primary_pixels() -> None:
         landmarks,
         bbox,
         minimum_improvement=0.0,
+        preserve_visible_primary=True,
     )
 
     visible = primary_mask == 0
@@ -52,6 +52,7 @@ def test_regional_fusion_does_not_copy_occluded_reference_pixels() -> None:
         landmarks,
         bbox,
         minimum_improvement=0.0,
+        preserve_visible_primary=True,
     )
 
     unavailable = (primary_mask > 0) & (reference_mask > 0)
