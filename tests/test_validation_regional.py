@@ -77,3 +77,21 @@ def test_regional_fusion_does_not_use_occluded_reference_region() -> None:
     )
     assert np.count_nonzero(provenance) == 0
     assert all(decision.source_index == 0 for decision in decisions)
+
+
+def test_regional_fusion_never_changes_pixels_without_provenance() -> None:
+    """Feathering must not leak into observed pixels outside selected facial regions."""
+    reference = face_like()
+    # Make the primary sufficiently blurred so at least one observed reference region wins.
+    primary = cv2.GaussianBlur(reference, (15, 15), 4.0)
+    masks = [np.zeros((160, 160), np.uint8), np.zeros((160, 160), np.uint8)]
+
+    fused, provenance, decisions = regional_reference_fusion(
+        [primary, reference], masks, landmarks(), (30, 20, 100, 130), minimum_improvement=0.005
+    )
+
+    assert any(decision.source_index == 1 for decision in decisions)
+    changed = np.any(fused != primary, axis=2)
+    # This is the strict provenance invariant: no pixel may be modified unless its
+    # source is recorded. It catches Gaussian feather halos outside region masks.
+    assert not np.any(changed & (provenance == 0))
