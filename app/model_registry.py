@@ -28,6 +28,32 @@ class ModelManifest:
 
 OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
     ModelManifest(
+        key="opencv_yunet",
+        title="OpenCV Zoo YuNet face detector",
+        filename="face_detection_yunet_2023mar.onnx",
+        destination="models/opencv_zoo/face_detection_yunet_2023mar.onnx",
+        source_url="https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+        code_license="MIT",
+        weights_license="MIT (OpenCV Zoo model directory)",
+        conservative_default=True,
+        expected_sha256="8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+        max_bytes=2_000_000,
+        notes="Tiny CPU-first pretrained face detector with 5 landmarks; verified Git LFS SHA-256 and no extra runtime beyond OpenCV.",
+    ),
+    ModelManifest(
+        key="opencv_sface",
+        title="OpenCV Zoo SFace recognition",
+        filename="face_recognition_sface_2021dec.onnx",
+        destination="models/opencv_zoo/face_recognition_sface_2021dec.onnx",
+        source_url="https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
+        code_license="Apache-2.0",
+        weights_license="Apache-2.0 (OpenCV Zoo model directory)",
+        conservative_default=True,
+        expected_sha256="0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+        max_bytes=50_000_000,
+        notes="CPU-first MobileFaceNet/SFace embedding model. Uses YuNet 5-landmark output for alignCrop and gives a real pretrained identity guardrail without InsightFace dependencies.",
+    ),
+    ModelManifest(
         key="nafnet_gopro_width32",
         title="NAFNet GoPro width32 deblur",
         filename="NAFNet-GoPro-width32.pth",
@@ -183,8 +209,8 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
         weights_license="Non-commercial research use for upstream pretrained model packs",
         conservative_default=True,
         notes=(
-            "Preferred identity guardrail backend and secondary alignment backend. buffalo_l includes detection, "
-            "recognition and 2D106/3D68 alignment models. Install through the official InsightFace model mechanism or place the pack locally."
+            "High-quality optional identity/alignment backend. buffalo_l includes detection, recognition and "
+            "2D106/3D68 alignment models. The lighter verified YuNet+SFace pair is the default CPU path."
         ),
     ),
     ModelManifest(
