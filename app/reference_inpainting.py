@@ -22,6 +22,7 @@ class VerifiedReferenceRepairResult:
     local_shifts: tuple[tuple[int, int], ...]
     context_scores: tuple[float, ...]
     agreement_rejected_pixels: int
+    photometric_offsets_lab: tuple[tuple[float, float, float], ...] = ()
 
 
 def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
@@ -70,10 +71,9 @@ def _best_context_translation(
 ) -> tuple[int, int, float]:
     """Find a tiny translation from the visible ring around the damaged area.
 
-    Registration must tolerate the normal exposure/white-balance differences between
-    photographs of the same person. Raw LAB distance alone rejects otherwise useful
-    references, so matching uses median-centred LAB structure plus Sobel magnitude.
-    This changes registration only: transferred pixels still come from real references.
+    Registration must tolerate normal exposure/white-balance differences between
+    photographs of the same person. Matching therefore uses median-centred LAB
+    structure plus Sobel magnitude rather than raw colour distance.
     """
     shape = primary.shape[:2]
     ring = _context_ring(target_mask) > 0
@@ -154,6 +154,37 @@ def _shift_reference(
     return shifted, shifted_mask
 
 
+def _match_local_photometry(
+    primary: np.ndarray,
+    reference: np.ndarray,
+    target_mask: np.ndarray,
+    reference_mask: np.ndarray,
+    *,
+    minimum_pixels: int = 64,
+    max_l_offset: float = 18.0,
+    max_chroma_offset: float = 8.0,
+) -> tuple[np.ndarray, tuple[float, float, float]]:
+    """Match local illumination without inventing structure.
+
+    A single robust LAB offset is estimated only from visible context around the
+    requested repair. The offset is deliberately clamped: it can remove a visible
+    exposure/white-balance seam but cannot reshape, sharpen or synthesize facial detail.
+    """
+    ring = (_context_ring(target_mask) > 0) & (reference_mask == 0)
+    if int(np.count_nonzero(ring)) < int(minimum_pixels):
+        return reference.copy(), (0.0, 0.0, 0.0)
+
+    base_lab = cv2.cvtColor(primary, cv2.COLOR_BGR2LAB).astype(np.float32)
+    ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32)
+    delta = np.median(base_lab[ring] - ref_lab[ring], axis=0).astype(np.float32)
+    limits = np.asarray([max_l_offset, max_chroma_offset, max_chroma_offset], dtype=np.float32)
+    delta = np.clip(delta, -limits, limits)
+
+    adjusted_lab = np.clip(ref_lab + delta.reshape(1, 1, 3), 0.0, 255.0).astype(np.uint8)
+    adjusted = cv2.cvtColor(adjusted_lab, cv2.COLOR_LAB2BGR)
+    return adjusted, tuple(float(value) for value in delta.tolist())
+
+
 def _agreement_mask(
     references: list[np.ndarray],
     masks: list[np.ndarray],
@@ -161,14 +192,7 @@ def _agreement_mask(
     *,
     threshold: float = 24.0,
 ) -> np.ndarray:
-    """Return target pixels supported by at least two structurally agreeing references.
-
-    Different photographs of the same person routinely have different exposure and
-    white balance. Comparing raw LAB values made valid references disagree. We remove
-    one robust per-reference LAB offset over the requested region before comparing
-    structure, while also checking gradient magnitude. A conflicting eye/mouth shape
-    still produces a large structural/gradient residual and is rejected.
-    """
+    """Return target pixels supported by at least two structurally agreeing references."""
     if len(references) < 2:
         return target.copy()
 
@@ -240,14 +264,7 @@ def verified_reference_repair(
     agreement_threshold: float = 24.0,
     feather_sigma: float = 1.0,
 ) -> VerifiedReferenceRepairResult:
-    """Reference-guided inpainting that never invents pixels.
-
-    Principles deliberately mirror the face-inpainting literature:
-    * identity-level filtering before transfer;
-    * alignment immediately around the missing region;
-    * multi-reference agreement before accepting a source;
-    * exact source provenance for every transferred pixel.
-    """
+    """Reference-guided inpainting that prioritizes observed same-identity evidence."""
     if primary is None or primary.size == 0 or primary.ndim != 3 or primary.shape[2] != 3:
         raise ValueError("Immagine principale non valida")
     if not references:
@@ -264,6 +281,7 @@ def verified_reference_repair(
     original_indices: list[int] = []
     local_shifts: list[tuple[int, int]] = []
     context_scores: list[float] = []
+    photometric_offsets: list[tuple[float, float, float]] = []
 
     for index, (reference, mask) in enumerate(zip(references, masks)):
         if reference.shape != primary.shape:
@@ -282,11 +300,13 @@ def verified_reference_repair(
         if context < minimum_context_score and np.count_nonzero(target) > 0:
             continue
         shifted, shifted_mask = _shift_reference(reference, mask, dx, dy)
-        accepted_refs.append(shifted)
+        normalized, offset = _match_local_photometry(primary, shifted, target, shifted_mask)
+        accepted_refs.append(normalized)
         accepted_masks.append(shifted_mask)
         original_indices.append(index)
         local_shifts.append((dx, dy))
         context_scores.append(context)
+        photometric_offsets.append(offset)
 
     requested = int(np.count_nonzero(target))
     if not accepted_refs or requested == 0:
@@ -304,6 +324,7 @@ def verified_reference_repair(
             tuple(local_shifts),
             tuple(context_scores),
             0,
+            tuple(photometric_offsets),
         )
 
     agreed_target = _agreement_mask(
@@ -344,4 +365,5 @@ def verified_reference_repair(
         tuple(local_shifts),
         tuple(context_scores),
         agreement_rejected,
+        tuple(photometric_offsets),
     )
