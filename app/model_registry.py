@@ -39,6 +39,22 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
         notes="Generative super-resolution; strict mode must keep it disabled by default. Automatic download remains blocked until a trusted SHA-256 is pinned.",
     ),
     ModelManifest(
+        key="dmdnet",
+        title="DMDNet specific/generic blind face restoration",
+        filename="DMDNet.pth",
+        destination="models/dmdnet/DMDNet.pth",
+        source_url="https://github.com/csxmli2016/DMDNet/releases/download/v1/DMDNet.pth",
+        code_license="CC-BY-NC-SA-4.0 (upstream project)",
+        weights_license="Use under upstream non-commercial terms; keep separate from strict mode",
+        conservative_default=False,
+        notes=(
+            "Optional research backend inspired by dual generic/specific memory dictionaries. "
+            "The strict pipeline does not use this checkpoint: it uses an independent observed-pixel "
+            "specific-reference memory with provenance. Upstream model is 512x512-oriented and sensitive "
+            "to landmark/component localization. Automatic download remains blocked until a SHA-256 is pinned."
+        ),
+    ),
+    ModelManifest(
         key="3ddfa_mb1",
         title="3DDFA_V2 MobileNet v1 ONNX",
         filename="mb1_120x120.onnx",
