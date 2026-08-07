@@ -20,6 +20,89 @@ class MildFrontalizationResult:
     reason: str
 
 
+@dataclass(frozen=True)
+class FrontalReferenceEvidence:
+    """Best same-identity reference that is measurably more frontal than the primary.
+
+    This object is evidence only: it never authorizes texture synthesis or blind face
+    replacement.  The selected reference can strengthen a small observed-pixel warp,
+    while absence/disagreement keeps the transform deliberately weaker.
+    """
+
+    accepted: bool
+    selected_index: int | None
+    primary_frontalness: float
+    reference_frontalness: float | None
+    gain: float
+    selected_pose: tuple[float, float, float] | None
+    reason: str
+
+
+def pose_frontalness(pitch: float, yaw: float, roll: float) -> float:
+    """Small deterministic pose cost; lower means closer to a frontal photograph."""
+    return float(abs(float(yaw)) + 0.60 * abs(float(pitch)) + 0.20 * abs(float(roll)))
+
+
+def select_more_frontal_reference(
+    primary_pose: tuple[float, float, float],
+    reference_poses: list[tuple[float, float, float] | None],
+    *,
+    identity_scores: list[float | None] | None = None,
+    identity_verification_available: bool = False,
+    identity_threshold: float = 0.363,
+    minimum_gain: float = 1.5,
+    maximum_reference_abs_yaw: float = 10.0,
+    maximum_reference_abs_pitch: float = 10.0,
+) -> FrontalReferenceEvidence:
+    """Select a safer frontal anchor from already aligned same-person photographs.
+
+    Identity evidence is mandatory whenever the SFace verification backend was
+    available. A reference must also be genuinely more frontal than the primary and
+    remain inside a conservative yaw/pitch range. This prevents a merely different
+    photograph from being treated as geometric evidence.
+    """
+    ppitch, pyaw, proll = (float(v) for v in primary_pose)
+    primary_cost = pose_frontalness(ppitch, pyaw, proll)
+    best_index: int | None = None
+    best_pose: tuple[float, float, float] | None = None
+    best_cost = float("inf")
+
+    for index, pose in enumerate(reference_poses):
+        if pose is None:
+            continue
+        pitch, yaw, roll = (float(v) for v in pose)
+        if not np.isfinite([pitch, yaw, roll]).all():
+            continue
+        if abs(yaw) > float(maximum_reference_abs_yaw) or abs(pitch) > float(maximum_reference_abs_pitch):
+            continue
+        if identity_verification_available:
+            score = None if identity_scores is None or index >= len(identity_scores) else identity_scores[index]
+            if score is None or float(score) < float(identity_threshold):
+                continue
+        cost = pose_frontalness(pitch, yaw, roll)
+        if cost < best_cost:
+            best_cost = cost
+            best_index = index
+            best_pose = (pitch, yaw, roll)
+
+    if best_index is None or best_pose is None:
+        return FrontalReferenceEvidence(
+            False, None, primary_cost, None, 0.0, None,
+            "nessun riferimento same-identity abbastanza frontale e verificabile",
+        )
+
+    gain = float(primary_cost - best_cost)
+    if gain < float(minimum_gain):
+        return FrontalReferenceEvidence(
+            False, best_index, primary_cost, best_cost, gain, best_pose,
+            "il riferimento non migliora abbastanza la frontalità rispetto alla primaria",
+        )
+    return FrontalReferenceEvidence(
+        True, best_index, primary_cost, best_cost, gain, best_pose,
+        "riferimento same-identity più frontale disponibile come evidenza geometrica",
+    )
+
+
 def _validate_inputs(
     image: np.ndarray,
     landmarks5: np.ndarray,
@@ -138,8 +221,6 @@ def conservative_mild_frontal_affine(
             max_displacement, supported_fraction, "la trasformazione richiederebbe pixel non osservati",
         )
 
-    # Feather only the edge of the already-observed transformed face region.  Pixels
-    # outside this mask remain byte-for-byte identical to the input.
     alpha = cv2.GaussianBlur(usable, (0, 0), 1.2).astype(np.float32) / 255.0
     alpha *= (usable > 0).astype(np.float32)
     alpha3 = alpha[..., None]
