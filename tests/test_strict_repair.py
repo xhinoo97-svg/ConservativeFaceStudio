@@ -53,6 +53,8 @@ def test_reference_consensus_detects_local_blur_supported_by_two_sharp_reference
         maximum_fraction=0.35,
     )
 
+    assert target.dtype == np.uint8
+    assert set(np.unique(target)).issubset({0, 255})
     assert np.count_nonzero(target) > 0
     detected_inside = np.count_nonzero(target[42:90, 40:88])
     detected_total = np.count_nonzero(target)
