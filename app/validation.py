@@ -49,6 +49,48 @@ def identity_anchor_score(image: np.ndarray, anchors: list[np.ndarray]) -> tuple
     return max(identity_similarity_proxy(image, anchor) for anchor in anchors), "lab-histogram-proxy"
 
 
+def evaluate_identity_scores(
+    before_score: float,
+    after_score: float,
+    *,
+    engine: str,
+    max_drop: float = 0.12,
+    absolute_minimum: float = 0.25,
+    minimum_retention: float = 0.95,
+) -> GuardrailDecision:
+    """Apply the same conservative decision rule to externally computed identity scores."""
+    if not 0.0 < minimum_retention <= 1.0:
+        raise ValueError("minimum_retention deve essere compreso tra 0 e 1")
+    before_score = float(before_score)
+    after_score = float(after_score)
+    if not np.isfinite(before_score) or not np.isfinite(after_score):
+        raise ValueError("Punteggi identità non validi")
+
+    drop = float(before_score - after_score)
+    if before_score > 1e-6:
+        retention_ratio = float(after_score / before_score)
+    else:
+        retention_ratio = 1.0 if after_score >= before_score else 0.0
+
+    retention_required = before_score >= absolute_minimum
+    retained = (not retention_required) or retention_ratio >= minimum_retention
+    accepted = after_score >= absolute_minimum and drop <= max_drop and retained
+    reason = "accepted" if accepted else (
+        f"identity regression: {after_score:.3f}, drop {drop:.3f}, retention {retention_ratio:.3f}; "
+        f"limits minimum={absolute_minimum:.3f}, max_drop={max_drop:.3f}, retention>={minimum_retention:.3f}"
+    )
+    return GuardrailDecision(
+        accepted,
+        before_score,
+        after_score,
+        drop,
+        str(engine),
+        reason,
+        retention_ratio,
+        float(minimum_retention),
+    )
+
+
 def evaluate_identity_guardrail(
     before: np.ndarray,
     candidate: np.ndarray,
@@ -67,35 +109,17 @@ def evaluate_identity_guardrail(
     """
     if before is None or before.size == 0 or candidate is None or candidate.size == 0:
         raise ValueError("Immagini non valide per il guardrail")
-    if not 0.0 < minimum_retention <= 1.0:
-        raise ValueError("minimum_retention deve essere compreso tra 0 e 1")
-
     effective = list(anchors) if anchors else [before]
     before_score, before_engine = identity_anchor_score(before, effective)
     after_score, after_engine = identity_anchor_score(candidate, effective)
     engine = after_engine if after_engine != "no-anchor" else before_engine
-    drop = float(before_score - after_score)
-    if before_score > 1e-6:
-        retention_ratio = float(after_score / before_score)
-    else:
-        retention_ratio = 1.0 if after_score >= before_score else 0.0
-
-    retention_required = before_score >= absolute_minimum
-    retained = (not retention_required) or retention_ratio >= minimum_retention
-    accepted = after_score >= absolute_minimum and drop <= max_drop and retained
-    reason = "accepted" if accepted else (
-        f"identity regression: {after_score:.3f}, drop {drop:.3f}, retention {retention_ratio:.3f}; "
-        f"limits minimum={absolute_minimum:.3f}, max_drop={max_drop:.3f}, retention>={minimum_retention:.3f}"
-    )
-    return GuardrailDecision(
-        accepted,
-        float(before_score),
-        float(after_score),
-        drop,
-        engine,
-        reason,
-        retention_ratio,
-        float(minimum_retention),
+    return evaluate_identity_scores(
+        before_score,
+        after_score,
+        engine=engine,
+        max_drop=max_drop,
+        absolute_minimum=absolute_minimum,
+        minimum_retention=minimum_retention,
     )
 
 
