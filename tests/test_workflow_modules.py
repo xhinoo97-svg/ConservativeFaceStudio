@@ -6,7 +6,14 @@ import cv2
 import numpy as np
 import pytest
 
-from app.alignment import align_to_reference, quality_map, select_best_observed_pixels
+from app.alignment import (
+    align_from_points,
+    align_to_reference,
+    denormalize_points,
+    normalize_points,
+    quality_map,
+    select_best_observed_pixels,
+)
 from app.exporting import export_image_atomic
 from app.history import ImageHistory
 from app.project import ProjectDocument
@@ -30,6 +37,36 @@ def test_alignment_recovers_small_translation() -> None:
     assert result.image.shape == reference.shape
     assert result.matches >= 8
     assert result.inlier_ratio >= 0.35
+    assert result.reprojection_error >= 0.0
+
+
+def test_point_guided_alignment_recovers_transform() -> None:
+    image = textured(96)
+    source = np.float32([[20, 20], [70, 20], [45, 45], [25, 70], [65, 70]])
+    target = source + np.float32([4, -3])
+    result = align_from_points(image, source, target, (96, 96))
+    assert result.image.shape == image.shape
+    assert result.inlier_ratio == pytest.approx(1.0)
+    assert result.reprojection_error < 0.1
+    assert result.matrix[0, 2] == pytest.approx(4.0, abs=0.1)
+    assert result.matrix[1, 2] == pytest.approx(-3.0, abs=0.1)
+
+
+def test_point_normalization_roundtrip() -> None:
+    points = np.float32([[20, 10], [80, 40], [50, 70]])
+    normalized = normalize_points(points, (100, 200))
+    restored = denormalize_points(normalized, (100, 200))
+    assert np.allclose(restored, points)
+
+
+def test_point_alignment_rejects_mismatched_sets() -> None:
+    with pytest.raises(ValueError):
+        align_from_points(
+            textured(64),
+            np.float32([[1, 1], [2, 2], [3, 3]]),
+            np.float32([[1, 1], [2, 2], [3, 3], [4, 4]]),
+            (64, 64),
+        )
 
 
 def test_quality_map_rejects_masked_area() -> None:
