@@ -50,7 +50,7 @@ class BlockArtifactArchive:
     def snapshots(self) -> tuple[BlockSnapshot, ...]:
         return tuple(item[0] for item in self._entries)
 
-    def record(self, block: str, title: str, image: np.ndarray, details: dict[str, Any] | None = None) -> BlockSnapshot:
+    def _encode(self, image: np.ndarray) -> bytes:
         if image is None or image.size == 0:
             raise ValueError("Immagine snapshot non valida")
         if image.ndim not in (2, 3):
@@ -58,37 +58,33 @@ class BlockArtifactArchive:
         ok, encoded = cv2.imencode(".png", image, [cv2.IMWRITE_PNG_COMPRESSION, 3])
         if not ok:
             raise RuntimeError("Impossibile codificare lo snapshot PNG")
-        payload = encoded.tobytes()
+        return encoded.tobytes()
+
+    def record(self, block: str, title: str, image: np.ndarray, details: dict[str, Any] | None = None) -> BlockSnapshot:
+        payload = self._encode(image)
         order = len(self._entries) + 1
         safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", block).strip("_") or "block"
         filename = f"{order:02d}_{safe}.png"
         height, width = image.shape[:2]
-        snapshot = BlockSnapshot(
-            order=order,
-            block=block,
-            title=title,
-            filename=filename,
-            sha256=hashlib.sha256(payload).hexdigest(),
-            width=int(width),
-            height=int(height),
-            details=dict(details or {}),
-            timestamp_utc=datetime.now(timezone.utc).isoformat(),
-        )
+        snapshot = BlockSnapshot(order, block, title, filename, hashlib.sha256(payload).hexdigest(), int(width), int(height), dict(details or {}), datetime.now(timezone.utc).isoformat())
         self._entries.append((snapshot, payload))
         return snapshot
 
-    def export_zip(
-        self,
-        destination: str | Path,
-        *,
-        project: ProjectDocument | None = None,
-        attachments: Iterable[str | Path] = (),
-    ) -> Path:
+    def replace_last(self, image: np.ndarray, details: dict[str, Any]) -> BlockSnapshot:
+        if not self._entries:
+            raise RuntimeError("Nessuno snapshot da sostituire")
+        previous, _ = self._entries[-1]
+        payload = self._encode(image)
+        h, w = image.shape[:2]
+        replacement = BlockSnapshot(previous.order, previous.block, previous.title, previous.filename, hashlib.sha256(payload).hexdigest(), int(w), int(h), dict(details), datetime.now(timezone.utc).isoformat())
+        self._entries[-1] = (replacement, payload)
+        return replacement
+
+    def export_zip(self, destination: str | Path, *, project: ProjectDocument | None = None, attachments: Iterable[str | Path] = ()) -> Path:
         target = Path(destination)
         if target.suffix.lower() != ".zip":
             target = target.with_suffix(target.suffix + ".zip" if target.suffix else ".zip")
         target.parent.mkdir(parents=True, exist_ok=True)
-
         attachment_paths: list[Path] = []
         seen: set[Path] = set()
         for item in attachments:
@@ -97,26 +93,16 @@ class BlockArtifactArchive:
                 continue
             seen.add(path)
             attachment_paths.append(path)
-
         manifest: dict[str, Any] = {
             "format": "ConservativeFaceStudio block archive",
             "version": 2,
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "snapshot_count": len(self._entries),
             "snapshots": [asdict(item[0]) for item in self._entries],
-            "attachments": [
-                {
-                    "filename": path.name,
-                    "archive_path": f"results/{path.name}",
-                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                    "size_bytes": path.stat().st_size,
-                }
-                for path in attachment_paths
-            ],
+            "attachments": [{"filename": p.name, "archive_path": f"results/{p.name}", "sha256": hashlib.sha256(p.read_bytes()).hexdigest(), "size_bytes": p.stat().st_size} for p in attachment_paths],
         }
         if project is not None:
             manifest["project"] = asdict(project)
-
         fd, temp_name = tempfile.mkstemp(prefix=target.name, suffix=".tmp", dir=target.parent)
         os.close(fd)
         temp_path = Path(temp_name)
@@ -126,10 +112,7 @@ class BlockArtifactArchive:
                     archive.writestr(f"blocks/{snapshot.filename}", payload)
                 for path in attachment_paths:
                     archive.write(path, arcname=f"results/{path.name}")
-                archive.writestr(
-                    "manifest.json",
-                    json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default),
-                )
+                archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default))
             with zipfile.ZipFile(temp_path, "r") as archive:
                 bad = archive.testzip()
                 if bad is not None:
