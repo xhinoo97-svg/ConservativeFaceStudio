@@ -7,9 +7,10 @@ from typing import Any, Callable
 import cv2
 import numpy as np
 
-from app.alignment import align_to_reference, quality_map, select_best_observed_pixels
+from app.alignment import align_from_points, align_to_reference, quality_map, select_best_observed_pixels
 from app.block_artifacts import BlockArtifactArchive
 from app.exporting import export_image_atomic
+from app.face_analysis import OpenCVHaarBackend, choose_backend, cosine_similarity
 from app.history import ImageHistory
 from app.pipeline import BlockKind, BlockSpec, PipelineState, default_pipeline, validate_pipeline
 from app.project import OperationRecord, ProjectDocument
@@ -65,6 +66,7 @@ class BlockExecutor:
             BlockKind.IMPORT: self._import,
             BlockKind.DEBLUR: self._deblur,
             BlockKind.ENHANCE: self._enhance,
+            BlockKind.LANDMARKS: self._landmarks,
             BlockKind.ALIGN: self._align,
             BlockKind.OCCLUSION_MASK: self._occlusion,
             BlockKind.REGION_SELECT: self._region_select,
@@ -110,12 +112,9 @@ class BlockExecutor:
         return ExecutionResult(result.block, result.image, details)
 
     def record_skipped(self, block: BlockSpec, reason: str) -> ExecutionResult:
-        """Registra anche i blocchi saltati, mantenendo una foto per ogni fase della pipeline."""
         details = {"skipped": True, "reason": str(reason)}
         image = self.workspace.copy_primary()
-        self.project.operations.append(
-            OperationRecord(block=block.key, parameters=details, conservative=not block.generative)
-        )
+        self.project.operations.append(OperationRecord(block=block.key, parameters=details, conservative=not block.generative))
         snapshot = self.block_artifacts.record(block.key, block.title, image, details)
         details["snapshot"] = snapshot.filename
         details["snapshot_sha256"] = snapshot.sha256
@@ -140,23 +139,48 @@ class BlockExecutor:
             sharpen=float(parameters.get("sharpen", 1.0)),
             contrast=float(parameters.get("contrast", 1.0)),
         )
-        image = conservative_deblur(self.workspace.primary, settings)
-        return ExecutionResult(block.key, image, {"settings": settings.__dict__})
+        return ExecutionResult(block.key, conservative_deblur(self.workspace.primary, settings), {"settings": settings.__dict__})
 
     def _enhance(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
         return ExecutionResult(block.key, quality_enhance(self.workspace.primary), {})
 
+    def _landmarks(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+        backend = OpenCVHaarBackend()
+        primary = backend.analyze(self.workspace.primary)
+        references = []
+        for image in self.workspace.references:
+            try:
+                references.append(backend.analyze(image))
+            except ValueError:
+                references.append(None)
+        self.workspace.metadata["primary_landmarks5"] = primary.landmarks5
+        self.workspace.metadata["reference_landmarks5"] = [None if item is None else item.landmarks5 for item in references]
+        return ExecutionResult(block.key, self.workspace.copy_primary(), {
+            "backend": primary.backend,
+            "bbox": list(primary.bbox),
+            "landmark_count": int(len(primary.landmarks5)),
+            "reference_faces": int(sum(item is not None for item in references)),
+        })
+
     def _align(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
         aligned: list[np.ndarray] = []
         diagnostics: list[dict[str, Any]] = []
-        for reference in self.workspace.references:
-            result = align_to_reference(reference, self.workspace.primary)
+        primary_points = self.workspace.metadata.get("primary_landmarks5")
+        reference_points = self.workspace.metadata.get("reference_landmarks5", [])
+        for index, reference in enumerate(self.workspace.references):
+            points = reference_points[index] if index < len(reference_points) else None
+            try:
+                if primary_points is not None and points is not None:
+                    result = align_from_points(reference, points, primary_points, self.workspace.primary.shape[:2])
+                    method = "landmarks5-ransac"
+                else:
+                    result = align_to_reference(reference, self.workspace.primary)
+                    method = "orb-ransac"
+            except ValueError:
+                result = align_to_reference(reference, self.workspace.primary)
+                method = "orb-ransac"
             aligned.append(result.image)
-            diagnostics.append({
-                "matches": result.matches,
-                "inlier_ratio": result.inlier_ratio,
-                "reprojection_error": result.reprojection_error,
-            })
+            diagnostics.append({"method": method, "matches": result.matches, "inlier_ratio": result.inlier_ratio, "reprojection_error": result.reprojection_error})
         self.workspace.aligned_references = aligned
         return ExecutionResult(block.key, self.workspace.copy_primary(), {"aligned": len(aligned), "diagnostics": diagnostics})
 
@@ -164,8 +188,7 @@ class BlockExecutor:
         images = [self.workspace.primary, *self.workspace.aligned_references]
         masks = [detect_occlusion_candidates(image) for image in images]
         self.workspace.occlusion_masks = masks
-        coverage = [float(np.mean(mask > 0)) for mask in masks]
-        return ExecutionResult(block.key, self.workspace.copy_primary(), {"coverage": coverage})
+        return ExecutionResult(block.key, self.workspace.copy_primary(), {"coverage": [float(np.mean(mask > 0)) for mask in masks]})
 
     def _region_select(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
         images = [self.workspace.primary, *self.workspace.aligned_references]
@@ -193,12 +216,27 @@ class BlockExecutor:
         return ExecutionResult(block.key, image, {"reference_index": reference_index, "mask_coverage": float(np.mean(mask > 0))})
 
     def _identity(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        scores = [identity_similarity_proxy(self.workspace.primary, item) for item in self.workspace.references]
         minimum = float(parameters.get("minimum", 0.35))
+        scores: list[float] = []
+        engine = "lab-histogram-proxy"
+        try:
+            backend = choose_backend(prefer_embeddings=bool(parameters.get("prefer_embeddings", True)))
+            primary = backend.analyze(self.workspace.primary)
+            if primary.embedding is not None:
+                for item in self.workspace.references:
+                    reference = backend.analyze(item)
+                    if reference.embedding is not None:
+                        scores.append(cosine_similarity(primary.embedding, reference.embedding))
+                if scores:
+                    engine = backend.name
+        except Exception:
+            scores = []
+        if not scores:
+            scores = [identity_similarity_proxy(self.workspace.primary, item) for item in self.workspace.references]
         best = max(scores, default=1.0)
         if scores and best < minimum:
             raise BlockExecutionError(f"Controllo identità sotto soglia: {best:.3f} < {minimum:.3f}")
-        return ExecutionResult(block.key, self.workspace.copy_primary(), {"scores": scores, "best": best, "minimum": minimum})
+        return ExecutionResult(block.key, self.workspace.copy_primary(), {"engine": engine, "scores": scores, "best": best, "minimum": minimum})
 
     def _upscale(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
         scale = int(parameters.get("scale", 2))
