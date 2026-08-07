@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q app tests
-          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; from app.model_catalog import all_model_manifests; from app.pretrained_values import validate_defaults; from app.model_registry import validate_manifest; [validate_manifest(m) for m in all_model_manifests()]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
+          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; import app.opencv_lama; import app.reference_inpainting; import app.pretrained_inpaint_handler; from app.model_catalog import all_model_manifests; from app.pretrained_values import validate_defaults; from app.model_registry import validate_manifest; [validate_manifest(m) for m in all_model_manifests()]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
 
       - name: Run tests
         run: python -m pytest -q
