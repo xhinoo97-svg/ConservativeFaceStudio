@@ -34,9 +34,10 @@ class PipelineWorker(QObject):
                 f"Hardware bilanciato: {policy.cv_threads} thread CPU, DNN {policy.dnn_target}, un modello alla volta",
             )
 
+            self.progress.emit(0, "Preparazione modelli pretrained verificati")
             bootstrap = ensure_production_pretrained_models(
                 face_timeout_seconds=15,
-                restoration_timeout_seconds=75,
+                restoration_timeout_seconds=90,
             )
             self.workspace.metadata["core_model_paths"] = {
                 key: str(path) for key, path in bootstrap.paths.items()
@@ -44,6 +45,9 @@ class PipelineWorker(QObject):
             self.workspace.metadata["core_model_errors"] = dict(bootstrap.errors)
             self.workspace.metadata["core_models_ready"] = bootstrap.face_ready
             self.workspace.metadata["pretrained_deblur_ready"] = bootstrap.deblur_ready
+            self.workspace.metadata["pretrained_semantic_ready"] = bootstrap.semantic_ready
+            self.workspace.metadata["pretrained_pose_ready"] = bootstrap.pose_ready
+            self.workspace.metadata["pretrained_standard_ready"] = bootstrap.standard_ready
 
             runner = AutomaticPipelineRunner(self.workspace)
             runner.on_progress = lambda index, name: self.progress.emit(int(index), str(name))
