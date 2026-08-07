@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.model_registry import inspect_model, registry_by_key
+from app.model_registry import ModelManifest, inspect_model, registry_by_key
 from app.pipeline import BlockKind
 from app.pretrained_plan import plan_by_block
+from app.standard_pretrained import standard_manifest_by_key
 
 
 MODEL_DEPENDENCIES: dict[str, tuple[str, ...]] = {
@@ -24,12 +25,23 @@ class ModelSelection:
     reason: str
 
 
-def _installed(key: str, root: str | Path) -> bool:
+def combined_registry() -> dict[str, ModelManifest]:
     registry = registry_by_key()
-    status = inspect_model(registry[key], root)
+    registry.update(standard_manifest_by_key())
+    return registry
+
+
+def _installed(key: str, root: str | Path, registry: dict[str, ModelManifest] | None = None) -> bool:
+    manifests = registry or combined_registry()
+    manifest = manifests.get(key)
+    if manifest is None:
+        return False
+    status = inspect_model(manifest, root)
     if not bool(status["exists"]):
         return False
-    return all(_installed(dependency, root) for dependency in MODEL_DEPENDENCIES.get(key, ()))
+    if status.get("checksum_ok") is False:
+        return False
+    return all(_installed(dependency, root, manifests) for dependency in MODEL_DEPENDENCIES.get(key, ()))
 
 
 def select_model_for_block(block: BlockKind, root: str | Path = ".") -> ModelSelection:
@@ -37,13 +49,16 @@ def select_model_for_block(block: BlockKind, root: str | Path = ".") -> ModelSel
 
     Selection never downloads anything and never makes a missing optional model a
     pipeline error. Model order is defined centrally in ``app.pretrained_plan``.
-    Dependencies such as SFace -> YuNet must also be installed.
+    Unknown optional keys are ignored rather than becoming a runtime crash.
     """
     choice = plan_by_block()[block]
-    registry = registry_by_key()
+    registry = combined_registry()
     for key in choice.primary_models:
-        if _installed(key, root):
-            status = inspect_model(registry[key], root)
+        manifest = registry.get(key)
+        if manifest is None:
+            continue
+        if _installed(key, root, registry):
+            status = inspect_model(manifest, root)
             return ModelSelection(
                 block=block,
                 model_key=key,
