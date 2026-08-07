@@ -104,10 +104,23 @@ class BlockExecutor:
             archive_path = parameters.get("blocks_zip")
             if archive_path is None:
                 archive_path = output.with_suffix(output.suffix + ".blocks.zip")
-            archive = self.block_artifacts.export_zip(Path(archive_path), project=self.project)
+            attachments: list[Path] = [output]
+            provenance_path = details.get("provenance_path")
+            if provenance_path:
+                attachments.append(Path(provenance_path))
+            archive = self.block_artifacts.export_zip(
+                Path(archive_path), project=self.project, attachments=attachments
+            )
             details["blocks_zip"] = str(archive)
             details["block_images"] = len(self.block_artifacts.snapshots)
-            operation.parameters.update({"blocks_zip": str(archive), "block_images": len(self.block_artifacts.snapshots)})
+            details["archive_attachments"] = [path.name for path in attachments if path.is_file()]
+            operation.parameters.update(
+                {
+                    "blocks_zip": str(archive),
+                    "block_images": len(self.block_artifacts.snapshots),
+                    "archive_attachments": details["archive_attachments"],
+                }
+            )
 
         return ExecutionResult(result.block, result.image, details)
 
