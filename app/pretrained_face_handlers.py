@@ -12,22 +12,28 @@ from app.pipeline import BlockKind, BlockSpec
 
 
 def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path]) -> None:
-    """Install CPU pretrained YuNet/SFace handlers on an existing executor.
-
-    If the verified models are unavailable, the executor's original handlers stay
-    active. This keeps offline use functional while making the normal online path
-    genuinely pretrained without introducing another runtime framework.
-    """
+    """Install verified YuNet/SFace handlers with safe CPU/OpenCL fallback."""
     yunet = model_paths.get("opencv_yunet")
     sface = model_paths.get("opencv_sface")
     if yunet is None:
         return
 
+    hardware = executor.workspace.metadata.get("hardware_policy")
+    dnn_target = "cpu"
+    if isinstance(hardware, dict):
+        candidate = str(hardware.get("dnn_target", "cpu")).lower()
+        if candidate in {"cpu", "opencl"}:
+            dnn_target = candidate
+
     original_landmarks = executor._handlers.get(BlockKind.LANDMARKS)
     original_identity = executor._handlers.get(BlockKind.IDENTITY_CHECK)
 
     try:
-        landmark_engine = OpenCVZooFaceEngine(yunet, sface if sface is not None else None)
+        landmark_engine = OpenCVZooFaceEngine(
+            yunet,
+            sface if sface is not None else None,
+            dnn_target=dnn_target,
+        )
     except Exception:
         return
 
@@ -40,6 +46,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     refs.append(landmark_engine.analyze(image))
                 except ValueError:
                     refs.append(None)
+            backend = f"opencv-zoo-yunet-sface-{landmark_engine.target_name}" if primary.embedding is not None else f"opencv-zoo-yunet-{landmark_engine.target_name}"
             executor.workspace.metadata.update(
                 {
                     "primary_landmarks5": primary.landmarks5,
@@ -47,15 +54,16 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "primary_landmark_confidence": primary.score,
                     "reference_landmarks5": [None if item is None else item.landmarks5 for item in refs],
                     "reference_landmark_confidence": [0.0 if item is None else item.score for item in refs],
-                    "face_backend": "opencv-zoo-yunet-sface-cpu" if primary.embedding is not None else "opencv-zoo-yunet-cpu",
+                    "face_backend": backend,
                 }
             )
             return ExecutionResult(
                 block.key,
                 executor.workspace.copy_primary(),
                 {
-                    "backend": executor.workspace.metadata["face_backend"],
+                    "backend": backend,
                     "pretrained": True,
+                    "dnn_target": landmark_engine.target_name,
                     "bbox": list(primary.bbox),
                     "landmark_count": 5,
                     "landmark_confidence": float(primary.score),
@@ -76,7 +84,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
         return
 
     try:
-        identity_engine = OpenCVZooFaceEngine(yunet, sface)
+        identity_engine = OpenCVZooFaceEngine(yunet, sface, dnn_target=dnn_target)
     except Exception:
         return
 
@@ -103,8 +111,9 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 block.key,
                 executor.workspace.copy_primary(),
                 {
-                    "engine": "opencv-zoo-sface-cpu",
+                    "engine": f"opencv-zoo-sface-{identity_engine.target_name}",
                     "pretrained": True,
+                    "dnn_target": identity_engine.target_name,
                     "scores": scores,
                     "best": float(best),
                     "minimum": minimum,
