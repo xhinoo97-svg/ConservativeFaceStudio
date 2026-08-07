@@ -83,11 +83,13 @@ def regional_reference_fusion(
     *,
     minimum_improvement: float = 0.06,
 ) -> tuple[np.ndarray, np.ndarray, tuple[RegionDecision, ...]]:
-    """Sostituisce regioni solo quando una foto osservata è misurabilmente migliore della primaria.
+    """Ripara solo pixel coperti della primaria usando regioni osservate migliori.
 
-    Ogni pixel modificato resta confinato alla maschera semantica della regione. Il feathering
-    non può fuoriuscire dalla regione: questo mantiene la provenance esatta e preserva i pixel
-    osservati esterni, requisito fondamentale della modalità conservativa.
+    La selezione della sorgente resta regionale, ma in strict mode un riferimento non
+    può riscrivere pixel già osservati e validi della foto primaria. Il trasferimento è
+    quindi limitato all'intersezione tra regione semantica, occlusione della primaria e
+    pixel non occlusi del riferimento scelto. Il feathering resta interno a tale area,
+    così immagine e provenance coincidono esattamente sui pixel modificati.
     """
     if len(images) < 2:
         raise ValueError("Servono almeno una primaria e un riferimento")
@@ -96,10 +98,14 @@ def regional_reference_fusion(
     shape = images[0].shape
     if any(image.shape != shape for image in images):
         raise ValueError("Le immagini devono essere allineate e avere la stessa forma")
+    if any(mask.shape != shape[:2] for mask in occlusion_masks):
+        raise ValueError("Le maschere di occlusione devono avere la stessa forma delle immagini")
+
     regions = facial_region_masks(shape[:2], landmarks5, bbox)
     output = images[0].copy()
     provenance = np.zeros(shape[:2], dtype=np.uint16)
     decisions: list[RegionDecision] = []
+    primary_occluded = occlusion_masks[0] > 0
 
     for name, region_mask in regions.items():
         candidates = [
@@ -111,20 +117,24 @@ def regional_reference_fusion(
         best_score = float(candidates[best_index])
         improvement = best_score - primary_score
         area = int(np.count_nonzero(region_mask))
+        selected_index = 0
+
         if best_index > 0 and improvement >= minimum_improvement and area > 0:
-            feather = cv2.GaussianBlur(region_mask, (0, 0), 2.0).astype(np.float32) / 255.0
-            # Gaussian blur normally leaks beyond the binary region boundary. That used to
-            # alter pixels with provenance=0. Clamp alpha strictly to the semantic region so
-            # every changed pixel is attributable to the selected real reference.
-            feather[region_mask == 0] = 0.0
-            alpha = feather[..., None]
-            output = np.clip(
-                output.astype(np.float32) * (1.0 - alpha)
-                + images[best_index].astype(np.float32) * alpha,
-                0,
-                255,
-            ).astype(np.uint8)
-            provenance[region_mask > 0] = best_index
-        selected_index = best_index if best_index > 0 and improvement >= minimum_improvement else 0
+            source_visible = occlusion_masks[best_index] == 0
+            transfer_mask = (region_mask > 0) & primary_occluded & source_visible
+            if np.any(transfer_mask):
+                binary_transfer = transfer_mask.astype(np.uint8) * 255
+                feather = cv2.GaussianBlur(binary_transfer, (0, 0), 2.0).astype(np.float32) / 255.0
+                feather[~transfer_mask] = 0.0
+                alpha = feather[..., None]
+                output = np.clip(
+                    output.astype(np.float32) * (1.0 - alpha)
+                    + images[best_index].astype(np.float32) * alpha,
+                    0,
+                    255,
+                ).astype(np.uint8)
+                provenance[transfer_mask] = best_index
+                selected_index = best_index
+
         decisions.append(RegionDecision(name, selected_index, primary_score, best_score, improvement, area))
     return output, provenance, tuple(decisions)
