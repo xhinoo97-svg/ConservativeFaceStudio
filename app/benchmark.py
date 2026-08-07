@@ -9,6 +9,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from app.reference_memory import specific_reference_memory_fusion
 from app.restoration import DeblurSettings, conservative_deblur, conservative_upscale, detect_occlusion_candidates, quality_enhance
 
 
@@ -19,6 +20,7 @@ class BenchmarkResult:
     deblur_ms: float
     enhance_ms: float
     occlusion_ms: float
+    reference_memory_ms: float
     upscale2_ms: float
     total_ms: float
 
@@ -40,14 +42,45 @@ def _time_ms(callable_):
     return value, (time.perf_counter() - start) * 1000.0
 
 
+def _memory_geometry(width: int, height: int) -> tuple[np.ndarray, tuple[int, int, int, int]]:
+    face_w = max(32, int(width * 0.34))
+    face_h = max(40, int(height * 0.58))
+    x = max(0, width // 2 - face_w // 2)
+    y = max(0, height // 2 - face_h // 2)
+    landmarks = np.array(
+        [
+            [x + face_w * 0.34, y + face_h * 0.36],
+            [x + face_w * 0.66, y + face_h * 0.36],
+            [x + face_w * 0.50, y + face_h * 0.53],
+            [x + face_w * 0.40, y + face_h * 0.72],
+            [x + face_w * 0.60, y + face_h * 0.72],
+        ],
+        dtype=np.float32,
+    )
+    return landmarks, (x, y, min(face_w, width - x), min(face_h, height - y))
+
+
 def run_cpu_benchmark(width: int = 768, height: int = 512) -> BenchmarkResult:
     if width < 64 or height < 64:
         raise ValueError("Benchmark dimensions must be at least 64x64")
     image = _synthetic(width, height)
     start = time.perf_counter()
-    deblurred, deblur_ms = _time_ms(lambda: conservative_deblur(image, DeblurSettings(denoise=4, sharpen=0.7, contrast=1.0)))
+    deblurred, deblur_ms = _time_ms(lambda: conservative_deblur(image, DeblurSettings(denoise=4, sharpen=0.2, contrast=1.0)))
     enhanced, enhance_ms = _time_ms(lambda: quality_enhance(deblurred))
-    _, occlusion_ms = _time_ms(lambda: detect_occlusion_candidates(enhanced))
+    occlusion, occlusion_ms = _time_ms(lambda: detect_occlusion_candidates(enhanced))
+
+    landmarks, bbox = _memory_geometry(width, height)
+    ref_a = image.copy()
+    ref_b = cv2.convertScaleAbs(image, alpha=1.0, beta=2)
+    zero = np.zeros((height, width), dtype=np.uint8)
+    _, reference_memory_ms = _time_ms(
+        lambda: specific_reference_memory_fusion(
+            [enhanced, ref_a, ref_b],
+            [occlusion, zero, zero],
+            landmarks,
+            bbox,
+        )
+    )
     _, upscale_ms = _time_ms(lambda: conservative_upscale(enhanced, 2))
     total_ms = (time.perf_counter() - start) * 1000.0
     return BenchmarkResult(
@@ -56,6 +89,7 @@ def run_cpu_benchmark(width: int = 768, height: int = 512) -> BenchmarkResult:
         deblur_ms=round(deblur_ms, 3),
         enhance_ms=round(enhance_ms, 3),
         occlusion_ms=round(occlusion_ms, 3),
+        reference_memory_ms=round(reference_memory_ms, 3),
         upscale2_ms=round(upscale_ms, 3),
         total_ms=round(total_ms, 3),
     )
