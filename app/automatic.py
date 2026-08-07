@@ -33,10 +33,10 @@ class AutomaticPipelineRunner:
             callback(int(index), str(name))
 
     def _apply_guardrail(self, block, before: np.ndarray, result: ExecutionResult) -> ExecutionResult:
-        if block.kind in {BlockKind.IMPORT, BlockKind.EXPORT, BlockKind.IDENTITY_CHECK, BlockKind.UPSCALE}:
+        if block.kind in {BlockKind.IMPORT, BlockKind.EXPORT, BlockKind.IDENTITY_CHECK}:
             return result
         anchors = list(self.executor.workspace.references) or [self._original_anchor]
-        decision = evaluate_identity_guardrail(before, result.image, anchors, max_drop=0.18, absolute_minimum=0.20)
+        decision = evaluate_identity_guardrail(before, result.image, anchors, max_drop=0.10, absolute_minimum=0.20)
         details = dict(result.details)
         details["identity_guardrail"] = {
             "accepted": decision.accepted,
@@ -58,12 +58,15 @@ class AutomaticPipelineRunner:
             self.executor.workspace.primary = restored.copy()
         details["rolled_back"] = True
         details["rollback_reason"] = decision.reason
-        self.executor.block_artifacts.replace_last(restored, details)
+        details.pop("snapshot_sha256", None)
+        replacement = self.executor.block_artifacts.replace_last(restored, details)
+        details["snapshot_sha256"] = replacement.sha256
         if self.executor.project.operations:
             self.executor.project.operations[-1].parameters.update({
                 "identity_guardrail": details["identity_guardrail"],
                 "rolled_back": True,
                 "rollback_reason": decision.reason,
+                "snapshot_sha256": replacement.sha256,
             })
         return ExecutionResult(result.block, restored, details)
 
