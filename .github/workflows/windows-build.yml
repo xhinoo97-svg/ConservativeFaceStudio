@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q app tests
-          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.regional_fusion; from app.model_registry import OFFICIAL_MODELS, validate_manifest; [validate_manifest(m) for m in OFFICIAL_MODELS]"
+          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; from app.pretrained_values import validate_defaults; from app.model_registry import OFFICIAL_MODELS, validate_manifest; [validate_manifest(m) for m in OFFICIAL_MODELS]; [validate_manifest(m) for m in app.standard_pretrained.STANDARD_MODELS]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
 
       - name: Run tests
         run: python -m pytest -q
