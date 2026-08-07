@@ -78,6 +78,92 @@ def _valid_five_points(points: np.ndarray, bbox: tuple[int, int, int, int]) -> b
     return True
 
 
+class MediaPipeFaceLandmarkerBackend:
+    """Optional dense pretrained landmarks using the official MediaPipe Tasks bundle."""
+
+    name = "mediapipe-face-landmarker-cpu"
+
+    def __init__(
+        self,
+        model_path: str | Path = "models/landmarks/face_landmarker.task",
+    ) -> None:
+        path = Path(model_path).resolve()
+        if not path.is_file():
+            raise RuntimeError(f"MediaPipe Face Landmarker non trovato: {path}")
+        try:
+            import mediapipe as mp
+        except ImportError as exc:
+            raise RuntimeError("MediaPipe non installato") from exc
+
+        self._mp = mp
+        try:
+            BaseOptions = mp.tasks.BaseOptions
+            FaceLandmarker = mp.tasks.vision.FaceLandmarker
+            FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
+            options = FaceLandmarkerOptions(
+                base_options=BaseOptions(model_asset_path=str(path)),
+                running_mode=mp.tasks.vision.RunningMode.IMAGE,
+                num_faces=1,
+                min_face_detection_confidence=0.5,
+                min_face_presence_confidence=0.5,
+                min_tracking_confidence=0.5,
+                output_face_blendshapes=False,
+                output_facial_transformation_matrixes=False,
+            )
+            self._landmarker = FaceLandmarker.create_from_options(options)
+        except Exception as exc:
+            raise RuntimeError(f"Impossibile inizializzare MediaPipe Face Landmarker: {exc}") from exc
+
+    @staticmethod
+    def _point(landmarks, indices: tuple[int, ...], width: int, height: int) -> np.ndarray:
+        values = np.array(
+            [[landmarks[index].x * width, landmarks[index].y * height] for index in indices],
+            dtype=np.float32,
+        )
+        return np.mean(values, axis=0)
+
+    def analyze(self, image: np.ndarray) -> FaceAnalysisResult:
+        if image is None or image.size == 0:
+            raise ValueError("Immagine non valida")
+        if image.ndim == 2:
+            rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        elif image.ndim == 3 and image.shape[2] == 3:
+            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        else:
+            raise ValueError("Formato immagine non supportato")
+
+        mp_image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
+        result = self._landmarker.detect(mp_image)
+        if not result.face_landmarks:
+            raise ValueError("Nessun volto rilevato")
+        landmarks = result.face_landmarks[0]
+        h, w = rgb.shape[:2]
+        all_xy = np.array([[item.x * w, item.y * h] for item in landmarks], dtype=np.float32)
+        if all_xy.shape[0] < 292 or not np.isfinite(all_xy).all():
+            raise ValueError("Landmark MediaPipe incompleti")
+
+        # Stable Face Mesh component indices. Averaging eyelid corners is less noisy
+        # than using one vertex, while nose tip and mouth corners remain direct anchors.
+        left_eye = self._point(landmarks, (33, 133), w, h)
+        right_eye = self._point(landmarks, (362, 263), w, h)
+        if left_eye[0] > right_eye[0]:
+            left_eye, right_eye = right_eye, left_eye
+        nose = self._point(landmarks, (1, 4), w, h)
+        mouth_a = self._point(landmarks, (61,), w, h)
+        mouth_b = self._point(landmarks, (291,), w, h)
+        left_mouth, right_mouth = (mouth_a, mouth_b) if mouth_a[0] < mouth_b[0] else (mouth_b, mouth_a)
+
+        x1 = int(np.floor(np.clip(np.min(all_xy[:, 0]), 0, w - 1)))
+        y1 = int(np.floor(np.clip(np.min(all_xy[:, 1]), 0, h - 1)))
+        x2 = int(np.ceil(np.clip(np.max(all_xy[:, 0]), x1 + 1, w)))
+        y2 = int(np.ceil(np.clip(np.max(all_xy[:, 1]), y1 + 1, h)))
+        bbox = (x1, y1, max(1, x2 - x1), max(1, y2 - y1))
+        points = np.vstack((left_eye, right_eye, nose, left_mouth, right_mouth)).astype(np.float32)
+        if not _valid_five_points(points, bbox):
+            raise ValueError("Geometria MediaPipe non plausibile per il trasferimento strict")
+        return FaceAnalysisResult(bbox, points, None, self.name, 0.92)
+
+
 class OpenCVHaarBackend:
     """Fallback CPU con rilevamento volto e raffinamento prudente di occhi/bocca."""
 
@@ -237,4 +323,8 @@ def choose_backend(prefer_embeddings: bool = True) -> FaceBackend:
             return InsightFaceBackend()
         except Exception:
             pass
+    try:
+        return MediaPipeFaceLandmarkerBackend()
+    except Exception:
+        pass
     return OpenCVHaarBackend()
