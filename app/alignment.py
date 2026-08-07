@@ -46,6 +46,8 @@ def _validate_transform(matrix: np.ndarray, minimum_scale: float, maximum_scale:
 
 def _phase_translation(moving: np.ndarray, reference: np.ndarray) -> AlignmentResult:
     """Fallback conservativo per sole traslazioni quando non esistono descrittori affidabili."""
+    if moving.shape[:2] != reference.shape[:2]:
+        raise ValueError("Phase correlation richiede immagini della stessa dimensione")
     moving_gray = _gray(moving).astype(np.float32)
     reference_gray = _gray(reference).astype(np.float32)
     window = cv2.createHanningWindow((moving_gray.shape[1], moving_gray.shape[0]), cv2.CV_32F)
@@ -147,6 +149,97 @@ def denormalize_points(points: np.ndarray, image_shape: tuple[int, int]) -> np.n
     return array
 
 
+def _feature_affine(
+    moving: np.ndarray,
+    reference: np.ndarray,
+    *,
+    prefer_sift: bool,
+    min_matches: int,
+    minimum_inlier_ratio: float,
+    maximum_reprojection_error: float,
+    minimum_scale: float,
+    maximum_scale: float,
+) -> AlignmentResult:
+    """Local-feature affine alignment that also accepts partial/different-size photos."""
+    moving_gray = _gray(moving)
+    reference_gray = _gray(reference)
+    if prefer_sift and hasattr(cv2, "SIFT_create"):
+        detector = cv2.SIFT_create(nfeatures=3500, contrastThreshold=0.02, edgeThreshold=12)
+        norm = cv2.NORM_L2
+        ratio_threshold = 0.72
+    else:
+        detector = cv2.ORB_create(nfeatures=3500, fastThreshold=8)
+        norm = cv2.NORM_HAMMING
+        ratio_threshold = 0.75
+    kp_a, desc_a = detector.detectAndCompute(moving_gray, None)
+    kp_b, desc_b = detector.detectAndCompute(reference_gray, None)
+    if desc_a is None or desc_b is None or len(kp_a) < min_matches or len(kp_b) < min_matches:
+        raise ValueError("Dettagli locali insufficienti per una reference parziale")
+    pairs = cv2.BFMatcher(norm).knnMatch(desc_a, desc_b, k=2)
+    good = [first for first, second in pairs if first.distance < ratio_threshold * second.distance]
+    if len(good) < min_matches:
+        raise ValueError(f"Reference parziale: solo {len(good)} corrispondenze affidabili")
+    source = np.float32([kp_a[m.queryIdx].pt for m in good])
+    target = np.float32([kp_b[m.trainIdx].pt for m in good])
+    matrix, inliers = cv2.estimateAffinePartial2D(
+        source,
+        target,
+        method=cv2.RANSAC,
+        ransacReprojThreshold=3.0,
+        maxIters=5000,
+        confidence=0.997,
+        refineIters=30,
+    )
+    if matrix is None or inliers is None:
+        raise ValueError("Reference parziale: trasformazione locale non stimabile")
+    _validate_transform(matrix, minimum_scale, maximum_scale)
+    active = inliers.reshape(-1).astype(bool)
+    inlier_count = int(np.count_nonzero(active))
+    inlier_ratio = float(np.mean(active))
+    if inlier_count < max(4, min_matches // 2) or inlier_ratio < minimum_inlier_ratio:
+        raise ValueError(f"Reference parziale instabile: {inlier_count} inlier, ratio {inlier_ratio:.3f}")
+    homogeneous = np.column_stack((source, np.ones(len(source), dtype=np.float32)))
+    projected = homogeneous @ matrix.T
+    errors = np.linalg.norm(projected - target, axis=1)
+    reprojection_error = float(np.mean(errors[active])) if np.any(active) else float("inf")
+    if reprojection_error > maximum_reprojection_error:
+        raise ValueError(f"Reference parziale: errore di riproiezione {reprojection_error:.3f}px")
+    height, width = reference.shape[:2]
+    aligned = cv2.warpAffine(
+        moving,
+        matrix,
+        (width, height),
+        flags=cv2.INTER_LANCZOS4,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+    return AlignmentResult(aligned, matrix.astype(np.float32), len(good), inlier_ratio, reprojection_error)
+
+
+def align_partial_to_reference(
+    moving: np.ndarray,
+    reference: np.ndarray,
+    *,
+    min_matches: int = 6,
+) -> AlignmentResult:
+    """Strict alignment for a crop showing only one facial component.
+
+    No face detector is required. SIFT is preferred when available because partial
+    crops often have too little context for ORB. The transform is accepted only with
+    strong RANSAC support and low reprojection error; otherwise the caller must abstain.
+    """
+    return _feature_affine(
+        moving,
+        reference,
+        prefer_sift=True,
+        min_matches=max(6, int(min_matches)),
+        minimum_inlier_ratio=0.50,
+        maximum_reprojection_error=4.0,
+        minimum_scale=0.40,
+        maximum_scale=2.50,
+    )
+
+
 def align_to_reference(
     moving: np.ndarray,
     reference: np.ndarray,
@@ -156,7 +249,9 @@ def align_to_reference(
 ) -> AlignmentResult:
     """Allinea con ORB+RANSAC e fallback di sola traslazione, senza sintetizzare contenuto."""
     if moving.shape[:2] != reference.shape[:2]:
-        raise ValueError("Le immagini devono avere la stessa dimensione prima dell'allineamento")
+        # Different-size input is common for partial facial crops. Use the stricter
+        # local-feature path instead of resizing the crop and distorting geometry.
+        return align_partial_to_reference(moving, reference, min_matches=max(6, min_matches // 2))
     detector = cv2.ORB_create(nfeatures=max(200, int(max_features)), fastThreshold=12)
     kp_a, desc_a = detector.detectAndCompute(_gray(moving), None)
     kp_b, desc_b = detector.detectAndCompute(_gray(reference), None)
