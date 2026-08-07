@@ -5,8 +5,6 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from app.alignment import quality_map
-
 
 @dataclass(frozen=True)
 class RegionDecision:
@@ -43,7 +41,6 @@ def facial_region_masks(shape: tuple[int, int], landmarks5: np.ndarray, bbox: tu
         "mouth": _ellipse_mask(shape, tuple(mouth_center), (0.28 * w, 0.14 * h)),
         "face": _ellipse_mask(shape, (x + 0.5 * w, y + 0.52 * h), (0.46 * w, 0.50 * h)),
     }
-    # Evita che la regione generica del volto sovrascriva le componenti più specifiche.
     specific = cv2.bitwise_or(masks["left_eye"], masks["right_eye"])
     specific = cv2.bitwise_or(specific, masks["nose"])
     specific = cv2.bitwise_or(specific, masks["mouth"])
@@ -51,9 +48,31 @@ def facial_region_masks(shape: tuple[int, int], landmarks5: np.ndarray, bbox: tu
     return masks
 
 
-def _mean_score(score: np.ndarray, mask: np.ndarray) -> float:
-    selected = score[mask > 0]
-    return float(np.mean(selected)) if selected.size else 0.0
+def _gray(image: np.ndarray) -> np.ndarray:
+    if image.ndim == 2:
+        return image.astype(np.float32) / 255.0
+    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255.0
+
+
+def _regional_quality(image: np.ndarray, occlusion_mask: np.ndarray, region_mask: np.ndarray) -> float:
+    """Punteggio regionale confrontabile tra immagini, senza normalizzare via il massimo di ciascuna sorgente."""
+    active = region_mask > 0
+    if not np.any(active):
+        return 0.0
+    if occlusion_mask.shape != region_mask.shape:
+        raise ValueError("Maschera di occlusione non compatibile con la regione")
+
+    gray = _gray(image)
+    laplacian = np.abs(cv2.Laplacian(gray, cv2.CV_32F))
+    sharpness = float(np.mean(laplacian[active]))
+    exposure = 1.0 - np.clip(np.abs(gray[active] - 0.5) / 0.5, 0.0, 1.0)
+    exposure_score = float(np.mean(exposure)) if exposure.size else 0.0
+    visible_fraction = 1.0 - float(np.mean(occlusion_mask[active].astype(np.float32) / 255.0))
+
+    # La nitidezza assoluta deve restare confrontabile tra sorgenti: normalizzarla per-image
+    # rende indistinguibili una foto sfocata e una nitida se entrambe hanno il proprio massimo locale.
+    score = (sharpness + 0.03 * exposure_score) * max(0.0, visible_fraction)
+    return float(score)
 
 
 def regional_reference_fusion(
@@ -73,23 +92,30 @@ def regional_reference_fusion(
     if any(image.shape != shape for image in images):
         raise ValueError("Le immagini devono essere allineate e avere la stessa forma")
     regions = facial_region_masks(shape[:2], landmarks5, bbox)
-    scores = [quality_map(image, mask) for image, mask in zip(images, occlusion_masks)]
     output = images[0].copy()
     provenance = np.zeros(shape[:2], dtype=np.uint16)
     decisions: list[RegionDecision] = []
 
     for name, region_mask in regions.items():
-        primary_score = _mean_score(scores[0], region_mask)
-        candidates = [_mean_score(score, region_mask) for score in scores]
+        candidates = [
+            _regional_quality(image, occlusion_mask, region_mask)
+            for image, occlusion_mask in zip(images, occlusion_masks)
+        ]
+        primary_score = float(candidates[0])
         best_index = int(np.argmax(candidates))
         best_score = float(candidates[best_index])
         improvement = best_score - primary_score
         area = int(np.count_nonzero(region_mask))
         if best_index > 0 and improvement >= minimum_improvement and area > 0:
-            # Maschera sfumata solo per evitare cuciture; i pixel provengono comunque da una foto osservata.
             feather = cv2.GaussianBlur(region_mask, (0, 0), 2.0).astype(np.float32) / 255.0
             alpha = feather[..., None]
-            output = np.clip(output.astype(np.float32) * (1.0 - alpha) + images[best_index].astype(np.float32) * alpha, 0, 255).astype(np.uint8)
+            output = np.clip(
+                output.astype(np.float32) * (1.0 - alpha)
+                + images[best_index].astype(np.float32) * alpha,
+                0,
+                255,
+            ).astype(np.uint8)
             provenance[region_mask > 0] = best_index
-        decisions.append(RegionDecision(name, best_index if improvement >= minimum_improvement else 0, primary_score, best_score, improvement, area))
+        selected_index = best_index if best_index > 0 and improvement >= minimum_improvement else 0
+        decisions.append(RegionDecision(name, selected_index, primary_score, best_score, improvement, area))
     return output, provenance, tuple(decisions)
