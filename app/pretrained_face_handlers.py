@@ -44,6 +44,11 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
     except Exception:
         return
 
+    # Private runtime object: it is intentionally not included in project JSON.
+    # AutomaticPipelineRunner can reuse it for post-block identity guardrails.
+    if landmark_engine.recognizer is not None:
+        executor.workspace.metadata["_identity_backend"] = landmark_engine
+
     def landmarks_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
         try:
             primary = landmark_engine.analyze(executor.workspace.primary)
@@ -53,7 +58,26 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     refs.append(landmark_engine.analyze(image))
                 except ValueError:
                     refs.append(None)
-            backend = f"opencv-zoo-yunet-sface-{landmark_engine.target_name}" if primary.embedding is not None else f"opencv-zoo-yunet-{landmark_engine.target_name}"
+
+            identity_scores: list[float | None] = []
+            if primary.embedding is not None:
+                for item in refs:
+                    if item is None or item.embedding is None:
+                        identity_scores.append(None)
+                    else:
+                        identity_scores.append(cosine_similarity(primary.embedding, item.embedding))
+            else:
+                identity_scores = [None for _ in refs]
+
+            identity_verified = [
+                score is not None and score >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
+                for score in identity_scores
+            ]
+            backend = (
+                f"opencv-zoo-yunet-sface-{landmark_engine.target_name}"
+                if primary.embedding is not None
+                else f"opencv-zoo-yunet-{landmark_engine.target_name}"
+            )
             executor.workspace.metadata.update(
                 {
                     "primary_landmarks5": primary.landmarks5,
@@ -61,6 +85,9 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "primary_landmark_confidence": primary.score,
                     "reference_landmarks5": [None if item is None else item.landmarks5 for item in refs],
                     "reference_landmark_confidence": [0.0 if item is None else item.score for item in refs],
+                    "reference_identity_scores": identity_scores,
+                    "reference_identity_verified": identity_verified,
+                    "reference_identity_verification_available": primary.embedding is not None,
                     "face_backend": backend,
                 }
             )
@@ -76,6 +103,9 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "landmark_confidence": float(primary.score),
                     "yunet_score_threshold": FACE_MODEL_DEFAULTS.yunet_score_threshold,
                     "reference_faces": int(sum(item is not None for item in refs)),
+                    "reference_identity_scores": identity_scores,
+                    "reference_identity_verified": int(sum(identity_verified)),
+                    "sface_reference_threshold": FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
                 },
             )
         except Exception as exc:
@@ -93,6 +123,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
 
     try:
         identity_engine = make_engine(with_identity=True)
+        executor.workspace.metadata["_identity_backend"] = identity_engine
     except Exception:
         return
 
