@@ -16,10 +16,12 @@ class ZooFaceObservation:
 
 
 class OpenCVZooFaceEngine:
-    """CPU face detection/5-landmarks with YuNet and optional SFace embedding.
+    """YuNet/SFace with conservative OpenCV CPU/OpenCL execution.
 
-    Both networks run through OpenCV DNN, so the base application needs no
-    PyTorch, ONNX Runtime, or InsightFace package for this pretrained path.
+    OpenCL is used only when requested by the hardware policy and reported by the
+    installed OpenCV/driver stack. Any OpenCL inference error rebuilds the models
+    on CPU and retries once, so GPU acceleration can never make the strict path
+    unavailable.
     """
 
     def __init__(
@@ -30,41 +32,68 @@ class OpenCVZooFaceEngine:
         score_threshold: float = 0.75,
         nms_threshold: float = 0.3,
         top_k: int = 5000,
+        dnn_target: str = "cpu",
     ) -> None:
-        detector_path = Path(yunet_path).resolve()
-        if not detector_path.is_file():
-            raise RuntimeError(f"YuNet non trovato: {detector_path}")
+        self.detector_path = Path(yunet_path).resolve()
+        if not self.detector_path.is_file():
+            raise RuntimeError(f"YuNet non trovato: {self.detector_path}")
         if not hasattr(cv2, "FaceDetectorYN"):
             raise RuntimeError("Questa build OpenCV non include FaceDetectorYN")
-        self.detector = cv2.FaceDetectorYN.create(
-            str(detector_path),
-            "",
-            (320, 320),
-            float(score_threshold),
-            float(nms_threshold),
-            int(top_k),
-            cv2.dnn.DNN_BACKEND_OPENCV,
-            cv2.dnn.DNN_TARGET_CPU,
-        )
+
+        recognition_path = Path(sface_path).resolve() if sface_path is not None else None
+        self.recognition_path = recognition_path if recognition_path is not None and recognition_path.is_file() else None
+        self.score_threshold = float(score_threshold)
+        self.nms_threshold = float(nms_threshold)
+        self.top_k = int(top_k)
+        requested = str(dnn_target).strip().lower()
+        self.target_name = requested if requested in {"cpu", "opencl"} else "cpu"
+        if self.target_name == "opencl":
+            try:
+                if not hasattr(cv2, "ocl") or not cv2.ocl.haveOpenCL():
+                    self.target_name = "cpu"
+            except Exception:
+                self.target_name = "cpu"
+        self.detector = None
         self.recognizer = None
-        if sface_path is not None:
-            recognition_path = Path(sface_path).resolve()
-            if recognition_path.is_file():
+        self._build_models(self.target_name)
+
+    def _build_models(self, target_name: str) -> None:
+        target_id = cv2.dnn.DNN_TARGET_OPENCL if target_name == "opencl" else cv2.dnn.DNN_TARGET_CPU
+        try:
+            self.detector = cv2.FaceDetectorYN.create(
+                str(self.detector_path),
+                "",
+                (320, 320),
+                self.score_threshold,
+                self.nms_threshold,
+                self.top_k,
+                cv2.dnn.DNN_BACKEND_OPENCV,
+                target_id,
+            )
+            self.recognizer = None
+            if self.recognition_path is not None:
                 if not hasattr(cv2, "FaceRecognizerSF"):
                     raise RuntimeError("Questa build OpenCV non include FaceRecognizerSF")
                 self.recognizer = cv2.FaceRecognizerSF.create(
-                    str(recognition_path),
+                    str(self.recognition_path),
                     "",
                     cv2.dnn.DNN_BACKEND_OPENCV,
-                    cv2.dnn.DNN_TARGET_CPU,
+                    target_id,
                 )
+            self.target_name = target_name
+        except Exception:
+            if target_name != "cpu":
+                self._build_models("cpu")
+                return
+            raise
+
+    def _fallback_cpu(self) -> None:
+        if self.target_name != "cpu":
+            self._build_models("cpu")
 
     @staticmethod
     def _five_points(face: np.ndarray) -> np.ndarray:
         raw = np.asarray(face[4:14], dtype=np.float32).reshape(5, 2)
-        # YuNet exposes two eye points, nose and two mouth corners. Sorting the
-        # paired horizontal features makes the convention independent of whether
-        # upstream labels them from the subject or viewer perspective.
         eye_a, eye_b, nose, mouth_a, mouth_b = raw
         left_eye, right_eye = (eye_a, eye_b) if eye_a[0] < eye_b[0] else (eye_b, eye_a)
         left_mouth, right_mouth = (mouth_a, mouth_b) if mouth_a[0] < mouth_b[0] else (mouth_b, mouth_a)
@@ -79,6 +108,23 @@ class OpenCVZooFaceEngine:
         y2 = int(np.clip(np.ceil(y + h), y1 + 1, height))
         return x1, y1, max(1, x2 - x1), max(1, y2 - y1)
 
+    def _detect(self, bgr: np.ndarray) -> np.ndarray:
+        h, w = bgr.shape[:2]
+        assert self.detector is not None
+        self.detector.setInputSize((int(w), int(h)))
+        try:
+            _, faces = self.detector.detect(bgr)
+        except cv2.error:
+            if self.target_name == "cpu":
+                raise
+            self._fallback_cpu()
+            assert self.detector is not None
+            self.detector.setInputSize((int(w), int(h)))
+            _, faces = self.detector.detect(bgr)
+        if faces is None or len(faces) == 0:
+            raise ValueError("Nessun volto rilevato")
+        return np.asarray(faces, dtype=np.float32)
+
     def analyze(self, image: np.ndarray) -> ZooFaceObservation:
         if image is None or image.size == 0:
             raise ValueError("Immagine non valida")
@@ -90,11 +136,7 @@ class OpenCVZooFaceEngine:
             raise ValueError("Formato immagine non supportato")
 
         h, w = bgr.shape[:2]
-        self.detector.setInputSize((int(w), int(h)))
-        _, faces = self.detector.detect(bgr)
-        if faces is None or len(faces) == 0:
-            raise ValueError("Nessun volto rilevato")
-        faces = np.asarray(faces, dtype=np.float32)
+        faces = self._detect(bgr)
         areas = np.maximum(faces[:, 2], 0) * np.maximum(faces[:, 3], 0)
         scores = faces[:, 14] if faces.shape[1] > 14 else np.ones(len(faces), dtype=np.float32)
         index = int(np.argmax(areas * np.maximum(scores, 1e-6)))
@@ -105,10 +147,16 @@ class OpenCVZooFaceEngine:
 
         embedding: np.ndarray | None = None
         if self.recognizer is not None:
-            # OpenCV Zoo's SFace demo passes the YuNet row without its final score
-            # to alignCrop, preserving the detector's exact five landmarks.
-            aligned = self.recognizer.alignCrop(bgr, face[:-1])
-            feature = self.recognizer.feature(aligned)
+            try:
+                aligned = self.recognizer.alignCrop(bgr, face[:-1])
+                feature = self.recognizer.feature(aligned)
+            except cv2.error:
+                if self.target_name == "cpu":
+                    raise
+                self._fallback_cpu()
+                assert self.recognizer is not None
+                aligned = self.recognizer.alignCrop(bgr, face[:-1])
+                feature = self.recognizer.feature(aligned)
             if feature is not None and np.asarray(feature).size:
                 embedding = np.asarray(feature, dtype=np.float32).reshape(-1)
 
