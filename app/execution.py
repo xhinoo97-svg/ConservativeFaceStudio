@@ -55,12 +55,12 @@ class BlockExecutor:
 
     def __init__(self, workspace: Workspace, *, history_limit: int = 12) -> None:
         self.workspace = workspace
-        self.history = ImageHistory(max_entries=history_limit)
+        self.history = ImageHistory(max_steps=history_limit)
         self.pipeline = PipelineState(default_pipeline())
         validate_pipeline(self.pipeline.blocks)
         self.project = ProjectDocument(name="Untitled")
         self.block_artifacts = BlockArtifactArchive()
-        self.history.push(self.workspace.copy_primary())
+        self.history.push(self.workspace.copy_primary(), "import")
         self._handlers: dict[BlockKind, Callable[[BlockSpec, dict[str, Any]], ExecutionResult]] = {
             BlockKind.IMPORT: self._import,
             BlockKind.DEBLUR: self._deblur,
@@ -84,7 +84,7 @@ class BlockExecutor:
             raise BlockExecutionError(f"Il blocco {block.key} ha prodotto un'immagine non valida")
         self.workspace.primary = result.image.copy()
         if not np.array_equal(before, result.image):
-            self.history.push(result.image)
+            self.history.push(result.image, block.key)
 
         details = dict(result.details)
         operation = OperationRecord(
