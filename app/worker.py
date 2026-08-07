@@ -47,6 +47,7 @@ class PipelineWorker(QObject):
             self.workspace.metadata["pretrained_deblur_ready"] = bootstrap.deblur_ready
             self.workspace.metadata["pretrained_semantic_ready"] = bootstrap.semantic_ready
             self.workspace.metadata["pretrained_pose_ready"] = bootstrap.pose_ready
+            self.workspace.metadata["pretrained_lama_ready"] = bootstrap.inpaint_ready
             self.workspace.metadata["pretrained_standard_ready"] = bootstrap.standard_ready
 
             runner = AutomaticPipelineRunner(self.workspace)
