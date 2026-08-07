@@ -46,6 +46,26 @@ def test_occlusion_candidates_returns_binary_mask() -> None:
     assert set(np.unique(mask)).issubset({0, 255})
 
 
+def test_occlusion_candidates_detect_colour_sticker() -> None:
+    image = np.full((128, 128, 3), (150, 165, 185), dtype=np.uint8)
+    cv2.circle(image, (64, 64), 46, (135, 165, 195), -1)
+    cv2.rectangle(image, (48, 48), (80, 76), (20, 20, 245), -1)
+    mask = detect_occlusion_candidates(image)
+    sticker = mask[50:75, 50:79]
+    assert float(np.mean(sticker > 0)) >= 0.20
+
+
+def test_occlusion_candidates_detect_dark_scribble_without_flagging_everything() -> None:
+    image = np.full((128, 128, 3), (145, 170, 195), dtype=np.uint8)
+    cv2.circle(image, (64, 64), 46, (130, 165, 200), -1)
+    cv2.line(image, (38, 48), (88, 72), (8, 8, 8), 5, cv2.LINE_AA)
+    cv2.line(image, (42, 75), (87, 47), (8, 8, 8), 4, cv2.LINE_AA)
+    mask = detect_occlusion_candidates(image)
+    scribble_roi = mask[42:80, 34:92]
+    assert float(np.mean(scribble_roi > 0)) >= 0.08
+    assert float(np.mean(mask > 0)) < 0.45
+
+
 def test_conservative_fusion_uses_only_masked_reference_pixels() -> None:
     base = np.zeros((8, 8, 3), dtype=np.uint8)
     reference = np.full((8, 8, 3), 200, dtype=np.uint8)
