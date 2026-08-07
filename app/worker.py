@@ -7,6 +7,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 from app.automatic import AutomaticPipelineRunner
 from app.core_models import ensure_core_pretrained_models
 from app.execution import Workspace
+from app.hardware import apply_hardware_policy, detect_hardware_policy
 
 
 class PipelineWorker(QObject):
@@ -25,7 +26,14 @@ class PipelineWorker(QObject):
     @Slot()
     def run(self) -> None:
         try:
-            self.progress.emit(0, "Preparazione modelli pretrained CPU")
+            policy = detect_hardware_policy("balanced")
+            apply_hardware_policy(policy)
+            self.workspace.metadata["hardware_policy"] = policy.to_dict()
+            self.progress.emit(
+                0,
+                f"Hardware bilanciato: {policy.cv_threads} thread CPU, DNN {policy.dnn_target}, un modello alla volta",
+            )
+
             bootstrap = ensure_core_pretrained_models(timeout_seconds=15)
             self.workspace.metadata["core_model_paths"] = {
                 key: str(path) for key, path in bootstrap.paths.items()
