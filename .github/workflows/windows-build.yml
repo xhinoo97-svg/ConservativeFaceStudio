@@ -75,8 +75,8 @@ jobs:
           if ($registry.Count -lt 4) { throw "Model registry incomplete" }
           $exe = Get-Item "dist\ConservativeFaceStudio\ConservativeFaceStudio.exe"
           if ($exe.Length -lt 1MB) { throw "Executable unexpectedly small" }
-          & "dist\ConservativeFaceStudio\ConservativeFaceStudio.exe" --smoke-test
-          if ($LASTEXITCODE -ne 0) { throw "Packaged executable smoke test failed with exit code $LASTEXITCODE" }
+          $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) { throw "Packaged executable smoke test failed with exit code $($process.ExitCode)" }
 
       - name: Create portable ZIP
         shell: pwsh
