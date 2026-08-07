@@ -53,17 +53,7 @@ class BlockArtifactArchive:
         safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", block).strip("_") or "block"
         filename = f"{order:02d}_{safe}.png"
         height, width = image.shape[:2]
-        snapshot = BlockSnapshot(
-            order=order,
-            block=block,
-            title=title,
-            filename=filename,
-            sha256=hashlib.sha256(payload).hexdigest(),
-            width=int(width),
-            height=int(height),
-            details=dict(details or {}),
-            timestamp_utc=datetime.now(timezone.utc).isoformat(),
-        )
+        snapshot = BlockSnapshot(order, block, title, filename, hashlib.sha256(payload).hexdigest(), int(width), int(height), dict(details or {}), datetime.now(timezone.utc).isoformat())
         self._entries.append((snapshot, payload))
         return snapshot
 
@@ -72,7 +62,7 @@ class BlockArtifactArchive:
         if target.suffix.lower() != ".zip":
             target = target.with_suffix(target.suffix + ".zip" if target.suffix else ".zip")
         target.parent.mkdir(parents=True, exist_ok=True)
-        manifest = {
+        manifest: dict[str, Any] = {
             "format": "ConservativeFaceStudio block archive",
             "version": 1,
             "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -89,7 +79,7 @@ class BlockArtifactArchive:
             with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
                 for snapshot, payload in self._entries:
                     archive.writestr(f"blocks/{snapshot.filename}", payload)
-                archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
+                archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True, default=str))
             with zipfile.ZipFile(temp_path, "r") as archive:
                 bad = archive.testzip()
                 if bad is not None:
