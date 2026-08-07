@@ -9,6 +9,7 @@ from app.execution import BlockExecutionError, ExecutionResult
 from app.face_analysis import cosine_similarity
 from app.opencv_zoo_face import OpenCVZooFaceEngine
 from app.pipeline import BlockKind, BlockSpec
+from app.pretrained_values import FACE_MODEL_DEFAULTS
 
 
 def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path]) -> None:
@@ -28,12 +29,18 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
     original_landmarks = executor._handlers.get(BlockKind.LANDMARKS)
     original_identity = executor._handlers.get(BlockKind.IDENTITY_CHECK)
 
-    try:
-        landmark_engine = OpenCVZooFaceEngine(
+    def make_engine(with_identity: bool) -> OpenCVZooFaceEngine:
+        return OpenCVZooFaceEngine(
             yunet,
-            sface if sface is not None else None,
+            sface if with_identity and sface is not None else None,
+            score_threshold=FACE_MODEL_DEFAULTS.yunet_score_threshold,
+            nms_threshold=FACE_MODEL_DEFAULTS.yunet_nms_threshold,
+            top_k=FACE_MODEL_DEFAULTS.yunet_top_k,
             dnn_target=dnn_target,
         )
+
+    try:
+        landmark_engine = make_engine(with_identity=True)
     except Exception:
         return
 
@@ -67,6 +74,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "bbox": list(primary.bbox),
                     "landmark_count": 5,
                     "landmark_confidence": float(primary.score),
+                    "yunet_score_threshold": FACE_MODEL_DEFAULTS.yunet_score_threshold,
                     "reference_faces": int(sum(item is not None for item in refs)),
                 },
             )
@@ -84,12 +92,17 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
         return
 
     try:
-        identity_engine = OpenCVZooFaceEngine(yunet, sface, dnn_target=dnn_target)
+        identity_engine = make_engine(with_identity=True)
     except Exception:
         return
 
     def identity_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        minimum = float(parameters.get("minimum", 0.35))
+        # 0.363 is the OpenCV Zoo SFace cosine reference threshold. A caller may
+        # request a stricter value but cannot silently weaken the pretrained gate.
+        minimum = max(
+            float(parameters.get("minimum", FACE_MODEL_DEFAULTS.sface_same_identity_cosine)),
+            FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
+        )
         try:
             primary = identity_engine.analyze(executor.workspace.primary)
             if primary.embedding is None:
@@ -117,6 +130,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "scores": scores,
                     "best": float(best),
                     "minimum": minimum,
+                    "official_reference_threshold": FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
                 },
             )
         except BlockExecutionError:
