@@ -48,12 +48,15 @@ def test_identity_rollback_restores_provenance_and_metadata(monkeypatch) -> None
     before = workspace.copy_primary()
     state_before = runner._snapshot_guardrail_state()
     raw = runner.executor.execute(block)
+    assert runner.executor.history.can_undo is True
     result = runner._apply_guardrail(block, before, raw, state_before)
 
     assert result.details["rolled_back"] is True
     assert result.details["workspace_state_restored"] is True
+    assert result.details["rejected_history_discarded"] is True
     assert np.array_equal(workspace.primary, primary)
     assert np.count_nonzero(workspace.provenance_map) == 0
     assert np.array_equal(workspace.metadata["specific_reference_confidence"], baseline_confidence)
     assert np.array_equal(workspace.metadata["primary_landmarks5"], baseline_landmarks)
     assert "inpaint_generated_mask" not in workspace.metadata
+    assert runner.executor.history.can_redo is False
