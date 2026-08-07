@@ -32,7 +32,7 @@ PRETRAINED_BLOCK_PLAN: tuple[BlockModelChoice, ...] = (
         ),
         "conservative OpenCV denoise/unsharp",
         "guarded-pretrained",
-        "NAFNet width32 is the CPU-first preference because the official paper/repository targets strong restoration at substantially lower compute. Restormer remains a heavier quality alternative. Every neural result must pass the per-block identity guardrail.",
+        "NAFNet width32 is the CPU-first preference. Restormer remains a heavier quality alternative. Every neural result must pass the per-block identity guardrail.",
     ),
     BlockModelChoice(
         BlockKind.ENHANCE,
@@ -43,17 +43,17 @@ PRETRAINED_BLOCK_PLAN: tuple[BlockModelChoice, ...] = (
     ),
     BlockModelChoice(
         BlockKind.LANDMARKS,
-        ("mediapipe_face_landmarker", "insightface_identity"),
+        ("opencv_yunet", "mediapipe_face_landmarker", "insightface_identity"),
         "OpenCV Haar refined 5-point geometry",
         "pretrained-preferred",
-        "MediaPipe provides dense face landmarks and a CPU-capable Tasks runtime; InsightFace additionally supplies detection plus 2D/3D alignment models in its model packs.",
+        "YuNet is the tiny verified core detector with 5 landmarks and no extra runtime. MediaPipe adds dense landmarks; InsightFace remains a high-quality optional alternative.",
     ),
     BlockModelChoice(
         BlockKind.ALIGN,
-        ("mediapipe_face_landmarker", "insightface_identity"),
+        ("opencv_yunet", "mediapipe_face_landmarker", "insightface_identity"),
         "RANSAC partial-affine plus ORB fallback",
         "model-assisted-deterministic",
-        "The pretrained model supplies geometry, while the actual image transform remains deterministic and auditable.",
+        "A pretrained detector supplies geometry, while the actual image transform remains deterministic and auditable.",
     ),
     BlockModelChoice(
         BlockKind.OCCLUSION_MASK,
@@ -92,10 +92,10 @@ PRETRAINED_BLOCK_PLAN: tuple[BlockModelChoice, ...] = (
     ),
     BlockModelChoice(
         BlockKind.IDENTITY_CHECK,
-        ("insightface_identity",),
+        ("opencv_sface", "insightface_identity"),
         "LAB-histogram proxy",
         "pretrained-required-for-high-confidence",
-        "ArcFace/InsightFace embeddings are substantially more meaningful than the histogram fallback for the 95-percent per-block retention guardrail.",
+        "SFace gives the base installer a real pretrained identity embedding through OpenCV alone; InsightFace can be used as a heavier optional backend.",
     ),
     BlockModelChoice(
         BlockKind.UPSCALE,
