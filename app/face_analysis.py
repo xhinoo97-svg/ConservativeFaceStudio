@@ -63,19 +63,29 @@ class OpenCVHaarBackend:
 
 
 class InsightFaceBackend:
-    """Adattatore opzionale CPU. I pesi vengono gestiti esternamente e non sono inclusi."""
+    """Adattatore opzionale CPU che usa esclusivamente un model pack gia' presente localmente."""
 
     name = "insightface-cpu"
 
     def __init__(self, model_name: str = "buffalo_l", root: str | Path = "models") -> None:
+        root_path = Path(root).resolve()
+        pack_dir = root_path / "models" / model_name
+        if not pack_dir.is_dir() or not any(pack_dir.glob("*.onnx")):
+            raise RuntimeError(
+                f"Model pack InsightFace locale non trovato: {pack_dir}. "
+                "Il programma non effettua download impliciti dei pesi."
+            )
         try:
             from insightface.app import FaceAnalysis
         except ImportError as exc:
             raise RuntimeError("InsightFace non installato") from exc
-        self.app = FaceAnalysis(name=model_name, root=str(root), providers=["CPUExecutionProvider"])
+        self.model_pack_path = pack_dir
+        self.app = FaceAnalysis(name=model_name, root=str(root_path), providers=["CPUExecutionProvider"])
         self.app.prepare(ctx_id=-1, det_size=(640, 640))
 
     def analyze(self, image: np.ndarray) -> FaceAnalysisResult:
+        if image is None or image.size == 0:
+            raise ValueError("Immagine non valida")
         faces = self.app.get(image)
         if not faces:
             raise ValueError("Nessun volto rilevato")
