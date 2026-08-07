@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.model_registry import registry_by_key
+from app.model_catalog import all_models_by_key
 from app.pipeline import BlockKind
 from app.pretrained_plan import PRETRAINED_BLOCK_PLAN, plan_by_block, validate_pretrained_plan
 
@@ -13,7 +13,7 @@ def test_pretrained_plan_covers_every_pipeline_block() -> None:
 
 
 def test_every_pretrained_model_key_is_registered() -> None:
-    registry = registry_by_key()
+    registry = all_models_by_key()
     missing = {
         model_key
         for choice in PRETRAINED_BLOCK_PLAN
@@ -23,13 +23,19 @@ def test_every_pretrained_model_key_is_registered() -> None:
     assert missing == set()
 
 
-def test_cpu_first_restoration_models_are_selected() -> None:
+def test_verified_onnx_is_primary_deblur_model() -> None:
     deblur = plan_by_block()[BlockKind.DEBLUR]
-    assert deblur.primary_models[:2] == ("nafnet_gopro_width32", "nafnet_sidd_width32")
+    assert deblur.primary_models[0] == "opencv_nafnet_deblur"
     assert "restormer_motion_deblur" in deblur.primary_models
 
 
-def test_strict_reference_fusion_does_not_require_a_checkpoint() -> None:
+def test_pretrained_semantic_and_pose_models_are_primary() -> None:
+    plan = plan_by_block()
+    assert plan[BlockKind.OCCLUSION_MASK].primary_models[0] == "face_parsing_resnet18_onnx"
+    assert plan[BlockKind.FRONTALIZE].primary_models[0] == "head_pose_mobilenetv2_onnx"
+
+
+def test_strict_reference_fusion_does_not_require_a_generative_checkpoint() -> None:
     region = plan_by_block()[BlockKind.REGION_SELECT]
     fusion = plan_by_block()[BlockKind.FUSION]
     assert "specific reference memory" in region.fallback.lower()
