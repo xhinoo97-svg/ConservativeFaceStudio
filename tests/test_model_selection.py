@@ -33,6 +33,25 @@ def test_selection_respects_cpu_first_priority(tmp_path: Path) -> None:
     assert selected.model_key == "nafnet_gopro_width32"
 
 
+def test_sface_is_not_selected_without_yunet_dependency(tmp_path: Path) -> None:
+    _touch_manifest(tmp_path, "opencv_sface")
+    selected = select_model_for_block(BlockKind.IDENTITY_CHECK, tmp_path)
+    assert selected.model_key is None
+
+
+def test_sface_is_selected_when_yunet_pair_is_installed(tmp_path: Path) -> None:
+    _touch_manifest(tmp_path, "opencv_sface")
+    _touch_manifest(tmp_path, "opencv_yunet")
+    selected = select_model_for_block(BlockKind.IDENTITY_CHECK, tmp_path)
+    assert selected.model_key == "opencv_sface"
+
+
+def test_yunet_is_first_cpu_landmark_choice(tmp_path: Path) -> None:
+    _touch_manifest(tmp_path, "opencv_yunet")
+    selected = select_model_for_block(BlockKind.LANDMARKS, tmp_path)
+    assert selected.model_key == "opencv_yunet"
+
+
 def test_deterministic_blocks_never_require_models(tmp_path: Path) -> None:
     assert select_model_for_block(BlockKind.IMPORT, tmp_path).model_key is None
     assert select_model_for_block(BlockKind.EXPORT, tmp_path).model_key is None
