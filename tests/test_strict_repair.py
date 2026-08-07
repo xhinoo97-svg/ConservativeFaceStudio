@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+import cv2
+import numpy as np
+
+from app.strict_repair import (
+    conservative_roll_normalize,
+    reference_consensus_occlusion_mask,
+    repair_from_observed_references,
+)
+
+
+def clean_face() -> np.ndarray:
+    image = np.full((128, 128, 3), 35, dtype=np.uint8)
+    cv2.ellipse(image, (64, 66), (40, 52), 0, 0, 360, (135, 165, 195), -1)
+    cv2.circle(image, (50, 54), 4, (30, 30, 30), -1)
+    cv2.circle(image, (78, 54), 4, (30, 30, 30), -1)
+    cv2.line(image, (64, 60), (64, 78), (70, 80, 90), 2)
+    cv2.line(image, (52, 88), (76, 88), (55, 55, 75), 2)
+    return image
+
+
+def test_reference_consensus_repairs_only_supported_occlusion() -> None:
+    clean = clean_face()
+    primary = clean.copy()
+    primary[48:78, 45:83] = 0
+    hint = np.zeros((128, 128), dtype=np.uint8)
+    hint[48:78, 45:83] = 255
+    masks = [np.zeros((128, 128), dtype=np.uint8), np.zeros((128, 128), dtype=np.uint8)]
+
+    target = reference_consensus_occlusion_mask(primary, [clean, clean.copy()], hint, masks)
+    assert np.count_nonzero(target) > 0
+    repaired = repair_from_observed_references(primary, [clean, clean.copy()], target, masks, feather_sigma=0)
+    assert repaired.repaired_pixels == np.count_nonzero(target)
+    assert repaired.unresolved_pixels == 0
+    assert np.array_equal(repaired.image[target == 0], primary[target == 0])
+    assert np.mean(np.abs(repaired.image.astype(np.int16) - clean.astype(np.int16))) < np.mean(
+        np.abs(primary.astype(np.int16) - clean.astype(np.int16))
+    )
+
+
+def test_reference_consensus_abstains_when_references_disagree() -> None:
+    clean = clean_face()
+    primary = clean.copy()
+    primary[48:78, 45:83] = 0
+    hint = np.zeros((128, 128), dtype=np.uint8)
+    hint[48:78, 45:83] = 255
+    opposite = np.full_like(clean, 245)
+    target = reference_consensus_occlusion_mask(primary, [clean, opposite], hint)
+    assert np.count_nonzero(target) == 0
+
+
+def test_single_reference_requires_hint() -> None:
+    clean = clean_face()
+    primary = clean.copy()
+    primary[48:78, 45:83] = 0
+    no_hint = np.zeros((128, 128), dtype=np.uint8)
+    target = reference_consensus_occlusion_mask(primary, [clean], no_hint)
+    assert np.count_nonzero(target) == 0
+
+
+def test_pose_normalization_never_synthesizes_large_roll() -> None:
+    image = clean_face()
+    landmarks = np.array([[45, 45], [80, 70], [64, 68], [53, 88], [75, 88]], dtype=np.float32)
+    result = conservative_roll_normalize(image, landmarks, maximum_angle=12.0)
+    assert not result.applied
+    assert np.array_equal(result.image, image)
+
+
+def test_pose_normalization_accepts_already_level_face_without_change() -> None:
+    image = clean_face()
+    landmarks = np.array([[50, 54], [78, 54], [64, 68], [53, 88], [75, 88]], dtype=np.float32)
+    result = conservative_roll_normalize(image, landmarks)
+    assert not result.applied
+    assert result.supported_fraction == 1.0
+    assert np.array_equal(result.image, image)
