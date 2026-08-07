@@ -55,6 +55,65 @@ def _aligned_source_indices(workspace, count: int) -> list[int]:
     return list(range(count))
 
 
+def _bbox_from_landmarks(points: Any, image_shape: tuple[int, int]) -> tuple[int, int, int, int] | None:
+    """Conservative fallback crop when an original YuNet bbox is unavailable."""
+    if points is None:
+        return None
+    array = np.asarray(points, dtype=np.float32)
+    if array.shape != (5, 2) or not np.isfinite(array).all():
+        return None
+    height, width = image_shape
+    x_min, y_min = np.min(array, axis=0)
+    x_max, y_max = np.max(array, axis=0)
+    span_x = max(4.0, float(x_max - x_min))
+    span_y = max(4.0, float(y_max - y_min))
+    # Five landmarks cover only the central face. Expand enough to approximate the
+    # original face detector crop, but clamp to observed image bounds.
+    left = max(0, int(np.floor(x_min - 0.70 * span_x)))
+    right = min(width, int(np.ceil(x_max + 0.70 * span_x)))
+    top = max(0, int(np.floor(y_min - 0.65 * span_y)))
+    bottom = min(height, int(np.ceil(y_max + 1.55 * span_y)))
+    if right - left < 8 or bottom - top < 8:
+        return None
+    return left, top, right - left, bottom - top
+
+
+def _aligned_original_pose_inputs(workspace, aligned_count: int) -> list[tuple[np.ndarray, tuple[int, int, int, int], int] | None]:
+    """Return original photographs/crops for aligned slots, never post-warp images.
+
+    Head-pose selection must be based on the camera observation. Estimating yaw/pitch
+    after landmark/ORB alignment can partially rotate or shear a reference toward the
+    primary and make a non-frontal photo look artificially frontal.
+    """
+    source_indices = _aligned_source_indices(workspace, aligned_count)
+    stored_boxes = workspace.metadata.get("reference_bboxes", [])
+    stored_points = workspace.metadata.get("reference_landmarks5", [])
+    result: list[tuple[np.ndarray, tuple[int, int, int, int], int] | None] = []
+    for source_index in source_indices:
+        if source_index < 0 or source_index >= len(workspace.references):
+            result.append(None)
+            continue
+        image = workspace.references[source_index]
+        bbox = None
+        if isinstance(stored_boxes, list) and source_index < len(stored_boxes):
+            raw = stored_boxes[source_index]
+            if raw is not None:
+                try:
+                    candidate = tuple(int(v) for v in raw)
+                except (TypeError, ValueError):
+                    candidate = ()
+                if len(candidate) == 4 and candidate[2] > 0 and candidate[3] > 0:
+                    bbox = candidate
+        if bbox is None:
+            points = stored_points[source_index] if isinstance(stored_points, list) and source_index < len(stored_points) else None
+            bbox = _bbox_from_landmarks(points, image.shape[:2])
+        if bbox is None:
+            result.append(None)
+            continue
+        result.append((image, bbox, source_index))
+    return result
+
+
 def install_pretrained_semantic_handlers(executor, model_paths: dict[str, str | Path]) -> None:
     """Attach non-generative pretrained semantic/pose models to strict blocks."""
     target = _hardware_target(executor.workspace)
@@ -146,19 +205,27 @@ def install_pretrained_semantic_handlers(executor, model_paths: dict[str, str | 
                 pose = {"pitch": pitch, "yaw": yaw, "roll": roll}
                 executor.workspace.metadata["pretrained_head_pose"] = pose
 
-                # Estimate each aligned reference sequentially: one small ONNX model stays
-                # resident, so this remains practical on the 16-GB CPU-first target laptop.
                 references = list(executor.workspace.aligned_references)
+                pose_inputs = _aligned_original_pose_inputs(executor.workspace, len(references))
                 reference_poses: list[tuple[float, float, float] | None] = []
                 reference_backends: list[str | None] = []
-                for reference in references:
+                reference_pose_sources: list[int | None] = []
+                for item in pose_inputs:
+                    if item is None:
+                        reference_poses.append(None)
+                        reference_backends.append(None)
+                        reference_pose_sources.append(None)
+                        continue
+                    original_reference, reference_box, source_index = item
                     try:
-                        estimated, backend = estimate_with_fallback(reference, box, actual_target)
+                        estimated, backend = estimate_with_fallback(original_reference, reference_box, actual_target)
                         reference_poses.append(tuple(float(v) for v in estimated))
                         reference_backends.append(backend)
+                        reference_pose_sources.append(source_index)
                     except Exception:
                         reference_poses.append(None)
                         reference_backends.append(None)
+                        reference_pose_sources.append(source_index)
 
                 identity_available = bool(
                     executor.workspace.metadata.get("reference_identity_verification_available", False)
@@ -187,6 +254,7 @@ def install_pretrained_semantic_handlers(executor, model_paths: dict[str, str | 
                     "gain": evidence.gain,
                     "selected_pose": evidence.selected_pose,
                     "reason": evidence.reason,
+                    "pose_measured_on_original_references": True,
                 }
 
                 safe = (
@@ -203,6 +271,8 @@ def install_pretrained_semantic_handlers(executor, model_paths: dict[str, str | 
                             "backend": actual_target,
                             "pose_degrees": pose,
                             "reference_poses": reference_poses,
+                            "reference_pose_sources": reference_pose_sources,
+                            "reference_pose_domain": "original-pre-alignment-photographs",
                             "frontal_reference_evidence": executor.workspace.metadata["frontal_reference_evidence"],
                             "applied": False,
                             "yaw_synthesized": False,
@@ -220,16 +290,17 @@ def install_pretrained_semantic_handlers(executor, model_paths: dict[str, str | 
                     "pose_gate_passed": True,
                     "reference_poses": reference_poses,
                     "reference_pose_backends": reference_backends,
+                    "reference_pose_sources": reference_pose_sources,
+                    "reference_pose_domain": "original-pre-alignment-photographs",
                     "frontal_reference_evidence": executor.workspace.metadata["frontal_reference_evidence"],
                 })
 
                 landmarks = executor.workspace.metadata.get("primary_landmarks5")
                 mild = None
                 if landmarks is not None:
-                    # With an independently observed, same-identity frontal reference we
-                    # allow the normal conservative strength. Without that evidence the
-                    # transform is intentionally capped lower rather than pretending that
-                    # bilateral symmetry alone proves the hidden geometry.
+                    # With independently observed same-identity frontal evidence we allow
+                    # the normal conservative strength. Without it, bilateral symmetry is
+                    # not treated as proof of hidden geometry and the warp stays weaker.
                     max_strength = 0.45 if evidence.accepted else 0.30
                     mild = conservative_mild_frontal_affine(
                         result.image,
