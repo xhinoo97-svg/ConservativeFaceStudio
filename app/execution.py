@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from app.alignment import align_to_reference, quality_map, select_best_observed_pixels
+from app.block_artifacts import BlockArtifactArchive
 from app.exporting import export_image_atomic
 from app.history import ImageHistory
 from app.pipeline import BlockKind, BlockSpec, PipelineState, default_pipeline, validate_pipeline
@@ -50,7 +51,7 @@ class ExecutionResult:
 
 
 class BlockExecutor:
-    """Esegue blocchi conservativi in modo isolato e registra undo/provenienza."""
+    """Esegue blocchi conservativi, registra undo/provenienza e salva ogni stato intermedio."""
 
     def __init__(self, workspace: Workspace, *, history_limit: int = 12) -> None:
         self.workspace = workspace
@@ -58,6 +59,7 @@ class BlockExecutor:
         self.pipeline = PipelineState(default_pipeline())
         validate_pipeline(self.pipeline.blocks)
         self.project = ProjectDocument(name="Untitled")
+        self.block_artifacts = BlockArtifactArchive()
         self.history.push(self.workspace.copy_primary())
         self._handlers: dict[BlockKind, Callable[[BlockSpec, dict[str, Any]], ExecutionResult]] = {
             BlockKind.IMPORT: self._import,
@@ -83,14 +85,29 @@ class BlockExecutor:
         self.workspace.primary = result.image.copy()
         if not np.array_equal(before, result.image):
             self.history.push(result.image)
-        self.project.operations.append(
-            OperationRecord(
-                block=block.key,
-                parameters={**parameters, **result.details},
-                conservative=not block.generative,
-            )
+
+        details = dict(result.details)
+        operation = OperationRecord(
+            block=block.key,
+            parameters={**parameters, **details},
+            conservative=not block.generative,
         )
-        return result
+        self.project.operations.append(operation)
+        snapshot = self.block_artifacts.record(block.key, block.title, result.image, details)
+        details["snapshot"] = snapshot.filename
+        details["snapshot_sha256"] = snapshot.sha256
+
+        if block.kind is BlockKind.EXPORT:
+            output = Path(details["path"])
+            archive_path = parameters.get("blocks_zip")
+            if archive_path is None:
+                archive_path = output.with_suffix(output.suffix + ".blocks.zip")
+            archive = self.block_artifacts.export_zip(Path(archive_path), project=self.project)
+            details["blocks_zip"] = str(archive)
+            details["block_images"] = len(self.block_artifacts.snapshots)
+            operation.parameters.update({"blocks_zip": str(archive), "block_images": len(self.block_artifacts.snapshots)})
+
+        return ExecutionResult(result.block, result.image, details)
 
     def undo(self) -> np.ndarray:
         image = self.history.undo()
