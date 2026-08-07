@@ -150,24 +150,40 @@ def _candidate_score(
     )
 
 
+def _median_reference_with_support(
+    refs: list[np.ndarray],
+    support_masks: list[np.ndarray],
+) -> np.ndarray:
+    """Median of observed reference pixels only; unsupported crop padding is ignored."""
+    stack = np.stack(refs, axis=0).astype(np.float32)
+    support = np.stack([mask > 0 for mask in support_masks], axis=0)
+    support3 = support[..., None]
+    values = np.where(support3, stack, np.nan)
+    with np.errstate(all="ignore"):
+        median = np.nanmedian(values, axis=0)
+    fallback = np.zeros(stack.shape[1:], dtype=np.float32)
+    median = np.where(np.isfinite(median), median, fallback)
+    return np.clip(median, 0, 255).astype(np.uint8)
+
+
 def specific_reference_memory_fusion(
     images: list[np.ndarray],
     occlusion_masks: list[np.ndarray],
     landmarks5: np.ndarray,
     bbox: tuple[int, int, int, int],
     *,
+    reference_support_masks: list[np.ndarray] | None = None,
     top_k: int = 2,
     minimum_region_confidence: float = 0.64,
     minimum_quality_gain: float = 0.03,
     maximum_replace_fraction: float = 0.35,
     agreement_colour_threshold: float = 22.0,
 ) -> SpecificReferenceMemoryResult:
-    """DMD-inspired specific memory using only observed pixels from same-identity references.
+    """DMD-inspired specific memory using only actually observed reference pixels.
 
-    The primary image is index 0 and references are indices 1..N in the returned
-    provenance map. Multi-scale matching ranks all references for each facial
-    component, while transfer is allowed only where selected references agree and
-    are locally better. No generic face prior or synthesized texture is used.
+    The primary image is index 0 and references are indices 1..N. Partial references
+    are allowed: reference_support_masks explicitly states where each aligned crop has
+    genuine source pixels. Unsupported padding is never treated as face evidence.
     """
     if len(images) < 2:
         raise ValueError("Serve almeno una fotografia di riferimento")
@@ -184,6 +200,16 @@ def specific_reference_memory_fusion(
     refs = images[1:]
     ref_masks = masks[1:]
     primary_mask = masks[0]
+    if reference_support_masks is None:
+        support_masks = [
+            np.where(np.max(reference, axis=2) > 2, 255, 0).astype(np.uint8)
+            for reference in refs
+        ]
+    else:
+        if len(reference_support_masks) != len(refs):
+            raise ValueError("Numero reference/support mask non compatibile")
+        support_masks = [_validate_mask(item, shape[:2]) for item in reference_support_masks]
+
     regions = facial_region_masks(shape[:2], landmarks5, bbox)
     output = base.copy()
     provenance = np.zeros(shape[:2], dtype=np.uint16)
@@ -191,7 +217,7 @@ def specific_reference_memory_fusion(
     decisions: list[MemoryRegionDecision] = []
 
     quality_maps = [_pixel_quality(item) for item in images]
-    median_reference = np.median(np.stack(refs, axis=0).astype(np.float32), axis=0).astype(np.uint8)
+    median_reference = _median_reference_with_support(refs, support_masks)
 
     for name, region_mask in regions.items():
         active = region_mask > 0
@@ -204,10 +230,10 @@ def specific_reference_memory_fusion(
         primary_quality = float(np.mean(quality_maps[0][primary_visible])) if np.any(primary_visible) else 0.0
         candidates: list[MemoryCandidate] = []
 
-        for ref_index, (reference, ref_mask, ref_quality_map) in enumerate(
-            zip(refs, ref_masks, quality_maps[1:]), start=1
+        for ref_index, (reference, ref_mask, ref_quality_map, support_mask) in enumerate(
+            zip(refs, ref_masks, quality_maps[1:], support_masks), start=1
         ):
-            valid = active & (ref_mask == 0) & (np.max(reference, axis=2) > 2)
+            valid = active & (ref_mask == 0) & (support_mask > 0)
             visibility = float(np.count_nonzero(valid) / max(1, area))
             if np.count_nonzero(valid) < 24:
                 continue
@@ -236,10 +262,11 @@ def specific_reference_memory_fusion(
             source_images = [images[index] for index in selected_indices]
             source_masks = [masks[index] for index in selected_indices]
             source_qualities = [quality_maps[index] for index in selected_indices]
+            source_support = [support_masks[index - 1] for index in selected_indices]
 
             eligible = active & (primary_mask == 0)
             valid_stack = np.stack(
-                [(mask == 0) & (np.max(image, axis=2) > 2) for image, mask in zip(source_images, source_masks)],
+                [(mask == 0) & (support > 0) for mask, support in zip(source_masks, source_support)],
                 axis=0,
             )
             quality_stack = np.stack(source_qualities, axis=0).copy()
