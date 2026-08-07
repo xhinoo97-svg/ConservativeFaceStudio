@@ -44,6 +44,30 @@ def _validate_transform(matrix: np.ndarray, minimum_scale: float, maximum_scale:
     return scale
 
 
+def _phase_translation(moving: np.ndarray, reference: np.ndarray) -> AlignmentResult:
+    """Fallback conservativo per sole traslazioni quando non esistono descrittori affidabili."""
+    moving_gray = _gray(moving).astype(np.float32)
+    reference_gray = _gray(reference).astype(np.float32)
+    window = cv2.createHanningWindow((moving_gray.shape[1], moving_gray.shape[0]), cv2.CV_32F)
+    shift, response = cv2.phaseCorrelate(moving_gray, reference_gray, window)
+    dx, dy = float(shift[0]), float(shift[1])
+    if not np.isfinite([dx, dy, response]).all() or response < 0.02:
+        raise ValueError("Dettagli insufficienti per l'allineamento")
+    height, width = reference.shape[:2]
+    if abs(dx) > width * 0.25 or abs(dy) > height * 0.25:
+        raise ValueError("Traslazione stimata non plausibile")
+    matrix = np.array([[1.0, 0.0, dx], [0.0, 1.0, dy]], dtype=np.float32)
+    aligned = cv2.warpAffine(
+        moving,
+        matrix,
+        (width, height),
+        flags=cv2.INTER_LANCZOS4,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+    return AlignmentResult(aligned, matrix, 0, float(np.clip(response, 0.0, 1.0)), 0.0)
+
+
 def align_from_points(
     moving: np.ndarray,
     source_points: np.ndarray,
@@ -130,19 +154,19 @@ def align_to_reference(
     max_features: int = 2500,
     min_matches: int = 12,
 ) -> AlignmentResult:
-    """Allinea con ORB+RANSAC senza sintetizzare contenuto fuori dall'immagine sorgente."""
+    """Allinea con ORB+RANSAC e fallback di sola traslazione, senza sintetizzare contenuto."""
     if moving.shape[:2] != reference.shape[:2]:
         raise ValueError("Le immagini devono avere la stessa dimensione prima dell'allineamento")
     detector = cv2.ORB_create(nfeatures=max(200, int(max_features)), fastThreshold=12)
     kp_a, desc_a = detector.detectAndCompute(_gray(moving), None)
     kp_b, desc_b = detector.detectAndCompute(_gray(reference), None)
     if desc_a is None or desc_b is None:
-        raise ValueError("Dettagli insufficienti per l'allineamento")
+        return _phase_translation(moving, reference)
 
     pairs = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(desc_a, desc_b, k=2)
     good = [first for first, second in pairs if first.distance < 0.75 * second.distance]
     if len(good) < min_matches:
-        raise ValueError(f"Corrispondenze insufficienti: {len(good)}")
+        return _phase_translation(moving, reference)
 
     source = np.float32([kp_a[m.queryIdx].pt for m in good])
     target = np.float32([kp_b[m.trainIdx].pt for m in good])
@@ -151,13 +175,13 @@ def align_to_reference(
         maxIters=3000, confidence=0.995, refineIters=20,
     )
     if matrix is None or inliers is None:
-        raise ValueError("Trasformazione non stimabile")
+        return _phase_translation(moving, reference)
 
     _validate_transform(matrix, 0.75, 1.35)
     inlier_mask = inliers.reshape(-1).astype(bool)
     inlier_ratio = float(np.mean(inlier_mask))
     if inlier_ratio < 0.35:
-        raise ValueError(f"Allineamento instabile: inlier ratio {inlier_ratio:.3f}")
+        return _phase_translation(moving, reference)
 
     homogeneous = np.column_stack((source, np.ones(len(source), dtype=np.float32)))
     projected = homogeneous @ matrix.T
