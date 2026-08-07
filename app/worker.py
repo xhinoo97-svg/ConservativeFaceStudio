@@ -5,9 +5,9 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot
 
 from app.automatic import AutomaticPipelineRunner
-from app.core_models import ensure_core_pretrained_models
 from app.execution import Workspace
 from app.hardware import apply_hardware_policy, detect_hardware_policy
+from app.production_models import ensure_production_pretrained_models
 
 
 class PipelineWorker(QObject):
@@ -34,12 +34,16 @@ class PipelineWorker(QObject):
                 f"Hardware bilanciato: {policy.cv_threads} thread CPU, DNN {policy.dnn_target}, un modello alla volta",
             )
 
-            bootstrap = ensure_core_pretrained_models(timeout_seconds=15)
+            bootstrap = ensure_production_pretrained_models(
+                face_timeout_seconds=15,
+                restoration_timeout_seconds=75,
+            )
             self.workspace.metadata["core_model_paths"] = {
                 key: str(path) for key, path in bootstrap.paths.items()
             }
             self.workspace.metadata["core_model_errors"] = dict(bootstrap.errors)
-            self.workspace.metadata["core_models_ready"] = bootstrap.ready
+            self.workspace.metadata["core_models_ready"] = bootstrap.face_ready
+            self.workspace.metadata["pretrained_deblur_ready"] = bootstrap.deblur_ready
 
             runner = AutomaticPipelineRunner(self.workspace)
             runner.on_progress = lambda index, name: self.progress.emit(int(index), str(name))
