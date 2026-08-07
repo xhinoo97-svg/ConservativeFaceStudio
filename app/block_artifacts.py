@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import tempfile
 import zipfile
@@ -82,18 +83,19 @@ class BlockArtifactArchive:
             manifest["project"] = asdict(project)
 
         fd, temp_name = tempfile.mkstemp(prefix=target.name, suffix=".tmp", dir=target.parent)
-        Path(temp_name).unlink(missing_ok=True)
+        os.close(fd)
+        temp_path = Path(temp_name)
         try:
-            with zipfile.ZipFile(temp_name, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+            with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
                 for snapshot, payload in self._entries:
                     archive.writestr(f"blocks/{snapshot.filename}", payload)
                 archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
-            with zipfile.ZipFile(temp_name, "r") as archive:
+            with zipfile.ZipFile(temp_path, "r") as archive:
                 bad = archive.testzip()
                 if bad is not None:
                     raise RuntimeError(f"Archivio ZIP corrotto: {bad}")
-            Path(temp_name).replace(target)
+            os.replace(temp_path, target)
         except Exception:
-            Path(temp_name).unlink(missing_ok=True)
+            temp_path.unlink(missing_ok=True)
             raise
         return target
