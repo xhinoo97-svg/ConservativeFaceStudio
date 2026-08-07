@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-import cv2
 import numpy as np
 
 from app.alignment import align_from_points, align_to_reference, quality_map, select_best_observed_pixels
@@ -14,15 +13,8 @@ from app.face_analysis import choose_backend, cosine_similarity
 from app.history import ImageHistory
 from app.pipeline import BlockKind, BlockSpec, PipelineState, default_pipeline, validate_pipeline
 from app.project import OperationRecord, ProjectDocument
-from app.restoration import (
-    DeblurSettings,
-    conservative_deblur,
-    conservative_fusion,
-    conservative_upscale,
-    detect_occlusion_candidates,
-    identity_similarity_proxy,
-    quality_enhance,
-)
+from app.regional_fusion import regional_reference_fusion
+from app.restoration import DeblurSettings, conservative_deblur, conservative_fusion, conservative_upscale, detect_occlusion_candidates, identity_similarity_proxy, quality_enhance
 
 
 class BlockExecutionError(RuntimeError):
@@ -52,8 +44,6 @@ class ExecutionResult:
 
 
 class BlockExecutor:
-    """Esegue blocchi conservativi, registra undo/provenienza e salva ogni stato intermedio."""
-
     def __init__(self, workspace: Workspace, *, history_limit: int = 12) -> None:
         self.workspace = workspace
         self.history = ImageHistory(max_steps=history_limit)
@@ -63,17 +53,10 @@ class BlockExecutor:
         self.block_artifacts = BlockArtifactArchive()
         self.history.push(self.workspace.copy_primary(), "import")
         self._handlers: dict[BlockKind, Callable[[BlockSpec, dict[str, Any]], ExecutionResult]] = {
-            BlockKind.IMPORT: self._import,
-            BlockKind.DEBLUR: self._deblur,
-            BlockKind.ENHANCE: self._enhance,
-            BlockKind.LANDMARKS: self._landmarks,
-            BlockKind.ALIGN: self._align,
-            BlockKind.OCCLUSION_MASK: self._occlusion,
-            BlockKind.REGION_SELECT: self._region_select,
-            BlockKind.FUSION: self._fusion,
-            BlockKind.IDENTITY_CHECK: self._identity,
-            BlockKind.UPSCALE: self._upscale,
-            BlockKind.EXPORT: self._export,
+            BlockKind.IMPORT: self._import, BlockKind.DEBLUR: self._deblur, BlockKind.ENHANCE: self._enhance,
+            BlockKind.LANDMARKS: self._landmarks, BlockKind.ALIGN: self._align, BlockKind.OCCLUSION_MASK: self._occlusion,
+            BlockKind.REGION_SELECT: self._region_select, BlockKind.FUSION: self._fusion, BlockKind.IDENTITY_CHECK: self._identity,
+            BlockKind.UPSCALE: self._upscale, BlockKind.EXPORT: self._export,
         }
 
     def execute(self, block: BlockSpec, **parameters: Any) -> ExecutionResult:
@@ -87,41 +70,23 @@ class BlockExecutor:
         self.workspace.primary = result.image.copy()
         if not np.array_equal(before, result.image):
             self.history.push(result.image, block.key)
-
         details = dict(result.details)
-        operation = OperationRecord(
-            block=block.key,
-            parameters={**parameters, **details},
-            conservative=not block.generative,
-        )
+        operation = OperationRecord(block=block.key, parameters={**parameters, **details}, conservative=not block.generative)
         self.project.operations.append(operation)
         snapshot = self.block_artifacts.record(block.key, block.title, result.image, details)
         details["snapshot"] = snapshot.filename
         details["snapshot_sha256"] = snapshot.sha256
-
         if block.kind is BlockKind.EXPORT:
             output = Path(details["path"])
-            archive_path = parameters.get("blocks_zip")
-            if archive_path is None:
-                archive_path = output.with_suffix(output.suffix + ".blocks.zip")
+            archive_path = parameters.get("blocks_zip") or output.with_suffix(output.suffix + ".blocks.zip")
             attachments: list[Path] = [output]
-            provenance_path = details.get("provenance_path")
-            if provenance_path:
-                attachments.append(Path(provenance_path))
-            archive = self.block_artifacts.export_zip(
-                Path(archive_path), project=self.project, attachments=attachments
-            )
+            if details.get("provenance_path"):
+                attachments.append(Path(details["provenance_path"]))
+            archive = self.block_artifacts.export_zip(Path(archive_path), project=self.project, attachments=attachments)
             details["blocks_zip"] = str(archive)
             details["block_images"] = len(self.block_artifacts.snapshots)
-            details["archive_attachments"] = [path.name for path in attachments if path.is_file()]
-            operation.parameters.update(
-                {
-                    "blocks_zip": str(archive),
-                    "block_images": len(self.block_artifacts.snapshots),
-                    "archive_attachments": details["archive_attachments"],
-                }
-            )
-
+            details["archive_attachments"] = [p.name for p in attachments if p.is_file()]
+            operation.parameters.update({"blocks_zip": str(archive), "block_images": details["block_images"], "archive_attachments": details["archive_attachments"]})
         return ExecutionResult(result.block, result.image, details)
 
     def record_skipped(self, block: BlockSpec, reason: str) -> ExecutionResult:
@@ -129,139 +94,105 @@ class BlockExecutor:
         image = self.workspace.copy_primary()
         self.project.operations.append(OperationRecord(block=block.key, parameters=details, conservative=not block.generative))
         snapshot = self.block_artifacts.record(block.key, block.title, image, details)
-        details["snapshot"] = snapshot.filename
-        details["snapshot_sha256"] = snapshot.sha256
+        details.update({"snapshot": snapshot.filename, "snapshot_sha256": snapshot.sha256})
         return ExecutionResult(block.key, image, details)
 
     def undo(self) -> np.ndarray:
-        image = self.history.undo()
-        self.workspace.primary = image.copy()
-        return image
+        image = self.history.undo(); self.workspace.primary = image.copy(); return image
 
     def redo(self) -> np.ndarray:
-        image = self.history.redo()
-        self.workspace.primary = image.copy()
-        return image
+        image = self.history.redo(); self.workspace.primary = image.copy(); return image
 
-    def _import(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+    def _import(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         return ExecutionResult(block.key, self.workspace.copy_primary(), {"references": len(self.workspace.references)})
 
-    def _deblur(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        settings = DeblurSettings(
-            denoise=int(parameters.get("denoise", 5)),
-            sharpen=float(parameters.get("sharpen", 1.0)),
-            contrast=float(parameters.get("contrast", 1.0)),
-        )
-        return ExecutionResult(block.key, conservative_deblur(self.workspace.primary, settings), {"settings": settings.__dict__})
+    def _deblur(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        s = DeblurSettings(denoise=int(p.get("denoise", 5)), sharpen=float(p.get("sharpen", 1.0)), contrast=float(p.get("contrast", 1.0)))
+        return ExecutionResult(block.key, conservative_deblur(self.workspace.primary, s), {"settings": s.__dict__})
 
-    def _enhance(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+    def _enhance(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         return ExecutionResult(block.key, quality_enhance(self.workspace.primary), {})
 
-    def _landmarks(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        backend = choose_backend(prefer_embeddings=bool(parameters.get("prefer_model", True)))
+    def _landmarks(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        backend = choose_backend(prefer_embeddings=bool(p.get("prefer_model", True)))
         primary = backend.analyze(self.workspace.primary)
-        references = []
+        refs = []
         for image in self.workspace.references:
-            try:
-                references.append(backend.analyze(image))
-            except ValueError:
-                references.append(None)
-        self.workspace.metadata["primary_landmarks5"] = primary.landmarks5
-        self.workspace.metadata["reference_landmarks5"] = [None if item is None else item.landmarks5 for item in references]
-        self.workspace.metadata["face_backend"] = primary.backend
-        return ExecutionResult(block.key, self.workspace.copy_primary(), {
-            "backend": primary.backend,
-            "bbox": list(primary.bbox),
-            "landmark_count": int(len(primary.landmarks5)),
-            "reference_faces": int(sum(item is not None for item in references)),
-        })
+            try: refs.append(backend.analyze(image))
+            except ValueError: refs.append(None)
+        self.workspace.metadata.update({"primary_landmarks5": primary.landmarks5, "primary_bbox": primary.bbox,
+                                        "reference_landmarks5": [None if x is None else x.landmarks5 for x in refs], "face_backend": primary.backend})
+        return ExecutionResult(block.key, self.workspace.copy_primary(), {"backend": primary.backend, "bbox": list(primary.bbox), "landmark_count": 5, "reference_faces": int(sum(x is not None for x in refs))})
 
-    def _align(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        aligned: list[np.ndarray] = []
-        diagnostics: list[dict[str, Any]] = []
+    def _align(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        aligned, diagnostics = [], []
         primary_points = self.workspace.metadata.get("primary_landmarks5")
-        reference_points = self.workspace.metadata.get("reference_landmarks5", [])
-        for index, reference in enumerate(self.workspace.references):
-            points = reference_points[index] if index < len(reference_points) else None
+        ref_points = self.workspace.metadata.get("reference_landmarks5", [])
+        for i, reference in enumerate(self.workspace.references):
+            points = ref_points[i] if i < len(ref_points) else None
             try:
                 if primary_points is not None and points is not None:
-                    result = align_from_points(reference, points, primary_points, self.workspace.primary.shape[:2])
-                    method = "landmarks5-ransac"
+                    r = align_from_points(reference, points, primary_points, self.workspace.primary.shape[:2]); method = "landmarks5-ransac"
                 else:
-                    result = align_to_reference(reference, self.workspace.primary)
-                    method = "orb-ransac"
+                    r = align_to_reference(reference, self.workspace.primary); method = "orb-ransac"
             except ValueError:
-                result = align_to_reference(reference, self.workspace.primary)
-                method = "orb-ransac"
-            aligned.append(result.image)
-            diagnostics.append({"method": method, "matches": result.matches, "inlier_ratio": result.inlier_ratio, "reprojection_error": result.reprojection_error})
+                r = align_to_reference(reference, self.workspace.primary); method = "orb-ransac"
+            aligned.append(r.image)
+            diagnostics.append({"method": method, "matches": r.matches, "inlier_ratio": r.inlier_ratio, "reprojection_error": r.reprojection_error})
         self.workspace.aligned_references = aligned
         return ExecutionResult(block.key, self.workspace.copy_primary(), {"aligned": len(aligned), "diagnostics": diagnostics})
 
-    def _occlusion(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+    def _occlusion(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         images = [self.workspace.primary, *self.workspace.aligned_references]
-        masks = [detect_occlusion_candidates(image) for image in images]
+        masks = [detect_occlusion_candidates(i) for i in images]
         self.workspace.occlusion_masks = masks
-        return ExecutionResult(block.key, self.workspace.copy_primary(), {"coverage": [float(np.mean(mask > 0)) for mask in masks]})
+        return ExecutionResult(block.key, self.workspace.copy_primary(), {"coverage": [float(np.mean(m > 0)) for m in masks]})
 
-    def _region_select(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+    def _region_select(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         images = [self.workspace.primary, *self.workspace.aligned_references]
-        if len(images) < 2:
-            raise BlockExecutionError("Servono almeno due immagini allineate per selezionare regioni")
-        masks = self.workspace.occlusion_masks or [np.zeros(image.shape[:2], np.uint8) for image in images]
-        if len(masks) != len(images):
-            raise BlockExecutionError("Numero di maschere non compatibile con le immagini")
-        maps = [quality_map(image, mask) for image, mask in zip(images, masks)]
+        if len(images) < 2: raise BlockExecutionError("Servono almeno due immagini allineate per selezionare regioni")
+        masks = self.workspace.occlusion_masks or [np.zeros(i.shape[:2], np.uint8) for i in images]
+        if len(masks) != len(images): raise BlockExecutionError("Numero di maschere non compatibile con le immagini")
+        landmarks = self.workspace.metadata.get("primary_landmarks5"); bbox = self.workspace.metadata.get("primary_bbox")
+        if landmarks is not None and bbox is not None:
+            selected, provenance, decisions = regional_reference_fusion(images, masks, landmarks, tuple(bbox), minimum_improvement=float(p.get("minimum_improvement", 0.06)))
+            self.workspace.provenance_map = provenance
+            return ExecutionResult(block.key, selected, {"engine": "landmark-regional", "regions": [d.__dict__ for d in decisions], "source_pixel_counts": np.bincount(provenance.ravel(), minlength=len(images)).tolist()})
+        maps = [quality_map(i, m) for i, m in zip(images, masks)]
         selected, provenance = select_best_observed_pixels(images, maps)
         self.workspace.provenance_map = provenance
-        counts = np.bincount(provenance.ravel(), minlength=len(images)).tolist()
-        return ExecutionResult(block.key, selected, {"source_pixel_counts": counts})
+        return ExecutionResult(block.key, selected, {"engine": "pixel-quality-fallback", "source_pixel_counts": np.bincount(provenance.ravel(), minlength=len(images)).tolist()})
 
-    def _fusion(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        reference_index = int(parameters.get("reference_index", 0))
-        if not self.workspace.aligned_references:
-            raise BlockExecutionError("Nessun riferimento allineato disponibile")
-        if reference_index < 0 or reference_index >= len(self.workspace.aligned_references):
-            raise BlockExecutionError("Indice riferimento fuori intervallo")
-        mask = parameters.get("mask")
-        if mask is None:
-            mask = detect_occlusion_candidates(self.workspace.primary)
-        image = conservative_fusion(self.workspace.primary, self.workspace.aligned_references[reference_index], mask)
-        return ExecutionResult(block.key, image, {"reference_index": reference_index, "mask_coverage": float(np.mean(mask > 0))})
+    def _fusion(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        idx = int(p.get("reference_index", 0))
+        if not self.workspace.aligned_references: raise BlockExecutionError("Nessun riferimento allineato disponibile")
+        if idx < 0 or idx >= len(self.workspace.aligned_references): raise BlockExecutionError("Indice riferimento fuori intervallo")
+        mask = p.get("mask") if p.get("mask") is not None else detect_occlusion_candidates(self.workspace.primary)
+        image = conservative_fusion(self.workspace.primary, self.workspace.aligned_references[idx], mask)
+        return ExecutionResult(block.key, image, {"reference_index": idx, "mask_coverage": float(np.mean(mask > 0))})
 
-    def _identity(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        minimum = float(parameters.get("minimum", 0.35))
-        scores: list[float] = []
-        engine = "lab-histogram-proxy"
+    def _identity(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        minimum = float(p.get("minimum", 0.35)); scores: list[float] = []; engine = "lab-histogram-proxy"
         try:
-            backend = choose_backend(prefer_embeddings=bool(parameters.get("prefer_embeddings", True)))
-            primary = backend.analyze(self.workspace.primary)
+            backend = choose_backend(prefer_embeddings=bool(p.get("prefer_embeddings", True))); primary = backend.analyze(self.workspace.primary)
             if primary.embedding is not None:
                 for item in self.workspace.references:
-                    reference = backend.analyze(item)
-                    if reference.embedding is not None:
-                        scores.append(cosine_similarity(primary.embedding, reference.embedding))
-                if scores:
-                    engine = backend.name
-        except Exception:
-            scores = []
-        if not scores:
-            scores = [identity_similarity_proxy(self.workspace.primary, item) for item in self.workspace.references]
+                    ref = backend.analyze(item)
+                    if ref.embedding is not None: scores.append(cosine_similarity(primary.embedding, ref.embedding))
+                if scores: engine = backend.name
+        except Exception: scores = []
+        if not scores: scores = [identity_similarity_proxy(self.workspace.primary, item) for item in self.workspace.references]
         best = max(scores, default=1.0)
-        if scores and best < minimum:
-            raise BlockExecutionError(f"Controllo identità sotto soglia: {best:.3f} < {minimum:.3f}")
+        if scores and best < minimum: raise BlockExecutionError(f"Controllo identità sotto soglia: {best:.3f} < {minimum:.3f}")
         return ExecutionResult(block.key, self.workspace.copy_primary(), {"engine": engine, "scores": scores, "best": best, "minimum": minimum})
 
-    def _upscale(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        scale = int(parameters.get("scale", 2))
-        return ExecutionResult(block.key, conservative_upscale(self.workspace.primary, scale), {"scale": scale, "engine": "Lanczos4"})
+    def _upscale(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        scale = int(p.get("scale", 2)); return ExecutionResult(block.key, conservative_upscale(self.workspace.primary, scale), {"scale": scale, "engine": "Lanczos4"})
 
-    def _export(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        output = parameters.get("path")
-        if output is None:
-            raise BlockExecutionError("Percorso export mancante")
-        image_path, sidecar_path = export_image_atomic(self.workspace.primary, Path(output), project=self.project)
+    def _export(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        output = p.get("path")
+        if output is None: raise BlockExecutionError("Percorso export mancante")
+        image_path, sidecar = export_image_atomic(self.workspace.primary, Path(output), project=self.project)
         details: dict[str, Any] = {"path": str(image_path)}
-        if sidecar_path is not None:
-            details["provenance_path"] = str(sidecar_path)
+        if sidecar is not None: details["provenance_path"] = str(sidecar)
         return ExecutionResult(block.key, self.workspace.copy_primary(), details)
