@@ -35,6 +35,14 @@ def test_license_acceptance_is_required(tmp_path) -> None:
         download_model(OFFICIAL_MODELS[0], tmp_path, accept_license=False)
 
 
+def test_download_without_pinned_checksum_is_blocked(tmp_path) -> None:
+    manifest = registry_by_key()["realesrgan_x2plus"]
+    assert manifest.source_url is not None
+    assert manifest.expected_sha256 is None
+    with pytest.raises(DownloadError, match="checksum"):
+        download_model(manifest, tmp_path, accept_license=True)
+
+
 def test_manual_model_has_no_automatic_download(tmp_path) -> None:
     manifest = registry_by_key()["insightface_identity"]
     with pytest.raises(DownloadError):
