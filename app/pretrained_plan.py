@@ -66,10 +66,10 @@ PRETRAINED_BLOCK_PLAN: tuple[BlockModelChoice, ...] = (
     ),
     BlockModelChoice(
         BlockKind.INPAINT,
-        ("lama_big",),
-        "observed-reference repair",
-        "strict-observed-plus-generative-optional",
-        "Strict mode first repairs only from aligned real references. Pretrained LaMa is reserved for an explicit non-strict unresolved-area pass because it can synthesize content.",
+        ("opencv_lama_inpaint",),
+        "verified same-identity observed-reference repair",
+        "observed-reference-first-plus-small-generated-residual",
+        "The main path transfers only pixels from aligned references that pass identity, local-context and multi-reference agreement checks. The verified OpenCV Zoo LaMa ONNX checkpoint is restricted to very small residual non-critical face areas and every generated pixel is marked in provenance and identity-checked.",
     ),
     BlockModelChoice(
         BlockKind.FUSION,
