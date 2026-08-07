@@ -28,15 +28,107 @@ class ModelManifest:
 
 OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
     ModelManifest(
-        key="realesrgan_x2plus",
-        title="Real-ESRGAN x2plus",
-        filename="RealESRGAN_x2plus.pth",
-        destination="models/realesrgan/RealESRGAN_x2plus.pth",
-        source_url="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
-        code_license="BSD-3-Clause",
-        weights_license="Verify upstream release terms before redistribution",
+        key="nafnet_gopro_width32",
+        title="NAFNet GoPro width32 deblur",
+        filename="NAFNet-GoPro-width32.pth",
+        destination="models/nafnet/NAFNet-GoPro-width32.pth",
+        source_url=None,
+        code_license="NAFNet upstream license",
+        weights_license="Use under upstream model terms",
+        conservative_default=True,
+        notes=(
+            "CPU-first deblur candidate. Official repository reports 32.8705 dB / 0.9606 SSIM on GoPro "
+            "and provides the pretrained checkpoint at Google Drive id 1Fr2QadtDCEXg6iwWX8OzeZLbHOx2t5Bj. "
+            "Keep the classical deblur fallback and identity rollback enabled."
+        ),
+    ),
+    ModelManifest(
+        key="nafnet_sidd_width32",
+        title="NAFNet SIDD width32 denoise",
+        filename="NAFNet-SIDD-width32.pth",
+        destination="models/nafnet/NAFNet-SIDD-width32.pth",
+        source_url=None,
+        code_license="NAFNet upstream license",
+        weights_license="Use under upstream model terms",
+        conservative_default=True,
+        notes=(
+            "CPU-first real-image denoise candidate. Official repository reports 39.9672 dB / 0.9599 SSIM "
+            "on SIDD and provides the checkpoint at Google Drive id 1lsByk21Xw-6aW7epCwOQxvm6HYCQZPHZ."
+        ),
+    ),
+    ModelManifest(
+        key="restormer_motion_deblur",
+        title="Restormer motion deblurring",
+        filename="motion_deblurring.pth",
+        destination="models/restormer/motion_deblurring.pth",
+        source_url="https://github.com/swz30/Restormer/releases/download/v1.0/motion_deblurring.pth",
+        code_license="MIT",
+        weights_license="Use under upstream release terms",
         conservative_default=False,
-        notes="Generative super-resolution; strict mode must keep it disabled by default. Automatic download remains blocked until a trusted SHA-256 is pinned.",
+        notes="Official Restormer v1.0 checkpoint. Heavier quality alternative to NAFNet width32; use tiled inference and identity rollback.",
+    ),
+    ModelManifest(
+        key="restormer_real_denoise",
+        title="Restormer real-image denoising",
+        filename="real_denoising.pth",
+        destination="models/restormer/real_denoising.pth",
+        source_url="https://github.com/swz30/Restormer/releases/download/v1.0/real_denoising.pth",
+        code_license="MIT",
+        weights_license="Use under upstream release terms",
+        conservative_default=False,
+        notes="Official Restormer v1.0 real-image denoising checkpoint. Prefer only when the lighter NAFNet path is unavailable or validation favours it.",
+    ),
+    ModelManifest(
+        key="mirnet_fivek_enhance",
+        title="MIRNet FiveK enhancement",
+        filename="model_fivek.pth",
+        destination="models/mirnet/model_fivek.pth",
+        source_url=None,
+        code_license="MIRNet upstream license",
+        weights_license="Use under upstream model terms",
+        conservative_default=False,
+        notes=(
+            "General photographic enhancement candidate. Official MIRNet repository publishes model_fivek.pth "
+            "in its pretrained-model Google Drive folder. Apply only behind colour/identity validation."
+        ),
+    ),
+    ModelManifest(
+        key="zero_dce_plus",
+        title="Zero-DCE++ low-light enhancement",
+        filename="Epoch99.pth",
+        destination="models/zero_dce_plus/Epoch99.pth",
+        source_url="https://raw.githubusercontent.com/Li-Chongyi/Zero-DCE_extension/main/Zero-DCE++/snapshots_Zero_DCE++/Epoch99.pth",
+        code_license="CC-BY-NC-4.0 upstream",
+        weights_license="Non-commercial research terms upstream",
+        conservative_default=False,
+        max_bytes=5_000_000,
+        notes="Very small pretrained checkpoint; use only when exposure analysis classifies the input as low-light. It is not a generic old-photo enhancer.",
+    ),
+    ModelManifest(
+        key="mediapipe_face_landmarker",
+        title="MediaPipe Face Landmarker float16",
+        filename="face_landmarker.task",
+        destination="models/landmarks/face_landmarker.task",
+        source_url="https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        code_license="Apache-2.0",
+        weights_license="Google MediaPipe model terms",
+        conservative_default=True,
+        max_bytes=100_000_000,
+        notes="Official pretrained Face Landmarker bundle; preferred dense-landmark backend on CPU when installed.",
+    ),
+    ModelManifest(
+        key="bisenet_face_parsing",
+        title="BiSeNet CelebAMask-HQ face parsing",
+        filename="79999_iter.pth",
+        destination="models/face_parsing/79999_iter.pth",
+        source_url=None,
+        code_license="MIT",
+        weights_license="Use under upstream pretrained-model terms",
+        conservative_default=True,
+        notes=(
+            "Official zllrunning face-parsing.PyTorch pretrained checkpoint. Upstream download is Google Drive id "
+            "154JgKpzCPW82qINcVieuPH3fZ2e0P812. Parsing is semantic support, not proof of occlusion; strict repair still requires multi-reference consensus."
+        ),
     ),
     ModelManifest(
         key="dmdnet",
@@ -44,14 +136,27 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
         filename="DMDNet.pth",
         destination="models/dmdnet/DMDNet.pth",
         source_url="https://github.com/csxmli2016/DMDNet/releases/download/v1/DMDNet.pth",
-        code_license="CC-BY-NC-SA-4.0 (upstream project)",
-        weights_license="Use under upstream non-commercial terms; keep separate from strict mode",
+        code_license="CC-BY-NC-SA-4.0 upstream",
+        weights_license="Non-commercial research terms upstream",
+        conservative_default=False,
+        max_bytes=800_000_000,
+        notes=(
+            "Optional research backend using generic and same-identity specific memory dictionaries. "
+            "Strict mode instead uses the independent observed-pixel specific-reference memory with exact provenance."
+        ),
+    ),
+    ModelManifest(
+        key="lama_big",
+        title="LaMa big-lama inpainting",
+        filename="big-lama",
+        destination="models/lama/big-lama",
+        source_url=None,
+        code_license="Apache-2.0 upstream",
+        weights_license="Use under upstream checkpoint terms",
         conservative_default=False,
         notes=(
-            "Optional research backend inspired by dual generic/specific memory dictionaries. "
-            "The strict pipeline does not use this checkpoint: it uses an independent observed-pixel "
-            "specific-reference memory with provenance. Upstream model is 512x512-oriented and sensitive "
-            "to landmark/component localization. Automatic download remains blocked until a SHA-256 is pinned."
+            "Official LaMa instructions provide pretrained Places2/CelebA-HQ models. This is generative inpainting; "
+            "use only outside strict mode when no real reference observes the damaged area."
         ),
     ),
     ModelManifest(
@@ -61,31 +166,37 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
         destination="models/3ddfa/mb1_120x120.onnx",
         source_url=None,
         code_license="MIT",
-        weights_license="Verify upstream repository terms before redistribution",
+        weights_license="Use under upstream model terms",
         conservative_default=True,
-        notes="Manual acquisition only until an official stable release URL and checksum are recorded.",
-    ),
-    ModelManifest(
-        key="mediapipe_face_landmarker",
-        title="MediaPipe Face Landmarker",
-        filename="face_landmarker.task",
-        destination="models/landmarks/face_landmarker.task",
-        source_url=None,
-        code_license="Apache-2.0",
-        weights_license="Verify model card terms before redistribution",
-        conservative_default=True,
-        notes="Model bundle must be supplied by the user or downloaded from an approved official source.",
+        notes=(
+            "Official pre-converted ONNX model. Upstream Google Drive id: 1YpO1KfXvJHRmCBkErNa62dHm-CUjsoIk. "
+            "3DDFA_V2 documents ONNX Runtime CPU inference; use for pose/3D geometry, not texture synthesis."
+        ),
     ),
     ModelManifest(
         key="insightface_identity",
-        title="InsightFace identity model pack",
+        title="InsightFace buffalo_l identity/alignment pack",
         filename="buffalo_l",
         destination="models/models/buffalo_l",
         source_url=None,
         code_license="MIT",
-        weights_license="Pretrained recognition models require separate usage rights; do not redistribute by default",
+        weights_license="Non-commercial research use for upstream pretrained model packs",
         conservative_default=True,
-        notes="Never auto-download or redistribute recognition weights without explicit licensing. The adapter only opens a local model pack.",
+        notes=(
+            "Preferred identity guardrail backend and secondary alignment backend. buffalo_l includes detection, "
+            "recognition and 2D106/3D68 alignment models. Install through the official InsightFace model mechanism or place the pack locally."
+        ),
+    ),
+    ModelManifest(
+        key="realesrgan_x2plus",
+        title="Real-ESRGAN x2plus",
+        filename="RealESRGAN_x2plus.pth",
+        destination="models/realesrgan/RealESRGAN_x2plus.pth",
+        source_url="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
+        code_license="BSD-3-Clause",
+        weights_license="Use under upstream release terms",
+        conservative_default=False,
+        notes="Optional learned x2 super-resolution. Strict mode keeps Lanczos as the default because learned SR can synthesize texture.",
     ),
 )
 
@@ -159,16 +270,15 @@ def download_model(
 ) -> Path:
     """Download atomico con limiti e verifica SHA-256.
 
-    Richiede accettazione esplicita della licenza. Per ridurre il rischio di
-    supply-chain, un download automatico è rifiutato se il manifest non contiene
-    un SHA-256 atteso. ``allow_unverified_download`` esiste solo per sviluppo e
-    non deve essere usato dal flusso UI standard.
+    Richiede accettazione esplicita dei termini del modello. Per ridurre il rischio
+    supply-chain, il flusso UI standard rifiuta download automatici senza SHA-256
+    atteso. ``allow_unverified_download`` resta disponibile solo per sviluppo.
     """
     validate_manifest(manifest)
     if not accept_license:
-        raise PermissionError("È richiesta l'accettazione esplicita della licenza del modello")
+        raise PermissionError("È richiesta l'accettazione esplicita dei termini del modello")
     if manifest.source_url is None:
-        raise DownloadError("Nessun URL ufficiale approvato per questo modello")
+        raise DownloadError("Nessun URL diretto approvato per questo modello")
     if manifest.expected_sha256 is None and not allow_unverified_download:
         raise DownloadError("Download automatico bloccato: checksum SHA-256 non registrato")
 
