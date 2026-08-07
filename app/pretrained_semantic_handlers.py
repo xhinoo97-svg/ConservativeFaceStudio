@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from app.execution import ExecutionResult
+from app.frontalization import conservative_mild_frontal_affine, warp_auxiliary_map
 from app.opencv_semantic_models import FaceParsingEngine, HeadPoseEngine
 from app.pipeline import BlockKind, BlockSpec
 from app.pretrained_values import HEAD_POSE_DEFAULTS
@@ -146,6 +147,51 @@ def install_pretrained_semantic_handlers(executor, model_paths: dict[str, str | 
                     "pose_degrees": pose,
                     "pose_gate_passed": True,
                 })
+
+                landmarks = executor.workspace.metadata.get("primary_landmarks5")
+                mild = None
+                if landmarks is not None:
+                    mild = conservative_mild_frontal_affine(
+                        result.image,
+                        np.asarray(landmarks, dtype=np.float32),
+                        tuple(int(v) for v in bbox),
+                        float(yaw),
+                        maximum_abs_yaw=min(12.0, HEAD_POSE_DEFAULTS.max_abs_yaw_strict),
+                    )
+
+                if mild is not None:
+                    details["mild_yaw_frontalization"] = {
+                        "applied": mild.applied,
+                        "yaw_degrees": mild.yaw_degrees,
+                        "strength": mild.strength,
+                        "max_landmark_displacement": mild.max_landmark_displacement,
+                        "supported_fraction": mild.supported_fraction,
+                        "reason": mild.reason,
+                        "synthesized_pixels": 0,
+                    }
+                    if mild.applied:
+                        provenance = executor.workspace.provenance_map
+                        if isinstance(provenance, np.ndarray) and provenance.shape == mild.changed_mask.shape:
+                            executor.workspace.provenance_map = warp_auxiliary_map(
+                                provenance,
+                                mild.matrix,
+                                mild.changed_mask,
+                                interpolation=cv2.INTER_NEAREST,
+                            ).astype(np.uint16)
+                        confidence = executor.workspace.metadata.get("specific_reference_confidence")
+                        if isinstance(confidence, np.ndarray) and confidence.shape == mild.changed_mask.shape:
+                            executor.workspace.metadata["specific_reference_confidence"] = warp_auxiliary_map(
+                                confidence,
+                                mild.matrix,
+                                mild.changed_mask,
+                                interpolation=cv2.INTER_NEAREST,
+                            ).astype(np.uint8)
+                        executor.workspace.metadata["primary_landmarks5"] = mild.transformed_landmarks.copy()
+                        details["engine"] = "observed-roll-plus-mild-yaw-frontalization"
+                        details["yaw_synthesized"] = False
+                        details["provenance_geometry_updated"] = executor.workspace.provenance_map is not None
+                        return ExecutionResult(block.key, mild.image, details)
+
                 return ExecutionResult(block.key, result.image, details)
             except Exception as exc:
                 fallback = original_frontalize(block, parameters)
