@@ -47,13 +47,6 @@ class AutomaticPipelineRunner:
             install_pretrained_face_handlers(self.executor, model_paths)
             install_pretrained_restoration_handlers(self.executor, model_paths)
             install_pretrained_semantic_handlers(self.executor, model_paths)
-
-        # The main inpaint path is useful even when no learned checkpoint is present:
-        # it reconstructs only from aligned, same-identity observed reference pixels.
-        # LaMa remains an optional residual fallback and is enabled only when its
-        # verified model path exists in model_paths.  Installing this handler
-        # unconditionally prevents a transient model-download failure from silently
-        # downgrading the most important restoration block to the legacy executor.
         install_verified_inpainting_handler(self.executor, model_paths)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
@@ -132,7 +125,8 @@ class AutomaticPipelineRunner:
             return ExecutionResult(result.block, result.image, details)
 
         if not np.array_equal(before, result.image):
-            restored = self.executor.undo()
+            restored = self.executor.history.rollback_discard_current()
+            self.executor.workspace.primary = restored.copy()
         else:
             restored = before.copy()
             self.executor.workspace.primary = restored.copy()
@@ -141,6 +135,7 @@ class AutomaticPipelineRunner:
         details["rolled_back"] = True
         details["rollback_reason"] = decision.reason
         details["workspace_state_restored"] = state_before is not None
+        details["rejected_history_discarded"] = True
         details.pop("snapshot_sha256", None)
         replacement = self.executor.block_artifacts.replace_last(restored, details)
         details["snapshot_sha256"] = replacement.sha256
@@ -150,6 +145,7 @@ class AutomaticPipelineRunner:
                 "rolled_back": True,
                 "rollback_reason": decision.reason,
                 "workspace_state_restored": details["workspace_state_restored"],
+                "rejected_history_discarded": True,
                 "snapshot_sha256": replacement.sha256,
             })
         return ExecutionResult(result.block, restored, details)
@@ -171,9 +167,6 @@ class AutomaticPipelineRunner:
             if block.kind is BlockKind.DEBLUR:
                 parameters.update(deblur or {})
             elif block.kind is BlockKind.INPAINT:
-                # Strict observed-reference transfer is always attempted. The verified
-                # LaMa checkpoint is allowed only for very small residual non-critical
-                # areas and remains fully marked in provenance.
                 parameters["allow_verified_generative"] = True
                 parameters["maximum_generated_face_fraction"] = 0.015
                 parameters["maximum_generated_target_fraction"] = 0.25
