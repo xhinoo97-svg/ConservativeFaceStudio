@@ -152,9 +152,23 @@ class BlockExecutor:
 
     def _align(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         aligned, diagnostics = [], []
+        source_indices: list[int] = []
         primary_points = self.workspace.metadata.get("primary_landmarks5")
         ref_points = self.workspace.metadata.get("reference_landmarks5", [])
+        identity_available = bool(self.workspace.metadata.get("reference_identity_verification_available", False))
+        identity_verified = self.workspace.metadata.get("reference_identity_verified", [])
+        identity_scores = self.workspace.metadata.get("reference_identity_scores", [])
+        aligned_scores: list[float | None] = []
+        rejected_identity = 0
+
         for i, reference in enumerate(self.workspace.references):
+            if identity_available:
+                verified = bool(identity_verified[i]) if i < len(identity_verified) else False
+                if not verified:
+                    rejected_identity += 1
+                    diagnostics.append({"source_index": i, "rejected": True, "reason": "identity_mismatch"})
+                    continue
+
             points = ref_points[i] if i < len(ref_points) else None
             try:
                 if primary_points is not None and points is not None:
@@ -164,9 +178,21 @@ class BlockExecutor:
             except ValueError:
                 r = align_to_reference(reference, self.workspace.primary); method = "orb-ransac"
             aligned.append(r.image)
-            diagnostics.append({"method": method, "matches": r.matches, "inlier_ratio": r.inlier_ratio, "reprojection_error": r.reprojection_error})
+            source_indices.append(i)
+            aligned_scores.append(identity_scores[i] if i < len(identity_scores) else None)
+            diagnostics.append({"source_index": i, "method": method, "matches": r.matches, "inlier_ratio": r.inlier_ratio, "reprojection_error": r.reprojection_error})
+
         self.workspace.aligned_references = aligned
-        return ExecutionResult(block.key, self.workspace.copy_primary(), {"aligned": len(aligned), "diagnostics": diagnostics})
+        self.workspace.metadata["aligned_reference_source_indices"] = source_indices
+        self.workspace.metadata["aligned_reference_identity_scores"] = aligned_scores
+        self.workspace.metadata["aligned_reference_identity_verified"] = [True] * len(aligned) if identity_available else []
+        return ExecutionResult(block.key, self.workspace.copy_primary(), {
+            "aligned": len(aligned),
+            "rejected_identity": rejected_identity,
+            "identity_filter_applied": identity_available,
+            "source_indices": source_indices,
+            "diagnostics": diagnostics,
+        })
 
     def _occlusion(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         images = [self.workspace.primary, *self.workspace.aligned_references]
@@ -184,8 +210,7 @@ class BlockExecutor:
             selected, provenance, decisions = regional_reference_fusion(images, masks, landmarks, tuple(bbox), minimum_improvement=float(p.get("minimum_improvement", 0.06)))
             self.workspace.provenance_map = provenance
             return ExecutionResult(block.key, selected, {"engine": "landmark-regional", "regions": [d.__dict__ for d in decisions], "source_pixel_counts": np.bincount(provenance.ravel(), minlength=len(images)).tolist()})
-        maps = [quality_map(i, m) for i, m in zip(images, masks)]
-        selected, provenance = select_best_observed_pixels(images, maps)
+        selected, provenance = select_best_observed_pixels(images, masks)
         self.workspace.provenance_map = provenance
         return ExecutionResult(block.key, selected, {"engine": "pixel-quality-fallback", "source_pixel_counts": np.bincount(provenance.ravel(), minlength=len(images)).tolist()})
 
