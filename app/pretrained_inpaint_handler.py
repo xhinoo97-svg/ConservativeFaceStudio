@@ -102,7 +102,9 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
         identity_available = bool(
             executor.workspace.metadata.get("reference_identity_verification_available", False)
         )
-        identity_scores = executor.workspace.metadata.get("reference_identity_scores")
+        identity_scores = executor.workspace.metadata.get("aligned_reference_identity_scores")
+        if not isinstance(identity_scores, list):
+            identity_scores = executor.workspace.metadata.get("reference_identity_scores")
         if not isinstance(identity_scores, list):
             identity_scores = None
 
@@ -131,8 +133,6 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
 
         allow_generated = bool(p.get("allow_verified_generative", True))
         if allow_generated and np.any(unresolved) and lama_path is not None and Path(lama_path).is_file():
-            # Identity-sensitive components must come from observed references. LaMa
-            # can only fill a small residual on the generic cheek/forehead/chin area.
             allowed = cv2.bitwise_and(unresolved, support)
             if landmarks is not None and bbox is not None:
                 try:
