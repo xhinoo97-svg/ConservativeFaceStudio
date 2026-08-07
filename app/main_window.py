@@ -6,7 +6,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread, Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -20,8 +20,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .automatic import AutomaticPipelineRunner, AutomaticRunResult
+from .automatic import AutomaticRunResult
 from .execution import Workspace
+from .worker import PipelineWorker
 
 
 class ImagePanel(QLabel):
@@ -47,9 +48,7 @@ class ImagePanel(QLabel):
         height, width, channels = rgb.shape
         qimage = QImage(rgb.data, width, height, channels * width, QImage.Format.Format_RGB888).copy()
         pixmap = QPixmap.fromImage(qimage).scaled(
-            self.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
+            self.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
         )
         self.setPixmap(pixmap)
 
@@ -67,11 +66,12 @@ class MainWindow(QMainWindow):
         self.source_paths: list[Path] = []
         self.run_result: AutomaticRunResult | None = None
         self.run_directory: Path | None = None
+        self.worker_thread: QThread | None = None
+        self.worker: PipelineWorker | None = None
 
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-
         self.status = QLabel("1. Carica una o più foto. La prima sarà la foto principale.")
         self.status.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(self.status)
@@ -85,7 +85,6 @@ class MainWindow(QMainWindow):
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 13)
-        self.progress.setValue(0)
         layout.addWidget(self.progress)
 
         controls = QHBoxLayout()
@@ -104,10 +103,7 @@ class MainWindow(QMainWindow):
 
     def load_images(self) -> None:
         filenames, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Seleziona foto principale e riferimenti",
-            "",
-            "Immagini (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)",
+            self, "Seleziona foto principale e riferimenti", "", "Immagini (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)"
         )
         if not filenames:
             return
@@ -138,46 +134,68 @@ class MainWindow(QMainWindow):
         self._update_controls()
 
     def start_pipeline(self) -> None:
-        if self.primary is None:
+        if self.primary is None or self.worker_thread is not None:
             return
-        self.load_button.setEnabled(False)
-        self.start_button.setEnabled(False)
-        self.download_button.setEnabled(False)
-        self.progress.setRange(0, 0)
-        self.status.setText("Pipeline automatica in esecuzione…")
+        self.run_result = None
+        self.run_directory = Path(tempfile.mkdtemp(prefix="ConservativeFaceStudio-"))
+        stem = self.source_paths[0].stem if self.source_paths else "restauro"
+        output = self.run_directory / f"{stem}_finale.png"
+        workspace = Workspace(primary=self.primary.copy(), references=[item.copy() for item in self.references])
 
-        try:
-            self.run_directory = Path(tempfile.mkdtemp(prefix="ConservativeFaceStudio-"))
-            stem = self.source_paths[0].stem if self.source_paths else "restauro"
-            output = self.run_directory / f"{stem}_finale.png"
-            runner = AutomaticPipelineRunner(
-                Workspace(primary=self.primary.copy(), references=[item.copy() for item in self.references])
-            )
-            self.run_result = runner.run(output)
-            final = cv2.imread(str(self.run_result.final_image), cv2.IMREAD_COLOR)
-            if final is None:
-                raise RuntimeError("Il risultato finale non è leggibile")
-            self.after_panel.set_cv_image(final)
-            self.progress.setRange(0, 13)
-            self.progress.setValue(13)
-            self.status.setText("Elaborazione completata. Premi Scarica risultati ZIP.")
-        except Exception as exc:  # noqa: BLE001
-            self.progress.setRange(0, 13)
-            self.progress.setValue(0)
-            self.status.setText("Elaborazione non completata")
-            QMessageBox.critical(self, "Errore pipeline", str(exc))
-        finally:
-            self._update_controls()
+        thread = QThread(self)
+        worker = PipelineWorker(workspace, output, upscale=2)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._on_progress)
+        worker.completed.connect(self._on_completed)
+        worker.failed.connect(self._on_failed)
+        worker.completed.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._on_thread_finished)
+        self.worker_thread = thread
+        self.worker = worker
+        self.progress.setRange(0, 13)
+        self.progress.setValue(0)
+        self.status.setText("Pipeline automatica in esecuzione")
+        self._update_controls()
+        thread.start()
+
+    def _on_progress(self, index: int, name: str) -> None:
+        self.progress.setValue(max(0, min(13, int(index))))
+        self.status.setText(name)
+
+    def _on_completed(self, result: object) -> None:
+        if not isinstance(result, AutomaticRunResult):
+            self._on_failed("Risultato pipeline non valido")
+            return
+        self.run_result = result
+        final = cv2.imread(str(result.final_image), cv2.IMREAD_COLOR)
+        if final is None:
+            self._on_failed("Il risultato finale non è leggibile")
+            return
+        self.after_panel.set_cv_image(final)
+        self.progress.setValue(13)
+        self.status.setText("Elaborazione completata. Premi Scarica risultati ZIP.")
+        self._update_controls()
+
+    def _on_failed(self, message: str) -> None:
+        self.progress.setValue(0)
+        self.status.setText("Elaborazione non completata")
+        QMessageBox.critical(self, "Errore pipeline", str(message))
+        self._update_controls()
+
+    def _on_thread_finished(self) -> None:
+        self.worker_thread = None
+        self.worker = None
+        self._update_controls()
 
     def download_results(self) -> None:
         if self.run_result is None:
             return
-        suggested = self.run_result.blocks_zip.name
         filename, _ = QFileDialog.getSaveFileName(
-            self,
-            "Salva ZIP completo",
-            suggested,
-            "Archivio ZIP (*.zip)",
+            self, "Salva ZIP completo", self.run_result.blocks_zip.name, "Archivio ZIP (*.zip)"
         )
         if not filename:
             return
@@ -189,7 +207,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Download completato", f"Archivio salvato in:\n{destination}")
 
     def _update_controls(self) -> None:
-        has_images = self.primary is not None
-        self.load_button.setEnabled(True)
-        self.start_button.setEnabled(has_images)
-        self.download_button.setEnabled(self.run_result is not None)
+        busy = self.worker_thread is not None
+        self.load_button.setEnabled(not busy)
+        self.start_button.setEnabled(self.primary is not None and not busy)
+        self.download_button.setEnabled(self.run_result is not None and not busy)
