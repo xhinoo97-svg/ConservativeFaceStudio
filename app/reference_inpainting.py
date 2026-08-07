@@ -71,10 +71,9 @@ def _best_context_translation(
     """Find a tiny translation from the visible ring around the damaged area.
 
     Registration must tolerate the normal exposure/white-balance differences between
-    photographs of the same person.  Raw LAB distance alone used to reject otherwise
-    useful references.  We therefore compare median-centred LAB structure and Sobel
-    gradient magnitude.  This changes only registration: transferred pixels still come
-    directly from the selected real reference and remain covered by provenance.
+    photographs of the same person. Raw LAB distance alone rejects otherwise useful
+    references, so matching uses median-centred LAB structure plus Sobel magnitude.
+    This changes registration only: transferred pixels still come from real references.
     """
     shape = primary.shape[:2]
     ring = _context_ring(target_mask) > 0
@@ -106,8 +105,6 @@ def _best_context_translation(
 
             left = base_lab[dy_s, dx_s][active]
             right = ref_lab[sy_s, sx_s][active]
-            # Remove global local illumination/white-balance offsets while keeping
-            # component structure. Median is robust to small residual occlusions.
             left_centered = left - np.median(left, axis=0, keepdims=True)
             right_centered = right - np.median(right, axis=0, keepdims=True)
             delta = np.abs(left_centered - right_centered)
@@ -164,19 +161,68 @@ def _agreement_mask(
     *,
     threshold: float = 24.0,
 ) -> np.ndarray:
-    shape = target.shape
+    """Return target pixels supported by at least two structurally agreeing references.
+
+    Different photographs of the same person routinely have different exposure and
+    white balance. Comparing raw LAB values made valid references disagree. We remove
+    one robust per-reference LAB offset over the requested region before comparing
+    structure, while also checking gradient magnitude. A conflicting eye/mouth shape
+    still produces a large structural/gradient residual and is rejected.
+    """
     if len(references) < 2:
         return target.copy()
-    labs = np.stack([cv2.cvtColor(item, cv2.COLOR_BGR2LAB).astype(np.float32) for item in references], axis=0)
-    valid = np.stack([(mask == 0) & (np.max(item, axis=2) > 2) for item, mask in zip(references, masks)], axis=0)
-    values = labs.copy()
+
+    valid = np.stack(
+        [(mask == 0) & (np.max(item, axis=2) > 2) for item, mask in zip(references, masks)],
+        axis=0,
+    )
+    target_bool = target > 0
+    labs = np.stack(
+        [cv2.cvtColor(item, cv2.COLOR_BGR2LAB).astype(np.float32) for item in references],
+        axis=0,
+    )
+    gradients: list[np.ndarray] = []
+    centred_labs: list[np.ndarray] = []
+
+    for index, item in enumerate(references):
+        active = valid[index] & target_bool
+        lab = labs[index].copy()
+        if int(np.count_nonzero(active)) >= 24:
+            offset = np.median(lab[active], axis=0)
+        else:
+            broader = valid[index]
+            offset = np.median(lab[broader], axis=0) if np.any(broader) else np.zeros(3, np.float32)
+        centred_labs.append(lab - offset.reshape(1, 1, 3))
+
+        gray = cv2.cvtColor(item, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        gradients.append(cv2.magnitude(gx, gy))
+
+    values = np.stack(centred_labs, axis=0)
+    grad_values = np.stack(gradients, axis=0)
     values[~valid[..., None].repeat(3, axis=3)] = np.nan
+    grad_values[~valid] = np.nan
+
     with np.errstate(invalid="ignore"):
-        median = np.nanmedian(values, axis=0)
-        per_ref_delta = np.mean(np.abs(values - median[None, ...]), axis=3)
-        agreement = np.nanmedian(per_ref_delta, axis=0)
+        median_lab = np.nanmedian(values, axis=0)
+        lab_delta = np.mean(np.abs(values - median_lab[None, ...]), axis=3)
+        lab_disagreement = np.nanmedian(lab_delta, axis=0)
+
+        median_grad = np.nanmedian(grad_values, axis=0)
+        grad_delta = np.abs(grad_values - median_grad[None, ...])
+        grad_disagreement = np.nanmedian(grad_delta, axis=0)
+        grad_scale = np.maximum(16.0, np.nanmedian(grad_values, axis=0))
+        normalized_grad = grad_disagreement / grad_scale * 18.0
+
+    combined = 0.78 * lab_disagreement + 0.22 * normalized_grad
     valid_count = np.sum(valid, axis=0)
-    accepted = (target > 0) & (valid_count >= 2) & np.isfinite(agreement) & (agreement <= float(threshold))
+    accepted = (
+        target_bool
+        & (valid_count >= 2)
+        & np.isfinite(combined)
+        & (combined <= float(threshold))
+    )
     return accepted.astype(np.uint8) * 255
 
 
