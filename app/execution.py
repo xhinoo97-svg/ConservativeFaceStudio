@@ -107,11 +107,19 @@ class BlockExecutor:
         return ExecutionResult(block.key, self.workspace.copy_primary(), {"references": len(self.workspace.references)})
 
     def _deblur(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
-        s = DeblurSettings(denoise=int(p.get("denoise", 5)), sharpen=float(p.get("sharpen", 1.0)), contrast=float(p.get("contrast", 1.0)))
+        defaults = DeblurSettings()
+        s = DeblurSettings(
+            denoise=int(p.get("denoise", defaults.denoise)),
+            sharpen=float(p.get("sharpen", defaults.sharpen)),
+            contrast=float(p.get("contrast", defaults.contrast)),
+            preserve_edges=bool(p.get("preserve_edges", defaults.preserve_edges)),
+        )
         return ExecutionResult(block.key, conservative_deblur(self.workspace.primary, s), {"settings": s.__dict__})
 
     def _enhance(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
-        return ExecutionResult(block.key, quality_enhance(self.workspace.primary), {})
+        clip_limit = float(p.get("clip_limit", 1.7))
+        blend = float(p.get("blend", 0.2))
+        return ExecutionResult(block.key, quality_enhance(self.workspace.primary, clip_limit=clip_limit, blend=blend), {"clip_limit": clip_limit, "blend": blend})
 
     def _landmarks(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         backend = choose_backend(prefer_embeddings=bool(p.get("prefer_model", True)))
@@ -164,12 +172,20 @@ class BlockExecutor:
         return ExecutionResult(block.key, selected, {"engine": "pixel-quality-fallback", "source_pixel_counts": np.bincount(provenance.ravel(), minlength=len(images)).tolist()})
 
     def _fusion(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        if self.workspace.provenance_map is not None:
+            provenance = self.workspace.provenance_map
+            counts = np.bincount(provenance.ravel()).tolist()
+            return ExecutionResult(
+                block.key,
+                self.workspace.copy_primary(),
+                {"engine": "region-selection-finalized", "source_pixel_counts": counts, "second_pass": False},
+            )
         idx = int(p.get("reference_index", 0))
         if not self.workspace.aligned_references: raise BlockExecutionError("Nessun riferimento allineato disponibile")
         if idx < 0 or idx >= len(self.workspace.aligned_references): raise BlockExecutionError("Indice riferimento fuori intervallo")
         mask = p.get("mask") if p.get("mask") is not None else detect_occlusion_candidates(self.workspace.primary)
         image = conservative_fusion(self.workspace.primary, self.workspace.aligned_references[idx], mask)
-        return ExecutionResult(block.key, image, {"reference_index": idx, "mask_coverage": float(np.mean(mask > 0))})
+        return ExecutionResult(block.key, image, {"engine": "masked-reference-fallback", "reference_index": idx, "mask_coverage": float(np.mean(mask > 0)), "second_pass": True})
 
     def _identity(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         minimum = float(p.get("minimum", 0.35)); scores: list[float] = []; engine = "lab-histogram-proxy"
