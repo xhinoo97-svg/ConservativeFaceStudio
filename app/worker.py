@@ -5,11 +5,12 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot
 
 from app.automatic import AutomaticPipelineRunner
+from app.core_models import ensure_core_pretrained_models
 from app.execution import Workspace
 
 
 class PipelineWorker(QObject):
-    """Esegue la pipeline fuori dal thread UI per evitare finestre bloccate."""
+    """Esegue download verificati e pipeline fuori dal thread UI."""
 
     progress = Signal(int, str)
     completed = Signal(object)
@@ -24,6 +25,14 @@ class PipelineWorker(QObject):
     @Slot()
     def run(self) -> None:
         try:
+            self.progress.emit(0, "Preparazione modelli pretrained CPU")
+            bootstrap = ensure_core_pretrained_models(timeout_seconds=15)
+            self.workspace.metadata["core_model_paths"] = {
+                key: str(path) for key, path in bootstrap.paths.items()
+            }
+            self.workspace.metadata["core_model_errors"] = dict(bootstrap.errors)
+            self.workspace.metadata["core_models_ready"] = bootstrap.ready
+
             runner = AutomaticPipelineRunner(self.workspace)
             runner.on_progress = lambda index, name: self.progress.emit(int(index), str(name))
             result = runner.run(self.output, upscale=self.upscale)
