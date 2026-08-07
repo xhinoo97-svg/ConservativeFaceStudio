@@ -26,9 +26,10 @@ if (!(Test-Path 'models/model-registry.json')) {
   python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-registry.json', all_model_manifests())"
 }
 
-# Ship the verified production checkpoints with the portable package/installer.
-# The application still keeps a writable per-user cache for future replacements,
-# but a first run must not depend on network availability.
-Copy-Item 'models/*' "$package/models" -Recurse -Force
+# Keep the PyInstaller step independent from large checkpoint downloads. Production
+# models are checksum-verified and staged explicitly by stage_production_models.ps1
+# after the executable exists. This avoids duplicating optional/research checkpoints
+# and keeps peak disk usage low on GitHub-hosted Windows runners.
+Copy-Item 'models/model-registry.json' "$package/models/model-registry.json" -Force
 Copy-Item 'THIRD_PARTY_MODULES.md' "$package/THIRD_PARTY_MODULES.md" -Force
 Copy-Item 'README.md' "$package/README.md" -Force
