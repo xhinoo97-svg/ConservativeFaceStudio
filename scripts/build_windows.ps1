@@ -5,7 +5,6 @@ python -m PyInstaller `
   --clean `
   --windowed `
   --name ConservativeFaceStudio `
-  --collect-all PySide6 `
   --hidden-import cv2 `
   --hidden-import app.model_registry `
   app/__main__.py
