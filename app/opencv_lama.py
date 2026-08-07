@@ -17,27 +17,47 @@ class LamaInpaintResult:
 
 
 class OpenCVLamaEngine:
-    """OpenCV-DNN wrapper around the official OpenCV Zoo LaMa ONNX checkpoint.
+    """CPU-first LaMa ONNX wrapper with conservative compositing.
 
-    The network is never allowed to rewrite the full image. Inference is performed
-    on a bounded ROI around the requested hole and the returned pixels are composited
-    strictly inside the supplied binary mask. This does not make LaMa conservative by
-    itself; callers must still treat these pixels as generated and run identity checks.
+    The public class name is kept for backward compatibility, but inference deliberately
+    uses ONNX Runtime rather than OpenCV's native DNN engine. OpenCV 5.0 had a documented
+    graph-fusion regression for the OpenCV Zoo LaMa model that could turn the masked
+    region white. ONNX Runtime produces the expected graph execution and is also a
+    predictable CPU backend for the EliteBook target hardware.
+
+    The model is never allowed to rewrite the full image. Inference is performed on a
+    bounded ROI around the requested hole and returned pixels are composited strictly
+    inside the supplied binary mask. Callers must still mark these pixels as generated
+    and run the identity guardrail.
     """
 
-    def __init__(self, model_path: str | Path, *, target: str = "cpu") -> None:
+    def __init__(self, model_path: str | Path, *, target: str = "cpu", cpu_threads: int = 2) -> None:
         path = Path(model_path).resolve()
         if not path.is_file():
             raise RuntimeError(f"LaMa non trovato: {path}")
-        self.net = cv2.dnn.readNetFromONNX(str(path))
-        self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-        requested = str(target).lower()
-        if requested == "opencl" and hasattr(cv2.dnn, "DNN_TARGET_OPENCL"):
-            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_OPENCL)
-            self.target = "opencl"
-        else:
-            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-            self.target = "cpu"
+        try:
+            import onnxruntime as ort
+        except ImportError as exc:
+            raise RuntimeError("onnxruntime non installato: impossibile eseguire LaMa in modo affidabile") from exc
+
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = max(1, min(4, int(cpu_threads)))
+        options.inter_op_num_threads = 1
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        self.session = ort.InferenceSession(
+            str(path),
+            sess_options=options,
+            providers=["CPUExecutionProvider"],
+        )
+        self.input_names = [item.name for item in self.session.get_inputs()]
+        if len(self.input_names) != 2:
+            raise RuntimeError(f"Input LaMa inattesi: {self.input_names}")
+        self.output_names = [item.name for item in self.session.get_outputs()]
+        if not self.output_names:
+            raise RuntimeError("Output LaMa non disponibile")
+        self.target = "onnxruntime-cpu"
+        self.requested_target = str(target).lower()
 
     @staticmethod
     def _validate(image: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -65,32 +85,37 @@ class OpenCVLamaEngine:
         y2 = min(mask.shape[0], y + h + side_margin)
         return x1, y1, max(1, x2 - x1), max(1, y2 - y1)
 
-    def _forward(self, image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    @staticmethod
+    def _blobs(image: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         resized_image = cv2.resize(image, (512, 512), interpolation=cv2.INTER_AREA)
         resized_mask = cv2.resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST)
-        image_blob = cv2.dnn.blobFromImage(
-            resized_image,
-            scalefactor=1.0 / 255.0,
-            size=(512, 512),
-            mean=(0.0, 0.0, 0.0),
-            swapRB=False,
-            crop=False,
-        )
-        mask_blob = cv2.dnn.blobFromImage(
-            resized_mask,
-            scalefactor=1.0,
-            size=(512, 512),
-            mean=(0.0,),
-            swapRB=False,
-            crop=False,
-        )
-        mask_blob = (mask_blob > 0).astype(np.float32)
-        self.net.setInput(image_blob, "image")
-        self.net.setInput(mask_blob, "mask")
-        output = np.asarray(self.net.forward())
-        if output.ndim != 4 or output.shape[0] != 1:
+        image_blob = np.transpose(resized_image.astype(np.float32) / 255.0, (2, 0, 1))[None, ...]
+        mask_blob = (resized_mask > 0).astype(np.float32)[None, None, ...]
+        return np.ascontiguousarray(image_blob), np.ascontiguousarray(mask_blob)
+
+    def _forward(self, image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        image_blob, mask_blob = self._blobs(image, mask)
+        feeds: dict[str, np.ndarray] = {}
+        for name in self.input_names:
+            lower = name.lower()
+            if "mask" in lower:
+                feeds[name] = mask_blob
+            elif "image" in lower or "img" in lower:
+                feeds[name] = image_blob
+            else:
+                # The OpenCV Zoo model has exactly image+mask inputs. For converted
+                # variants with neutral names, infer from channel count as a fallback.
+                meta = next(item for item in self.session.get_inputs() if item.name == name)
+                shape = list(meta.shape)
+                channels = shape[1] if len(shape) >= 2 and isinstance(shape[1], int) else None
+                feeds[name] = mask_blob if channels == 1 else image_blob
+
+        output = np.asarray(self.session.run([self.output_names[0]], feeds)[0])
+        if output.ndim != 4 or output.shape[0] != 1 or output.shape[1] != 3:
             raise RuntimeError(f"Output LaMa inatteso: {output.shape}")
         result = np.transpose(output[0], (1, 2, 0))
+        if not np.isfinite(result).all():
+            raise RuntimeError("Output LaMa contiene valori non finiti")
         return np.clip(result, 0, 255).astype(np.uint8)
 
     def infer(self, image: np.ndarray, mask: np.ndarray) -> LamaInpaintResult:
