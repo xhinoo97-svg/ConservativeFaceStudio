@@ -4,11 +4,11 @@ import numpy as np
 
 from app.opencv_semantic_models import FaceParsingEngine, HeadPoseEngine
 from app.pretrained_values import FACE_MODEL_DEFAULTS, PARSING_DEFAULTS, validate_defaults
-from app.standard_pretrained import STANDARD_MODELS, standard_manifest_by_key
+from app.standard_pretrained import STANDARD_MODELS, STANDARD_GENERATIVE_KEYS, STANDARD_STRICT_KEYS, standard_manifest_by_key
 
 
 def test_standard_pretrained_models_have_pinned_hashes() -> None:
-    assert len(STANDARD_MODELS) == 3
+    assert len(STANDARD_MODELS) == 4
     for manifest in STANDARD_MODELS:
         assert manifest.source_url is not None
         assert manifest.expected_sha256 is not None
@@ -21,7 +21,10 @@ def test_expected_production_models_are_registered() -> None:
         "opencv_nafnet_deblur",
         "face_parsing_resnet18_onnx",
         "head_pose_mobilenetv2_onnx",
+        "opencv_lama_inpaint",
     }
+    assert set(STANDARD_STRICT_KEYS).isdisjoint(set(STANDARD_GENERATIVE_KEYS))
+    assert registry["opencv_lama_inpaint"].conservative_default is False
 
 
 def test_official_runtime_values_are_sane() -> None:
