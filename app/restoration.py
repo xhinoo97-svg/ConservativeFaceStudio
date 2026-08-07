@@ -61,23 +61,54 @@ def quality_enhance(image: np.ndarray, clip_limit: float = 1.7, blend: float = 0
 
 
 def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
-    """Maschera euristica conservativa di regioni molto scure/chiare o poco testurizzate.
+    """Conservative multi-signal candidate mask for stickers/scribbles/obscuration.
 
-    Non identifica semanticamente l'oggetto: produce solo candidati da confermare in UI.
+    This is deliberately not the final occlusion decision. It produces a broad,
+    deterministic proposal that must later be constrained by face parsing and
+    confirmed against aligned same-identity references. Besides black/white and
+    flat regions, it detects locally implausible chroma and thin high-contrast
+    marks, which are common for stickers and drawn scribbles.
     """
     source = _ensure_bgr(image)
     gray = cv2.cvtColor(source, cv2.COLOR_BGR2GRAY)
     hsv = cv2.cvtColor(source, cv2.COLOR_BGR2HSV)
+    lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB)
     saturation = hsv[:, :, 1]
+
     local_mean = cv2.GaussianBlur(gray, (0, 0), 7)
     local_sq = cv2.GaussianBlur(gray.astype(np.float32) ** 2, (0, 0), 7)
     variance = np.maximum(local_sq - local_mean.astype(np.float32) ** 2, 0)
 
     extreme = ((gray < 18) | (gray > 242)).astype(np.uint8) * 255
-    flat = ((variance < 12) & (saturation < 18)).astype(np.uint8) * 255
+    flat = ((variance < 10) & (saturation < 24)).astype(np.uint8) * 255
+
+    # Coloured stickers/paint tend to be strong local chroma outliers. Work in LAB
+    # and compare only chroma, so a normal illumination gradient is not mistaken
+    # for an occlusion.
+    lab_f = lab.astype(np.float32)
+    local_lab = cv2.GaussianBlur(lab_f, (0, 0), 5.0)
+    chroma_delta = np.linalg.norm(lab_f[:, :, 1:3] - local_lab[:, :, 1:3], axis=2)
+    chroma_outlier = ((chroma_delta > 22.0) & (saturation > 48)).astype(np.uint8) * 255
+
+    # Thin pen/marker strokes are often local luminance outliers with a dense edge
+    # response. Requiring both properties avoids treating ordinary facial contours
+    # as a sticker proposal in isolation.
+    local_luma_delta = cv2.absdiff(gray, local_mean)
+    edges = cv2.Canny(gray, 70, 150)
+    edge_band = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+    scribble = ((local_luma_delta > 38) & (edge_band > 0)).astype(np.uint8) * 255
+
     mask = cv2.bitwise_or(extreme, flat)
-    kernel = np.ones((3, 3), np.uint8)
-    return cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.bitwise_or(mask, chroma_outlier)
+    mask = cv2.bitwise_or(mask, scribble)
+
+    # Join fragmented marker strokes while keeping the proposal local. Very small
+    # isolated noise is removed; subsequent reference consensus remains the final
+    # gate before any pixel can be replaced.
+    close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    open_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, close_kernel)
+    return cv2.morphologyEx(mask, cv2.MORPH_OPEN, open_kernel)
 
 
 def conservative_fusion(base: np.ndarray, reference: np.ndarray, mask: np.ndarray) -> np.ndarray:
