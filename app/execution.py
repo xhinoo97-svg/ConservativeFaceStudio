@@ -109,6 +109,18 @@ class BlockExecutor:
 
         return ExecutionResult(result.block, result.image, details)
 
+    def record_skipped(self, block: BlockSpec, reason: str) -> ExecutionResult:
+        """Registra anche i blocchi saltati, mantenendo una foto per ogni fase della pipeline."""
+        details = {"skipped": True, "reason": str(reason)}
+        image = self.workspace.copy_primary()
+        self.project.operations.append(
+            OperationRecord(block=block.key, parameters=details, conservative=not block.generative)
+        )
+        snapshot = self.block_artifacts.record(block.key, block.title, image, details)
+        details["snapshot"] = snapshot.filename
+        details["snapshot_sha256"] = snapshot.sha256
+        return ExecutionResult(block.key, image, details)
+
     def undo(self) -> np.ndarray:
         image = self.history.undo()
         self.workspace.primary = image.copy()
@@ -196,5 +208,8 @@ class BlockExecutor:
         output = parameters.get("path")
         if output is None:
             raise BlockExecutionError("Percorso export mancante")
-        path = export_image_atomic(self.workspace.primary, Path(output), project=self.project)
-        return ExecutionResult(block.key, self.workspace.copy_primary(), {"path": str(path)})
+        image_path, sidecar_path = export_image_atomic(self.workspace.primary, Path(output), project=self.project)
+        details: dict[str, Any] = {"path": str(image_path)}
+        if sidecar_path is not None:
+            details["provenance_path"] = str(sidecar_path)
+        return ExecutionResult(block.key, self.workspace.copy_primary(), details)
