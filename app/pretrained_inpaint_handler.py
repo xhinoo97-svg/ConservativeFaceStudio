@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 from app.execution import BlockExecutionError, ExecutionResult
-from app.opencv_lama import OpenCVLamaEngine
+from app.opencv_lama import LamaInpaintResult, OpenCVLamaEngine
 from app.pipeline import BlockKind, BlockSpec
 from app.pretrained_values import FACE_MODEL_DEFAULTS
 from app.reference_inpainting import verified_reference_repair
@@ -29,15 +29,15 @@ def _hardware_target(workspace) -> str:
 def install_verified_inpainting_handler(executor, model_paths: dict[str, str | Path]) -> None:
     """Install the main face-occlusion repair block.
 
-    Order of evidence:
-      1) same-identity real references;
-      2) local alignment around the hole;
-      3) multi-reference pixel agreement;
-      4) direct observed-pixel transfer with provenance;
-      5) optional LaMa only for a tiny non-critical residual.
+    Evidence order is intentionally strict:
+      1) real same-identity references;
+      2) local alignment around the damaged area;
+      3) agreement between references;
+      4) direct observed-pixel transfer with exact provenance;
+      5) optional LaMa only for a tiny, non-critical residual.
 
     LaMa is never considered evidence. Generated pixels receive provenance 65535 and
-    the outer AutomaticPipelineRunner identity guardrail can roll the whole block back.
+    the outer identity guardrail can roll back the complete block.
     """
     target_backend = _hardware_target(executor.workspace)
     lama_path = model_paths.get("opencv_lama_inpaint")
@@ -132,7 +132,7 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
         allow_generated = bool(p.get("allow_verified_generative", True))
         if allow_generated and np.any(unresolved) and lama_path is not None and Path(lama_path).is_file():
             # Identity-sensitive components must come from observed references. LaMa
-            # may only clean a small residual on the remaining face area.
+            # can only fill a small residual on the generic cheek/forehead/chin area.
             allowed = cv2.bitwise_and(unresolved, support)
             if landmarks is not None and bbox is not None:
                 try:
@@ -151,56 +151,59 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
             allowed_pixels = int(np.count_nonzero(allowed))
             maximum_face_fraction = float(p.get("maximum_generated_face_fraction", 0.015))
             maximum_pixels = max(1, int(round(face_pixels * maximum_face_fraction)))
-            if 0 < allowed_pixels <= maximum_pixels:
-                requested_target = target > 0
-                if np.count_nonzero(requested_target):
-                    allowed_target_fraction = allowed_pixels / max(1, int(np.count_nonzero(requested_target)))
-                else:
-                    allowed_target_fraction = 1.0
-                if allowed_target_fraction <= float(p.get("maximum_generated_target_fraction", 0.25)):
-                    requested_target_name = target_backend
-                    try:
-                        result = lama_engine(requested_target_name).infer(image, allowed)
-                        actual_backend = result.backend
-                    except Exception as first_exc:
-                        if requested_target_name != "opencl":
-                            lama_details = {"attempted": True, "accepted_for_guardrail": False, "error": str(first_exc)}
-                        else:
-                            try:
-                                result = lama_engine("cpu").infer(image, allowed)
-                                actual_backend = result.backend
-                            except Exception as second_exc:
-                                lama_details = {
-                                    "attempted": True,
-                                    "accepted_for_guardrail": False,
-                                    "error": f"OpenCL: {first_exc}; CPU: {second_exc}",
-                                }
-                        if "result" in locals():
-                            image = result.image
-                            generated_mask = result.generated_mask
-                            generated_pixels = result.generated_pixels
-                            provenance[generated_mask > 0] = GENERATED_PROVENANCE_CODE
-                            unresolved[generated_mask > 0] = 0
+            target_pixels = max(1, int(np.count_nonzero(target)))
+            allowed_target_fraction = allowed_pixels / target_pixels
+
+            if (
+                0 < allowed_pixels <= maximum_pixels
+                and allowed_target_fraction <= float(p.get("maximum_generated_target_fraction", 0.25))
+            ):
+                requested_target_name = target_backend
+                lama_result: LamaInpaintResult | None = None
+                first_error: Exception | None = None
+                try:
+                    lama_result = lama_engine(requested_target_name).infer(image, allowed)
+                except Exception as exc:
+                    first_error = exc
+                    if requested_target_name == "opencl":
+                        try:
+                            lama_result = lama_engine("cpu").infer(image, allowed)
+                        except Exception as cpu_exc:
                             lama_details = {
                                 "attempted": True,
-                                "accepted_for_guardrail": True,
-                                "model": "opencv-zoo-lama-2025jan",
-                                "backend": actual_backend,
-                                "roi": list(result.roi),
+                                "accepted_for_guardrail": False,
+                                "error": f"OpenCL: {first_error}; CPU: {cpu_exc}",
                             }
                     else:
-                        image = result.image
-                        generated_mask = result.generated_mask
-                        generated_pixels = result.generated_pixels
-                        provenance[generated_mask > 0] = GENERATED_PROVENANCE_CODE
-                        unresolved[generated_mask > 0] = 0
                         lama_details = {
                             "attempted": True,
-                            "accepted_for_guardrail": True,
-                            "model": "opencv-zoo-lama-2025jan",
-                            "backend": actual_backend,
-                            "roi": list(result.roi),
+                            "accepted_for_guardrail": False,
+                            "error": str(first_error),
                         }
+
+                if lama_result is not None:
+                    image = lama_result.image
+                    generated_mask = lama_result.generated_mask
+                    generated_pixels = int(lama_result.generated_pixels)
+                    provenance[generated_mask > 0] = GENERATED_PROVENANCE_CODE
+                    unresolved[generated_mask > 0] = 0
+                    lama_details = {
+                        "attempted": True,
+                        "accepted_for_guardrail": True,
+                        "model": "opencv-zoo-lama-2025jan",
+                        "backend": lama_result.backend,
+                        "roi": list(lama_result.roi),
+                        "generated_face_fraction": generated_pixels / face_pixels,
+                        "generated_target_fraction": generated_pixels / target_pixels,
+                    }
+            elif allowed_pixels > 0:
+                lama_details = {
+                    "attempted": False,
+                    "reason": "residuo troppo grande per la generazione conservativa",
+                    "allowed_pixels": allowed_pixels,
+                    "maximum_pixels": maximum_pixels,
+                    "allowed_target_fraction": allowed_target_fraction,
+                }
 
         if (
             executor.workspace.provenance_map is None
@@ -226,7 +229,7 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
                 "reference_identity_threshold": FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
                 "requested_pixels": observed.requested_pixels,
                 "repaired_pixels": observed.repaired_pixels,
-                "generated_pixels": int(generated_pixels),
+                "generated_pixels": generated_pixels,
                 "unresolved_pixels": int(np.count_nonzero(unresolved)),
                 "source_pixel_counts": list(observed.source_pixel_counts),
                 "local_shifts": [list(item) for item in observed.local_shifts],
