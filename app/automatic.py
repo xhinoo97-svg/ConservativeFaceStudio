@@ -8,6 +8,7 @@ import numpy as np
 
 from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.pipeline import BlockKind
+from app.pretrained_face_handlers import install_pretrained_face_handlers
 from app.strict_execution import StrictBlockExecutor
 from app.validation import evaluate_identity_guardrail
 
@@ -25,6 +26,9 @@ class AutomaticPipelineRunner:
 
     def __init__(self, workspace: Workspace) -> None:
         self.executor = StrictBlockExecutor(workspace)
+        core_paths = workspace.metadata.get("core_model_paths")
+        if isinstance(core_paths, dict):
+            install_pretrained_face_handlers(self.executor, core_paths)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
