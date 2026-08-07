@@ -13,6 +13,7 @@ from app.pretrained_values import FACE_MODEL_DEFAULTS
 from app.reference_inpainting import verified_reference_repair
 from app.regional_fusion import facial_region_masks
 from app.restoration import detect_occlusion_candidates
+from app.strict_execution import _remap_aligned_provenance
 from app.strict_repair import face_support_mask, reference_consensus_occlusion_mask
 
 
@@ -24,6 +25,18 @@ def _hardware_target(workspace) -> str:
     if isinstance(policy, dict) and str(policy.get("dnn_target", "cpu")).lower() == "opencl":
         return "opencl"
     return "cpu"
+
+
+def _aligned_source_indices(workspace, reference_count: int) -> list[int]:
+    stored = workspace.metadata.get("aligned_reference_source_indices")
+    if isinstance(stored, list) and len(stored) == reference_count:
+        try:
+            indices = [int(item) for item in stored]
+        except (TypeError, ValueError):
+            indices = []
+        if len(indices) == reference_count and all(0 <= item < len(workspace.references) for item in indices):
+            return indices
+    return list(range(reference_count))
 
 
 def install_verified_inpainting_handler(executor, model_paths: dict[str, str | Path]) -> None:
@@ -57,6 +70,7 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
         if not references:
             raise BlockExecutionError("Nessun riferimento reale allineato disponibile per rimuovere la copertura")
 
+        source_indices = _aligned_source_indices(executor.workspace, len(references))
         masks = executor.workspace.occlusion_masks
         reference_masks = (
             list(masks[1:])
@@ -95,6 +109,7 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
                     "repaired_pixels": 0,
                     "generated_pixels": 0,
                     "unresolved_pixels": 0,
+                    "aligned_reference_source_indices": source_indices,
                     "reason": "nessuna copertura confermata da fotografie della stessa persona",
                 },
             )
@@ -125,7 +140,7 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
         )
 
         image = observed.image
-        provenance = observed.provenance_map.copy()
+        provenance = _remap_aligned_provenance(observed.provenance_map, source_indices)
         unresolved = observed.unresolved_mask.copy()
         generated_mask = np.zeros_like(unresolved)
         generated_pixels = 0
@@ -219,6 +234,10 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
         executor.workspace.metadata["inpaint_generated_mask"] = generated_mask.copy()
         executor.workspace.metadata["inpaint_unresolved_mask"] = unresolved.copy()
 
+        source_counts = [
+            int(np.count_nonzero(provenance == original_index + 1))
+            for original_index in range(len(executor.workspace.references))
+        ]
         return ExecutionResult(
             block.key,
             image,
@@ -231,7 +250,8 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
                 "repaired_pixels": observed.repaired_pixels,
                 "generated_pixels": generated_pixels,
                 "unresolved_pixels": int(np.count_nonzero(unresolved)),
-                "source_pixel_counts": list(observed.source_pixel_counts),
+                "aligned_reference_source_indices": source_indices,
+                "source_pixel_counts": source_counts,
                 "local_shifts": [list(item) for item in observed.local_shifts],
                 "context_scores": list(observed.context_scores),
                 "agreement_rejected_pixels": observed.agreement_rejected_pixels,
