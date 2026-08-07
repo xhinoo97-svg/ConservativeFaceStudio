@@ -17,7 +17,7 @@ concurrency:
 jobs:
   test-and-build:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     env:
       PYTHONPATH: ${{ github.workspace }}
       QT_QPA_PLATFORM: offscreen
@@ -59,6 +59,11 @@ jobs:
         shell: pwsh
         run: python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-registry.json', all_model_manifests())"
 
+      - name: Bootstrap verified production models for offline installer
+        shell: pwsh
+        run: |
+          python -c "from app.production_models import ensure_production_pretrained_models; b=ensure_production_pretrained_models('.', face_timeout_seconds=60, restoration_timeout_seconds=180); print({k:str(v) for k,v in b.paths.items()}); print(b.errors); assert b.face_ready and b.standard_ready and b.inpaint_ready, b.errors"
+
       - name: Build Windows executable
         shell: pwsh
         run: .\scripts\build_windows.ps1
@@ -73,6 +78,16 @@ jobs:
           if (!(Test-Path "dist\ConservativeFaceStudio\models\model-registry.json")) { throw "Model registry missing" }
           $registry = Get-Content "dist\ConservativeFaceStudio\models\model-registry.json" -Raw | ConvertFrom-Json
           if ($registry.Count -lt 10) { throw "Model registry incomplete" }
+          foreach ($model in @(
+            'models\yunet\face_detection_yunet_2023mar.onnx',
+            'models\sface\face_recognition_sface_2021dec.onnx',
+            'models\nafnet\deblurring_nafnet_2025may.onnx',
+            'models\face_parsing\resnet18.onnx',
+            'models\head_pose\mobilenetv2.onnx',
+            'models\lama\inpainting_lama_2025jan.onnx'
+          )) {
+            if (!(Test-Path "dist\ConservativeFaceStudio\$model")) { throw "Bundled production model missing: $model" }
+          }
           $exe = Get-Item "dist\ConservativeFaceStudio\ConservativeFaceStudio.exe"
           if ($exe.Length -lt 1MB) { throw "Executable unexpectedly small" }
           $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -Wait -PassThru -NoNewWindow
