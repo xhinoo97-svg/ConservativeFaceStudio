@@ -73,9 +73,11 @@ def _best_context_translation(
 ) -> tuple[int, int, float]:
     """Find a tiny translation from the visible ring around the damaged area.
 
-    Registration must tolerate normal exposure/white-balance differences between
-    photographs of the same person. Matching therefore uses median-centred LAB
-    structure plus Sobel magnitude rather than raw colour distance.
+    Registration tolerates exposure/white-balance changes by comparing median-centred
+    LAB structure and Sobel magnitude. Flat/repeated context can make several shifts
+    score identically; those ties must prefer the smallest displacement, otherwise the
+    scan order can invent a spurious ±max_shift registration and copy the wrong facial
+    location even when the reference is already aligned.
     """
     shape = primary.shape[:2]
     ring = _context_ring(target_mask) > 0
@@ -94,6 +96,7 @@ def _best_context_translation(
 
     best = (0, 0, float("inf"), 0)
     limit = max(0, int(max_shift))
+    epsilon = 1e-6
     for dy in range(-limit, limit + 1):
         for dx in range(-limit, limit + 1):
             slices = _overlap_slices(h, w, dx, dy)
@@ -118,7 +121,11 @@ def _best_context_translation(
             gradient_cost = float(np.median(np.abs(left_grad - right_grad)) / grad_scale * 32.0)
 
             cost = 0.72 * colour_cost + 0.28 * gradient_cost
-            if cost < best[2]:
+            candidate_distance = dx * dx + dy * dy
+            best_distance = best[0] * best[0] + best[1] * best[1]
+            if cost < best[2] - epsilon or (
+                abs(cost - best[2]) <= epsilon and candidate_distance < best_distance
+            ):
                 best = (dx, dy, cost, count)
 
     if not np.isfinite(best[2]):
@@ -248,7 +255,6 @@ def _agreement_mask(
         median_lab = np.nanmedian(values, axis=0)
         lab_delta = np.mean(np.abs(values - median_lab[None, ...]), axis=3)
         lab_disagreement = np.nanmedian(lab_delta, axis=0)
-
         median_grad = np.nanmedian(grad_values, axis=0)
         grad_delta = np.abs(grad_values - median_grad[None, ...])
         grad_disagreement = np.nanmedian(grad_delta, axis=0)
