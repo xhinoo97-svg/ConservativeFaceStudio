@@ -42,10 +42,14 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q app tests
-          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; from app.model_registry import OFFICIAL_MODELS, validate_manifest; [validate_manifest(m) for m in OFFICIAL_MODELS]"
+          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.regional_fusion; from app.model_registry import OFFICIAL_MODELS, validate_manifest; [validate_manifest(m) for m in OFFICIAL_MODELS]"
 
       - name: Run tests
         run: python -m pytest -q
+
+      - name: Conservative validation suite
+        shell: pwsh
+        run: python -m app.validation_suite --output validation-report.json
 
       - name: CPU smoke benchmark
         shell: pwsh
@@ -95,4 +99,5 @@ jobs:
             ConservativeFaceStudio-Windows-x64.zip
             dist-installer/ConservativeFaceStudio-Setup-x64.exe
             benchmark-windows-ci.json
+            validation-report.json
           retention-days: 14
