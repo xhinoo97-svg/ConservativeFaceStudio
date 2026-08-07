@@ -126,9 +126,6 @@ def test_local_alignment_accepts_same_face_under_exposure_change() -> None:
     mask = _target()
     damaged[mask > 0] = (245, 30, 180)
 
-    # Same observed face, but from a differently exposed photograph and with a
-    # small registration offset. Registration should not discard it merely because
-    # its global brightness differs from the primary image.
     brighter = cv2.convertScaleAbs(clean, alpha=1.08, beta=24)
     matrix = np.float32([[1, 0, 2], [0, 1, -1]])
     brighter_shifted = cv2.warpAffine(brighter, matrix, (128, 128), borderMode=cv2.BORDER_REFLECT)
@@ -147,4 +144,30 @@ def test_local_alignment_accepts_same_face_under_exposure_change() -> None:
     assert result.repaired_pixels > 0
     assert result.context_scores and result.context_scores[0] >= 0.42
     assert result.local_shifts
+    assert np.array_equal(result.image[mask == 0], damaged[mask == 0])
+
+
+def test_local_photometric_matching_reduces_visible_exposure_seam() -> None:
+    clean = _face()
+    damaged = clean.copy()
+    mask = _target()
+    damaged[mask > 0] = (245, 30, 180)
+    brighter = cv2.convertScaleAbs(clean, alpha=1.0, beta=16)
+
+    result = verified_reference_repair(
+        damaged,
+        [brighter],
+        mask,
+        identity_scores=[0.8],
+        identity_verification_available=True,
+        minimum_context_score=0.20,
+        feather_sigma=0.0,
+    )
+
+    assert result.repaired_pixels == result.requested_pixels
+    assert result.photometric_offsets_lab
+    assert abs(result.photometric_offsets_lab[0][0]) > 1.0
+    repaired_error = float(np.mean(np.abs(result.image[mask > 0].astype(np.int16) - clean[mask > 0].astype(np.int16))))
+    raw_reference_error = float(np.mean(np.abs(brighter[mask > 0].astype(np.int16) - clean[mask > 0].astype(np.int16))))
+    assert repaired_error < raw_reference_error
     assert np.array_equal(result.image[mask == 0], damaged[mask == 0])
