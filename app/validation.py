@@ -18,6 +18,8 @@ class GuardrailDecision:
     score_drop: float
     engine: str
     reason: str
+    retention_ratio: float = 1.0
+    minimum_retention: float = 0.95
 
 
 def _embedding_score(image: np.ndarray, anchors: Iterable[np.ndarray]) -> tuple[float, str] | None:
@@ -54,25 +56,47 @@ def evaluate_identity_guardrail(
     *,
     max_drop: float = 0.12,
     absolute_minimum: float = 0.25,
+    minimum_retention: float = 0.95,
 ) -> GuardrailDecision:
-    """Rifiuta un blocco solo quando peggiora in modo significativo la coerenza con immagini osservate.
+    """Rifiuta trasformazioni che riducono troppo la coerenza con fotografie osservate.
 
-    Gli anchor devono essere fotografie reali della stessa persona. Se non esistono riferimenti,
-    l'immagine precedente viene usata come anchor conservativo per rilevare cambiamenti estremi.
+    ``minimum_retention`` confronta il candidato con il punteggio del blocco precedente:
+    0.95 significa che, quando il punteggio precedente e' sopra la soglia affidabile,
+    il candidato deve conservarne almeno il 95%. Non e' una percentuale assoluta di
+    identita', ma un guardrail relativo utile contro regressioni cumulative.
     """
     if before is None or before.size == 0 or candidate is None or candidate.size == 0:
         raise ValueError("Immagini non valide per il guardrail")
+    if not 0.0 < minimum_retention <= 1.0:
+        raise ValueError("minimum_retention deve essere compreso tra 0 e 1")
+
     effective = list(anchors) if anchors else [before]
     before_score, before_engine = identity_anchor_score(before, effective)
     after_score, after_engine = identity_anchor_score(candidate, effective)
     engine = after_engine if after_engine != "no-anchor" else before_engine
     drop = float(before_score - after_score)
-    accepted = after_score >= absolute_minimum and drop <= max_drop
+    if before_score > 1e-6:
+        retention_ratio = float(after_score / before_score)
+    else:
+        retention_ratio = 1.0 if after_score >= before_score else 0.0
+
+    retention_required = before_score >= absolute_minimum
+    retained = (not retention_required) or retention_ratio >= minimum_retention
+    accepted = after_score >= absolute_minimum and drop <= max_drop and retained
     reason = "accepted" if accepted else (
-        f"identity regression: {after_score:.3f}, drop {drop:.3f}, "
-        f"limits minimum={absolute_minimum:.3f}, max_drop={max_drop:.3f}"
+        f"identity regression: {after_score:.3f}, drop {drop:.3f}, retention {retention_ratio:.3f}; "
+        f"limits minimum={absolute_minimum:.3f}, max_drop={max_drop:.3f}, retention>={minimum_retention:.3f}"
     )
-    return GuardrailDecision(accepted, float(before_score), float(after_score), drop, engine, reason)
+    return GuardrailDecision(
+        accepted,
+        float(before_score),
+        float(after_score),
+        drop,
+        engine,
+        reason,
+        retention_ratio,
+        float(minimum_retention),
+    )
 
 
 @dataclass(frozen=True)
