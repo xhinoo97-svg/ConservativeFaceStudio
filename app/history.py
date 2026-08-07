@@ -75,3 +75,16 @@ class ImageHistory:
             raise RuntimeError("Nessuna operazione da ripristinare")
         self._index += 1
         return self.current()
+
+    def rollback_discard_current(self) -> np.ndarray:
+        """Torna allo snapshot precedente eliminando definitivamente lo stato rifiutato.
+
+        Il normale ``undo`` conserva lo stato corrente nella coda redo. Questo è corretto
+        per un comando utente, ma non per un risultato bocciato dal guardrail d'identità:
+        un'immagine giudicata non sicura non deve poter rientrare con Redo.
+        """
+        if not self.can_undo:
+            raise RuntimeError("Nessuna operazione da annullare")
+        self._index -= 1
+        del self._items[self._index + 1 :]
+        return self.current()
