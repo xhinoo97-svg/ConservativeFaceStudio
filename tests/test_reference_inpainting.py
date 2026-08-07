@@ -118,3 +118,33 @@ def test_local_alignment_corrects_small_reference_shift() -> None:
     assert result.local_shifts
     dx, dy = result.local_shifts[0]
     assert abs(dx) <= 5 and abs(dy) <= 5
+
+
+def test_local_alignment_accepts_same_face_under_exposure_change() -> None:
+    clean = _face()
+    damaged = clean.copy()
+    mask = _target()
+    damaged[mask > 0] = (245, 30, 180)
+
+    # Same observed face, but from a differently exposed photograph and with a
+    # small registration offset. Registration should not discard it merely because
+    # its global brightness differs from the primary image.
+    brighter = cv2.convertScaleAbs(clean, alpha=1.08, beta=24)
+    matrix = np.float32([[1, 0, 2], [0, 1, -1]])
+    brighter_shifted = cv2.warpAffine(brighter, matrix, (128, 128), borderMode=cv2.BORDER_REFLECT)
+
+    result = verified_reference_repair(
+        damaged,
+        [brighter_shifted],
+        mask,
+        identity_scores=[0.8],
+        identity_verification_available=True,
+        max_local_shift=5,
+        minimum_context_score=0.42,
+        feather_sigma=0.0,
+    )
+
+    assert result.repaired_pixels > 0
+    assert result.context_scores and result.context_scores[0] >= 0.42
+    assert result.local_shifts
+    assert np.array_equal(result.image[mask == 0], damaged[mask == 0])
