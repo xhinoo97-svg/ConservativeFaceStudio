@@ -59,6 +59,17 @@ jobs:
         shell: pwsh
         run: python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-registry.json', all_model_manifests())"
 
+      - name: Free build cache before PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip cache purge
+          if (Test-Path '.pytest_cache') { Remove-Item '.pytest_cache' -Recurse -Force }
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name,Used,Free -AutoSize
+
+      - name: Build Windows executable
+        shell: pwsh
+        run: .\scripts\build_windows.ps1
+
       - name: Bootstrap verified production models for offline installer
         shell: pwsh
         run: |
@@ -72,9 +83,9 @@ jobs:
         shell: pwsh
         run: python scripts/smoke_lama_runtime.py
 
-      - name: Build Windows executable
+      - name: Stage verified production models
         shell: pwsh
-        run: .\scripts\build_windows.ps1
+        run: .\scripts\stage_production_models.ps1
 
       - name: Smoke test portable package
         shell: pwsh
