@@ -4,8 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+import numpy as np
+
 from app.execution import BlockExecutionError, BlockExecutor, ExecutionResult, Workspace
 from app.pipeline import BlockKind
+from app.validation import evaluate_identity_guardrail
 
 
 @dataclass(frozen=True)
@@ -22,41 +25,60 @@ class AutomaticPipelineRunner:
     def __init__(self, workspace: Workspace) -> None:
         self.executor = BlockExecutor(workspace)
         self.on_progress: Callable[[int, str], None] | None = None
+        self._original_anchor = workspace.copy_primary()
 
     def _emit_progress(self, index: int, name: str) -> None:
         callback = self.on_progress
         if callback is not None:
             callback(int(index), str(name))
 
-    def run(
-        self,
-        output: str | Path,
-        *,
-        deblur: dict[str, Any] | None = None,
-        upscale: int = 2,
-        identity_minimum: float = 0.35,
-    ) -> AutomaticRunResult:
+    def _apply_guardrail(self, block, before: np.ndarray, result: ExecutionResult) -> ExecutionResult:
+        if block.kind in {BlockKind.IMPORT, BlockKind.EXPORT, BlockKind.IDENTITY_CHECK, BlockKind.UPSCALE}:
+            return result
+        anchors = list(self.executor.workspace.references) or [self._original_anchor]
+        decision = evaluate_identity_guardrail(before, result.image, anchors, max_drop=0.18, absolute_minimum=0.20)
+        details = dict(result.details)
+        details["identity_guardrail"] = {
+            "accepted": decision.accepted,
+            "score_before": decision.score_before,
+            "score_after": decision.score_after,
+            "score_drop": decision.score_drop,
+            "engine": decision.engine,
+            "reason": decision.reason,
+        }
+        if decision.accepted:
+            if self.executor.project.operations:
+                self.executor.project.operations[-1].parameters["identity_guardrail"] = details["identity_guardrail"]
+            return ExecutionResult(result.block, result.image, details)
+
+        if not np.array_equal(before, result.image):
+            restored = self.executor.undo()
+        else:
+            restored = before.copy()
+            self.executor.workspace.primary = restored.copy()
+        details["rolled_back"] = True
+        details["rollback_reason"] = decision.reason
+        self.executor.block_artifacts.replace_last(restored, details)
+        if self.executor.project.operations:
+            self.executor.project.operations[-1].parameters.update({
+                "identity_guardrail": details["identity_guardrail"],
+                "rolled_back": True,
+                "rollback_reason": decision.reason,
+            })
+        return ExecutionResult(result.block, restored, details)
+
+    def run(self, output: str | Path, *, deblur: dict[str, Any] | None = None, upscale: int = 2, identity_minimum: float = 0.35) -> AutomaticRunResult:
         output_path = Path(output)
         blocks = self.executor.pipeline.blocks
         results: list[ExecutionResult] = []
-
         for index, block in enumerate(blocks, start=1):
             self._emit_progress(index - 1, f"Avvio: {block.title}")
             if block.kind is BlockKind.EXPORT:
-                result = self.executor.execute(
-                    block,
-                    path=output_path,
-                    blocks_zip=output_path.with_suffix(output_path.suffix + ".blocks.zip"),
-                )
+                result = self.executor.execute(block, path=output_path, blocks_zip=output_path.with_suffix(output_path.suffix + ".blocks.zip"))
                 results.append(result)
                 self._emit_progress(index, block.title)
                 provenance = result.details.get("provenance_path")
-                return AutomaticRunResult(
-                    final_image=Path(result.details["path"]),
-                    provenance=Path(provenance) if provenance else None,
-                    blocks_zip=Path(result.details["blocks_zip"]),
-                    results=tuple(results),
-                )
+                return AutomaticRunResult(Path(result.details["path"]), Path(provenance) if provenance else None, Path(result.details["blocks_zip"]), tuple(results))
 
             parameters: dict[str, Any] = {}
             if block.kind is BlockKind.DEBLUR:
@@ -73,8 +95,11 @@ class AutomaticPipelineRunner:
                 continue
 
             try:
-                results.append(self.executor.execute(block, **parameters))
-                self._emit_progress(index, block.title)
+                before = self.executor.workspace.copy_primary()
+                raw = self.executor.execute(block, **parameters)
+                result = self._apply_guardrail(block, before, raw)
+                results.append(result)
+                self._emit_progress(index, block.title + (" — rollback" if result.details.get("rolled_back") else ""))
             except BlockExecutionError as exc:
                 if block.kind in {BlockKind.IMPORT, BlockKind.IDENTITY_CHECK}:
                     raise
@@ -83,7 +108,6 @@ class AutomaticPipelineRunner:
             except ValueError as exc:
                 results.append(self.executor.record_skipped(block, str(exc)))
                 self._emit_progress(index, f"{block.title} — saltato")
-
         raise RuntimeError("Pipeline terminata senza blocco export")
 
     def _skip_reason(self, kind: BlockKind) -> str | None:
