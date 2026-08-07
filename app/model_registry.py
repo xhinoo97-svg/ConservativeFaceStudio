@@ -32,7 +32,7 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
         title="Real-ESRGAN x2plus",
         filename="RealESRGAN_x2plus.pth",
         destination="models/realesrgan/RealESRGAN_x2plus.pth",
-        source_url="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/RealESRGAN_x2plus.pth",
+        source_url="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth",
         code_license="BSD-3-Clause",
         weights_license="Verify upstream release terms before redistribution",
         conservative_default=False,
@@ -62,14 +62,14 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
     ),
     ModelManifest(
         key="insightface_identity",
-        title="InsightFace identity model",
-        filename="model.onnx",
-        destination="models/insightface/model.onnx",
+        title="InsightFace identity model pack",
+        filename="buffalo_l",
+        destination="models/models/buffalo_l",
         source_url=None,
         code_license="MIT",
         weights_license="Separate license required for many pretrained recognition models",
         conservative_default=True,
-        notes="Never auto-download or redistribute recognition weights without explicit licensing.",
+        notes="Never auto-download or redistribute recognition weights without explicit licensing. The adapter only opens a local model pack.",
     ),
 )
 
@@ -104,6 +104,33 @@ def validate_manifest(manifest: ModelManifest) -> None:
         parsed = urllib.parse.urlparse(manifest.source_url)
         if parsed.scheme != "https" or not parsed.netloc:
             raise ValueError("Sono consentiti solo URL HTTPS")
+
+
+def inspect_model(manifest: ModelManifest, root: str | Path) -> dict[str, object]:
+    """Restituisce uno stato locale senza modificare o scaricare nulla."""
+    validate_manifest(manifest)
+    root_path = Path(root).resolve()
+    target = (root_path / manifest.destination).resolve()
+    try:
+        target.relative_to(root_path)
+    except ValueError as exc:
+        raise ValueError("La destinazione esce dalla directory del progetto") from exc
+    exists = target.exists()
+    status: dict[str, object] = {
+        "key": manifest.key,
+        "path": str(target),
+        "exists": exists,
+        "is_directory": target.is_dir() if exists else False,
+        "checksum_required": manifest.expected_sha256 is not None,
+        "checksum_ok": None,
+    }
+    if exists and target.is_file():
+        status["size_bytes"] = target.stat().st_size
+        actual = sha256_path(target)
+        status["sha256"] = actual
+        if manifest.expected_sha256 is not None:
+            status["checksum_ok"] = actual.lower() == manifest.expected_sha256.lower()
+    return status
 
 
 def download_model(
