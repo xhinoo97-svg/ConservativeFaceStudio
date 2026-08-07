@@ -68,11 +68,26 @@ def _best_context_translation(
     max_shift: int = 5,
     minimum_context_pixels: int = 96,
 ) -> tuple[int, int, float]:
-    """Find a tiny translation using only the visible ring around the damaged area."""
+    """Find a tiny translation from the visible ring around the damaged area.
+
+    Registration must tolerate the normal exposure/white-balance differences between
+    photographs of the same person.  Raw LAB distance alone used to reject otherwise
+    useful references.  We therefore compare median-centred LAB structure and Sobel
+    gradient magnitude.  This changes only registration: transferred pixels still come
+    directly from the selected real reference and remain covered by provenance.
+    """
     shape = primary.shape[:2]
     ring = _context_ring(target_mask) > 0
     base_lab = cv2.cvtColor(primary, cv2.COLOR_BGR2LAB).astype(np.float32)
     ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32)
+    base_gray = cv2.cvtColor(primary, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    ref_gray = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    base_gx = cv2.Sobel(base_gray, cv2.CV_32F, 1, 0, ksize=3)
+    base_gy = cv2.Sobel(base_gray, cv2.CV_32F, 0, 1, ksize=3)
+    ref_gx = cv2.Sobel(ref_gray, cv2.CV_32F, 1, 0, ksize=3)
+    ref_gy = cv2.Sobel(ref_gray, cv2.CV_32F, 0, 1, ksize=3)
+    base_grad = cv2.magnitude(base_gx, base_gy)
+    ref_grad = cv2.magnitude(ref_gx, ref_gy)
     ref_valid = reference_mask == 0
     h, w = shape
 
@@ -88,18 +103,28 @@ def _best_context_translation(
             count = int(np.count_nonzero(active))
             if count < minimum_context_pixels:
                 continue
+
             left = base_lab[dy_s, dx_s][active]
             right = ref_lab[sy_s, sx_s][active]
-            # L channel dominates registration while chroma still helps reject a
-            # semantically wrong neighboring patch.
-            delta = np.abs(left - right)
-            cost = float(np.mean(delta[:, 0]) + 0.25 * np.mean(delta[:, 1:]))
+            # Remove global local illumination/white-balance offsets while keeping
+            # component structure. Median is robust to small residual occlusions.
+            left_centered = left - np.median(left, axis=0, keepdims=True)
+            right_centered = right - np.median(right, axis=0, keepdims=True)
+            delta = np.abs(left_centered - right_centered)
+            colour_cost = float(np.median(delta[:, 0]) + 0.20 * np.median(delta[:, 1:]))
+
+            left_grad = base_grad[dy_s, dx_s][active]
+            right_grad = ref_grad[sy_s, sx_s][active]
+            grad_scale = max(16.0, float(np.median(left_grad) + np.median(right_grad)))
+            gradient_cost = float(np.median(np.abs(left_grad - right_grad)) / grad_scale * 32.0)
+
+            cost = 0.72 * colour_cost + 0.28 * gradient_cost
             if cost < best[2]:
                 best = (dx, dy, cost, count)
 
     if not np.isfinite(best[2]):
         return 0, 0, 0.0
-    score = float(np.clip(1.0 - best[2] / 80.0, 0.0, 1.0))
+    score = float(np.clip(1.0 - best[2] / 48.0, 0.0, 1.0))
     return int(best[0]), int(best[1]), score
 
 
