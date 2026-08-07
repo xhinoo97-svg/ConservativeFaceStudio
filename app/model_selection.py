@@ -8,6 +8,11 @@ from app.pipeline import BlockKind
 from app.pretrained_plan import plan_by_block
 
 
+MODEL_DEPENDENCIES: dict[str, tuple[str, ...]] = {
+    "opencv_sface": ("opencv_yunet",),
+}
+
+
 @dataclass(frozen=True)
 class ModelSelection:
     block: BlockKind
@@ -19,18 +24,26 @@ class ModelSelection:
     reason: str
 
 
+def _installed(key: str, root: str | Path) -> bool:
+    registry = registry_by_key()
+    status = inspect_model(registry[key], root)
+    if not bool(status["exists"]):
+        return False
+    return all(_installed(dependency, root) for dependency in MODEL_DEPENDENCIES.get(key, ()))
+
+
 def select_model_for_block(block: BlockKind, root: str | Path = ".") -> ModelSelection:
     """Select the highest-priority installed pretrained model for a block.
 
     Selection never downloads anything and never makes a missing optional model a
     pipeline error. Model order is defined centrally in ``app.pretrained_plan``.
+    Dependencies such as SFace -> YuNet must also be installed.
     """
     choice = plan_by_block()[block]
     registry = registry_by_key()
     for key in choice.primary_models:
-        manifest = registry[key]
-        status = inspect_model(manifest, root)
-        if bool(status["exists"]):
+        if _installed(key, root):
+            status = inspect_model(registry[key], root)
             return ModelSelection(
                 block=block,
                 model_key=key,
