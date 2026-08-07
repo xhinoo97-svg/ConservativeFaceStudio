@@ -13,9 +13,9 @@ def _session(model_path: Path) -> ort.InferenceSession:
     """Create the CPU-first ONNX Runtime session used by the upstream projects.
 
     The face-parsing and head-pose checkpoints are exported/tested upstream with
-    ONNX Runtime.  OpenCV DNN can reject otherwise valid graphs when a newer ONNX
+    ONNX Runtime. OpenCV DNN can reject otherwise valid graphs when a newer ONNX
     operator is introduced, so production inference follows the checkpoint authors'
-    runtime instead of depending on OpenCV's importer.  Two intra-op threads keep
+    runtime instead of depending on OpenCV's importer. Two intra-op threads keep
     sustained CPU load appropriate for the EliteBook-class target hardware.
     """
     options = ort.SessionOptions()
@@ -60,7 +60,7 @@ class FaceParsingEngine:
         self.output_names = [item.name for item in self.session.get_outputs()]
         default = int(PARSING_DEFAULTS.input_size)
         self.input_size = _static_input_size(self.session, (default, default))
-        # These checkpoints are deliberately CPU-first.  Keep the public attribute
+        # These checkpoints are deliberately CPU-first. Keep the public attribute
         # stable even if a caller requested OpenCL; OpenCL is not an ORT provider.
         self.target = "cpu"
         self.requested_target = str(target).lower()
@@ -75,7 +75,11 @@ class FaceParsingEngine:
         output = np.asarray(outputs[0])
         if output.ndim != 4 or output.shape[0] != 1:
             raise RuntimeError(f"Output face parsing inatteso: {output.shape}")
+        if not np.isfinite(output).all():
+            raise RuntimeError("Output face parsing non finito")
         mask = np.argmax(output[0], axis=0).astype(np.uint8)
+        if int(mask.max(initial=0)) > 18:
+            raise RuntimeError(f"Classe face parsing fuori intervallo: {int(mask.max())}")
         return cv2.resize(mask, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_NEAREST)
 
     @classmethod
@@ -102,12 +106,34 @@ class HeadPoseEngine:
         self.requested_target = str(target).lower()
 
     @staticmethod
-    def rotation_matrix_to_euler(rotation: np.ndarray) -> tuple[float, float, float]:
+    def _validated_rotation(rotation: np.ndarray) -> np.ndarray:
+        """Validate the 6DRepNet rotation output before it can steer geometry.
+
+        The upstream ONNX graph decodes ortho6D into a (B,3,3) rotation matrix.
+        A malformed/corrupt checkpoint must therefore fail closed instead of feeding
+        arbitrary angles into the frontalization gate.
+        """
         matrix = np.asarray(rotation, dtype=np.float32)
         if matrix.shape == (1, 3, 3):
             matrix = matrix[0]
         if matrix.shape != (3, 3):
             raise RuntimeError(f"Rotazione head-pose inattesa: {matrix.shape}")
+        if not np.isfinite(matrix).all():
+            raise RuntimeError("Rotazione head-pose contiene valori non finiti")
+
+        gram = matrix.T @ matrix
+        orthogonality_error = float(np.max(np.abs(gram - np.eye(3, dtype=np.float32))))
+        determinant = float(np.linalg.det(matrix))
+        if orthogonality_error > 0.08 or not 0.85 <= determinant <= 1.15:
+            raise RuntimeError(
+                "Rotazione head-pose non valida "
+                f"(ortho_error={orthogonality_error:.4f}, det={determinant:.4f})"
+            )
+        return matrix
+
+    @classmethod
+    def rotation_matrix_to_euler(cls, rotation: np.ndarray) -> tuple[float, float, float]:
+        matrix = cls._validated_rotation(rotation)
         sy = float(np.sqrt(matrix[0, 0] ** 2 + matrix[1, 0] ** 2))
         singular = sy < 1e-6
         if singular:
@@ -118,7 +144,10 @@ class HeadPoseEngine:
             pitch = np.arctan2(matrix[2, 1], matrix[2, 2])
             yaw = np.arctan2(-matrix[2, 0], sy)
             roll = np.arctan2(matrix[1, 0], matrix[0, 0])
-        return tuple(float(value) for value in np.degrees([pitch, yaw, roll]))
+        angles = np.degrees([pitch, yaw, roll]).astype(np.float64)
+        if not np.isfinite(angles).all() or np.any(np.abs(angles) > 180.0):
+            raise RuntimeError(f"Angoli head-pose non validi: {angles.tolist()}")
+        return tuple(float(value) for value in angles)
 
     def estimate(self, face_crop: np.ndarray) -> tuple[float, float, float]:
         if face_crop is None or face_crop.size == 0 or face_crop.ndim != 3:
