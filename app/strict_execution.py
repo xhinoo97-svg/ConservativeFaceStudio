@@ -59,10 +59,14 @@ class StrictBlockExecutor(BlockExecutor):
         landmarks = self.workspace.metadata.get("primary_landmarks5")
         bbox = self.workspace.metadata.get("primary_bbox")
         if landmarks is None or bbox is None:
-            fallback = super()._region_select(block, p)
-            details = dict(fallback.details)
-            details["memory_fallback"] = "landmark o bbox non disponibili"
-            return ExecutionResult(block.key, fallback.image, details)
+            return ExecutionResult(block.key, self.workspace.copy_primary(), {
+                "engine": "specific-memory-abstain",
+                "conservative": True,
+                "generic_dictionary_used": False,
+                "reference_count": len(self.workspace.aligned_references),
+                "transferred_pixels": 0,
+                "reason": "geometria facciale non abbastanza affidabile per una fusione strict",
+            })
 
         images = [self.workspace.primary, *self.workspace.aligned_references]
         masks = self.workspace.occlusion_masks or [
