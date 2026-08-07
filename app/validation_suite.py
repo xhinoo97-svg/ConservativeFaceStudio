@@ -22,29 +22,56 @@ def _reference_image(width: int = 320, height: int = 320) -> np.ndarray:
     return image
 
 
-def run_validation_suite() -> dict[str, object]:
+def run_validation_suite(
+    *,
+    minimum_psnr_delta: float = -0.05,
+    minimum_identity_delta: float = -0.05,
+) -> dict[str, object]:
     ground_truth = _reference_image()
     cases = synthetic_degradations(ground_truth)
-    report: dict[str, object] = {"format": "ConservativeFaceStudio validation suite", "version": 1, "cases": {}}
+    report: dict[str, object] = {
+        "format": "ConservativeFaceStudio validation suite",
+        "version": 2,
+        "thresholds": {
+            "minimum_psnr_delta": float(minimum_psnr_delta),
+            "minimum_identity_delta": float(minimum_identity_delta),
+        },
+        "passed": True,
+        "cases": {},
+    }
+    failures: list[str] = []
+    settings = DeblurSettings()
     for name, degraded in cases.items():
-        restored = quality_enhance(conservative_deblur(degraded, DeblurSettings(denoise=4, sharpen=0.7, contrast=1.0)))
+        restored = quality_enhance(conservative_deblur(degraded, settings))
         before = validation_metrics(degraded, ground_truth)
         after = validation_metrics(restored, ground_truth)
+        identity_delta = float(after.identity_score - before.identity_score)
+        psnr_delta = float(after.psnr - before.psnr)
+        passed = psnr_delta >= minimum_psnr_delta and identity_delta >= minimum_identity_delta
+        if not passed:
+            failures.append(name)
         report["cases"][name] = {
             "before": asdict(before),
             "after": asdict(after),
-            "identity_delta": after.identity_score - before.identity_score,
-            "psnr_delta": after.psnr - before.psnr,
+            "identity_delta": identity_delta,
+            "psnr_delta": psnr_delta,
+            "passed": passed,
         }
+    report["passed"] = not failures
+    report["failed_cases"] = failures
     return report
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="validation-report.json")
+    parser.add_argument("--fail-on-regression", action="store_true")
     args = parser.parse_args()
+    report = run_validation_suite()
     target = Path(args.output)
-    target.write_text(json.dumps(run_validation_suite(), indent=2, sort_keys=True), encoding="utf-8")
+    target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    if args.fail_on_regression and not bool(report["passed"]):
+        return 2
     return 0
 
 
