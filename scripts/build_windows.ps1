@@ -11,6 +11,9 @@ python -m PyInstaller `
   --hidden-import app.opencv_nafnet `
   --hidden-import app.opencv_semantic_models `
   --hidden-import app.pretrained_semantic_handlers `
+  --hidden-import app.opencv_lama `
+  --hidden-import app.reference_inpainting `
+  --hidden-import app.pretrained_inpaint_handler `
   app/__main__.py
 
 $package = 'dist/ConservativeFaceStudio'
