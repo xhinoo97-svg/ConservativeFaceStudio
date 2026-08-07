@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 import shutil
 
+from app.model_registry import OFFICIAL_MODELS, inspect_model
+from app.pretrained_plan import PRETRAINED_BLOCK_PLAN
+
 
 @dataclass(frozen=True)
 class ModuleStatus:
@@ -34,95 +37,97 @@ def _command_status(
     )
 
 
-def _model_status(
-    key: str,
-    title: str,
-    purpose: str,
-    relative_path: str,
-    stage: str,
-) -> ModuleStatus:
-    path = Path(relative_path)
-    return ModuleStatus(key, title, purpose, path.exists(), str(path), stage)
+def _model_stage_map() -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for choice in PRETRAINED_BLOCK_PLAN:
+        for model_key in choice.primary_models:
+            result.setdefault(model_key, []).append(choice.block.value)
+    return result
 
 
-def discover_modules() -> list[ModuleStatus]:
-    """Rileva modelli preaddestrati opzionali senza impedire l'avvio dell'app."""
-    return [
+def discover_pretrained_models(root: str | Path = ".") -> list[ModuleStatus]:
+    """Rileva solo modelli realmente registrati e con una sorgente/previsione d'uso documentata."""
+    stages = _model_stage_map()
+    result: list[ModuleStatus] = []
+    for manifest in OFFICIAL_MODELS:
+        status = inspect_model(manifest, root)
+        stage_names = stages.get(manifest.key, [])
+        stage = ",".join(stage_names) if stage_names else "optional"
+        exists = bool(status["exists"])
+        detail = str(status["path"])
+        if not exists:
+            detail += " — checkpoint non installato"
+        result.append(
+            ModuleStatus(
+                manifest.key,
+                manifest.title,
+                manifest.notes,
+                exists,
+                detail,
+                stage,
+                pretrained=True,
+            )
+        )
+    return result
+
+
+def discover_modules(root: str | Path = ".") -> list[ModuleStatus]:
+    """Rileva backend preaddestrati e runtime esterni senza impedire l'avvio dell'app."""
+    result = discover_pretrained_models(root)
+    result.append(
         _command_status(
-            "realesrgan",
-            "Real-ESRGAN NCNN",
-            "Upscale finale x2/x4 con accelerazione Vulkan",
+            "realesrgan_ncnn",
+            "Real-ESRGAN NCNN executable",
+            "Backend Vulkan opzionale per upscale senza caricare PyTorch nel processo principale",
             "realesrgan-ncnn-vulkan",
             "upscale",
-        ),
-        _model_status(
-            "lama",
-            "LaMa ONNX",
-            "Rimozione di oggetti, emoji e coperture non identitarie",
-            "models/lama/lama.onnx",
-            "inpainting",
-        ),
-        _model_status(
-            "codeformer",
-            "CodeFormer",
-            "Restauro generativo opzionale, separato dalla modalità rigorosa",
-            "models/codeformer/codeformer.pth",
-            "restoration-optional",
-        ),
-        _model_status(
-            "3ddfa",
-            "3DDFA V2",
-            "Stima posa 3D, allineamento e frontalizzazione",
-            "models/3ddfa/mb1_120x120.onnx",
-            "geometry",
-        ),
-        _model_status(
-            "insightface",
-            "InsightFace",
-            "Rilevamento, allineamento e controllo di coerenza identitaria",
-            "models/insightface",
-            "identity",
-        ),
-        _model_status(
-            "dfdnet",
-            "DFDNet",
-            "Restauro per componenti: occhi, naso e bocca",
-            "models/dfdnet",
-            "component-restoration",
-        ),
-        _model_status(
-            "gfrnet",
-            "GFRNet",
-            "Restauro guidato da una fotografia di riferimento",
-            "models/gfrnet",
-            "reference-guided",
-        ),
-        _model_status(
-            "face_parsing",
-            "BiSeNet Face Parsing",
-            "Segmentazione di pelle, occhi, bocca, capelli e zone occluse",
-            "models/face_parsing/bisenet.onnx",
-            "segmentation",
-        ),
-        _model_status(
-            "landmarks",
-            "Face Landmarks ONNX",
-            "Punti facciali per registrazione e confronto multi-foto",
-            "models/landmarks/face_landmarks.onnx",
-            "alignment",
-        ),
-        _model_status(
-            "deblur",
-            "Face Deblur ONNX",
-            "Deblur facciale preaddestrato opzionale",
-            "models/deblur/face_deblur.onnx",
-            "deblur",
-        ),
-        _model_status(
-            "reference_fusion",
-            "Reference Fusion ONNX",
-            "Fusione delle regioni migliori provenienti da più fotografie",
-            "models/reference_fusion/reference_fusion.onnx",
-            "multi-photo-fusion",
-        ),
-    ]
+        )
+    )
+
+    registry = {item.key: item for item in result}
+
+    def alias(key: str, title: str, purpose: str, model_keys: tuple[str, ...], stage: str) -> ModuleStatus:
+        installed = [registry[item] for item in model_keys if item in registry and registry[item].available]
+        if installed:
+            detail = "; ".join(f"{item.title}: {item.detail}" for item in installed)
+            return ModuleStatus(key, title, purpose, True, detail, stage)
+        expected = ", ".join(model_keys)
+        return ModuleStatus(key, title, purpose, False, f"Nessun backend installato: {expected}", stage)
+
+    # Compatibility aliases used by the block specification and UI. They no longer point to imaginary ONNX files.
+    result.extend(
+        [
+            alias(
+                "landmarks",
+                "Face landmarks",
+                "Landmark densi/5-point per regioni e allineamento",
+                ("mediapipe_face_landmarker", "insightface_identity"),
+                "landmarks",
+            ),
+            alias(
+                "insightface",
+                "Identity embeddings",
+                "ArcFace/InsightFace per guardrail identità",
+                ("insightface_identity",),
+                "identity_check",
+            ),
+            alias(
+                "face_parsing",
+                "Face parsing",
+                "BiSeNet semantic face parsing",
+                ("bisenet_face_parsing",),
+                "occlusion_mask",
+            ),
+            # Strict reference fusion is built in and needs no learned checkpoint.
+            ModuleStatus(
+                "reference_fusion",
+                "Observed-pixel specific reference memory",
+                "Fusione DMD-inspired da fotografie della stessa identità con provenance esatta",
+                True,
+                "Implementazione interna: app/reference_memory.py",
+                "region_select,fusion",
+                pretrained=False,
+            ),
+        ]
+    )
+    return result
