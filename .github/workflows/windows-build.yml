@@ -79,8 +79,8 @@ jobs:
           $registry = Get-Content "dist\ConservativeFaceStudio\models\model-registry.json" -Raw | ConvertFrom-Json
           if ($registry.Count -lt 10) { throw "Model registry incomplete" }
           foreach ($model in @(
-            'models\yunet\face_detection_yunet_2023mar.onnx',
-            'models\sface\face_recognition_sface_2021dec.onnx',
+            'models\opencv_zoo\face_detection_yunet_2023mar.onnx',
+            'models\opencv_zoo\face_recognition_sface_2021dec.onnx',
             'models\nafnet\deblurring_nafnet_2025may.onnx',
             'models\face_parsing\resnet18.onnx',
             'models\head_pose\mobilenetv2.onnx',
