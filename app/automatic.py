@@ -31,11 +31,19 @@ class AutomaticPipelineRunner:
     def __init__(self, workspace: Workspace) -> None:
         self.executor = StrictBlockExecutor(workspace)
         core_paths = workspace.metadata.get("core_model_paths")
-        if isinstance(core_paths, dict):
-            install_pretrained_face_handlers(self.executor, core_paths)
-            install_pretrained_restoration_handlers(self.executor, core_paths)
-            install_pretrained_semantic_handlers(self.executor, core_paths)
-            install_verified_inpainting_handler(self.executor, core_paths)
+        model_paths = core_paths if isinstance(core_paths, dict) else {}
+        if model_paths:
+            install_pretrained_face_handlers(self.executor, model_paths)
+            install_pretrained_restoration_handlers(self.executor, model_paths)
+            install_pretrained_semantic_handlers(self.executor, model_paths)
+
+        # The main inpaint path is useful even when no learned checkpoint is present:
+        # it reconstructs only from aligned, same-identity observed reference pixels.
+        # LaMa remains an optional residual fallback and is enabled only when its
+        # verified model path exists in model_paths.  Installing this handler
+        # unconditionally prevents a transient model-download failure from silently
+        # downgrading the most important restoration block to the legacy executor.
+        install_verified_inpainting_handler(self.executor, model_paths)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
