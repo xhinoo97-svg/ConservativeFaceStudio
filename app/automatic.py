@@ -37,13 +37,22 @@ class AutomaticPipelineRunner:
         if block.kind in {BlockKind.IMPORT, BlockKind.EXPORT, BlockKind.IDENTITY_CHECK}:
             return result
         anchors = list(self.executor.workspace.references) or [self._original_anchor]
-        decision = evaluate_identity_guardrail(before, result.image, anchors, max_drop=0.10, absolute_minimum=0.20)
+        decision = evaluate_identity_guardrail(
+            before,
+            result.image,
+            anchors,
+            max_drop=0.05,
+            absolute_minimum=0.20,
+            minimum_retention=0.95,
+        )
         details = dict(result.details)
         details["identity_guardrail"] = {
             "accepted": decision.accepted,
             "score_before": decision.score_before,
             "score_after": decision.score_after,
             "score_drop": decision.score_drop,
+            "retention_ratio": decision.retention_ratio,
+            "minimum_retention": decision.minimum_retention,
             "engine": decision.engine,
             "reason": decision.reason,
         }
