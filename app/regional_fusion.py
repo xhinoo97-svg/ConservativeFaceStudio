@@ -55,24 +55,18 @@ def _gray(image: np.ndarray) -> np.ndarray:
 
 
 def _regional_quality(image: np.ndarray, occlusion_mask: np.ndarray, region_mask: np.ndarray) -> float:
-    """Punteggio regionale confrontabile tra immagini, senza normalizzare via il massimo di ciascuna sorgente."""
     active = region_mask > 0
     if not np.any(active):
         return 0.0
     if occlusion_mask.shape != region_mask.shape:
         raise ValueError("Maschera di occlusione non compatibile con la regione")
-
     gray = _gray(image)
     laplacian = np.abs(cv2.Laplacian(gray, cv2.CV_32F))
     sharpness = float(np.mean(laplacian[active]))
     exposure = 1.0 - np.clip(np.abs(gray[active] - 0.5) / 0.5, 0.0, 1.0)
     exposure_score = float(np.mean(exposure)) if exposure.size else 0.0
     visible_fraction = 1.0 - float(np.mean(occlusion_mask[active].astype(np.float32) / 255.0))
-
-    # La nitidezza assoluta deve restare confrontabile tra sorgenti: normalizzarla per-image
-    # rende indistinguibili una foto sfocata e una nitida se entrambe hanno il proprio massimo locale.
-    score = (sharpness + 0.03 * exposure_score) * max(0.0, visible_fraction)
-    return float(score)
+    return float((sharpness + 0.03 * exposure_score) * max(0.0, visible_fraction))
 
 
 def regional_reference_fusion(
@@ -82,14 +76,14 @@ def regional_reference_fusion(
     bbox: tuple[int, int, int, int],
     *,
     minimum_improvement: float = 0.06,
+    preserve_visible_primary: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, tuple[RegionDecision, ...]]:
-    """Ripara solo pixel coperti della primaria usando regioni osservate migliori.
+    """Select a sharper observed facial region with exact provenance.
 
-    La selezione della sorgente resta regionale, ma in strict mode un riferimento non
-    può riscrivere pixel già osservati e validi della foto primaria. Il trasferimento è
-    quindi limitato all'intersezione tra regione semantica, occlusione della primaria e
-    pixel non occlusi del riferimento scelto. Il feathering resta interno a tale area,
-    così immagine e provenance coincidono esattamente sui pixel modificati.
+    ``preserve_visible_primary=True`` activates the stricter repair policy: only
+    primary pixels marked occluded may be replaced, and never from pixels marked
+    occluded in the selected reference. The default keeps the historical quality-
+    fusion behaviour used by the non-strict executor.
     """
     if len(images) < 2:
         raise ValueError("Servono almeno una primaria e un riferimento")
@@ -108,10 +102,7 @@ def regional_reference_fusion(
     primary_occluded = occlusion_masks[0] > 0
 
     for name, region_mask in regions.items():
-        candidates = [
-            _regional_quality(image, occlusion_mask, region_mask)
-            for image, occlusion_mask in zip(images, occlusion_masks)
-        ]
+        candidates = [_regional_quality(image, mask, region_mask) for image, mask in zip(images, occlusion_masks)]
         primary_score = float(candidates[0])
         best_index = int(np.argmax(candidates))
         best_score = float(candidates[best_index])
@@ -121,20 +112,21 @@ def regional_reference_fusion(
 
         if best_index > 0 and improvement >= minimum_improvement and area > 0:
             source_visible = occlusion_masks[best_index] == 0
-            transfer_mask = (region_mask > 0) & primary_occluded & source_visible
+            if preserve_visible_primary:
+                transfer_mask = (region_mask > 0) & primary_occluded & source_visible
+            else:
+                transfer_mask = (region_mask > 0) & source_visible
             if np.any(transfer_mask):
                 binary_transfer = transfer_mask.astype(np.uint8) * 255
                 feather = cv2.GaussianBlur(binary_transfer, (0, 0), 2.0).astype(np.float32) / 255.0
                 feather[~transfer_mask] = 0.0
                 alpha = feather[..., None]
                 output = np.clip(
-                    output.astype(np.float32) * (1.0 - alpha)
-                    + images[best_index].astype(np.float32) * alpha,
+                    output.astype(np.float32) * (1.0 - alpha) + images[best_index].astype(np.float32) * alpha,
                     0,
                     255,
                 ).astype(np.uint8)
                 provenance[transfer_mask] = best_index
                 selected_index = best_index
-
         decisions.append(RegionDecision(name, selected_index, primary_score, best_score, improvement, area))
     return output, provenance, tuple(decisions)
