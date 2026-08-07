@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q app tests
-          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; from app.pretrained_values import validate_defaults; from app.model_registry import OFFICIAL_MODELS, validate_manifest; [validate_manifest(m) for m in OFFICIAL_MODELS]; [validate_manifest(m) for m in app.standard_pretrained.STANDARD_MODELS]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
+          python -c "import app; import cv2; import numpy; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; from app.model_catalog import all_model_manifests; from app.pretrained_values import validate_defaults; from app.model_registry import validate_manifest; [validate_manifest(m) for m in all_model_manifests()]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
 
       - name: Run tests
         run: python -m pytest -q
@@ -57,7 +57,7 @@ jobs:
 
       - name: Export model registry
         shell: pwsh
-        run: python -c "from app.model_registry import export_registry; export_registry('models/model-registry.json')"
+        run: python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-registry.json', all_model_manifests())"
 
       - name: Build Windows executable
         shell: pwsh
@@ -72,7 +72,7 @@ jobs:
           }
           if (!(Test-Path "dist\ConservativeFaceStudio\models\model-registry.json")) { throw "Model registry missing" }
           $registry = Get-Content "dist\ConservativeFaceStudio\models\model-registry.json" -Raw | ConvertFrom-Json
-          if ($registry.Count -lt 4) { throw "Model registry incomplete" }
+          if ($registry.Count -lt 10) { throw "Model registry incomplete" }
           $exe = Get-Item "dist\ConservativeFaceStudio\ConservativeFaceStudio.exe"
           if ($exe.Length -lt 1MB) { throw "Executable unexpectedly small" }
           $process = Start-Process -FilePath $exe.FullName -ArgumentList '--smoke-test' -Wait -PassThru -NoNewWindow
