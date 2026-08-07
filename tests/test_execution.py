@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import zipfile
 from pathlib import Path
 
 import cv2
@@ -33,10 +35,36 @@ def test_executor_runs_basic_cpu_pipeline(tmp_path: Path) -> None:
     result = executor.execute(block(BlockKind.UPSCALE), scale=2)
     assert result.image.shape == (192, 192, 3)
     output = tmp_path / "result.png"
-    executor.execute(block(BlockKind.EXPORT), path=output)
+    exported = executor.execute(block(BlockKind.EXPORT), path=output)
     assert output.exists()
     assert (tmp_path / "result.png.provenance.json").exists()
+    archive = Path(exported.details["blocks_zip"])
+    assert archive.exists()
+    assert exported.details["block_images"] == 6
     assert len(executor.project.operations) == 6
+
+    with zipfile.ZipFile(archive) as bundle:
+        assert bundle.testzip() is None
+        names = bundle.namelist()
+        assert "manifest.json" in names
+        block_images = [name for name in names if name.startswith("blocks/") and name.endswith(".png")]
+        assert len(block_images) == 6
+        manifest = json.loads(bundle.read("manifest.json"))
+        assert manifest["snapshot_count"] == 6
+        assert [item["block"] for item in manifest["snapshots"]] == [
+            "import", "deblur", "enhance", "identity_check", "upscale", "export"
+        ]
+        assert all(len(item["sha256"]) == 64 for item in manifest["snapshots"])
+
+
+def test_custom_block_archive_path(tmp_path: Path) -> None:
+    executor = BlockExecutor(Workspace(primary=textured()))
+    executor.execute(block(BlockKind.IMPORT))
+    output = tmp_path / "result.jpg"
+    requested = tmp_path / "all-blocks.zip"
+    result = executor.execute(block(BlockKind.EXPORT), path=output, blocks_zip=requested)
+    assert Path(result.details["blocks_zip"]) == requested
+    assert requested.exists()
 
 
 def test_executor_undo_redo_roundtrip() -> None:
