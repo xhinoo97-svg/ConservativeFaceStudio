@@ -4,27 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.core_models import ensure_core_pretrained_models
-from app.model_registry import DownloadError, ModelManifest, download_model, inspect_model
 from app.paths import models_root
+from app.standard_pretrained import STANDARD_MODELS, ensure_standard_pretrained_models, standard_manifest_by_key
 
 
-OPENCV_NAFNET = ModelManifest(
-    key="opencv_nafnet_deblur",
-    title="OpenCV Zoo NAFNet deblurring (2025may)",
-    filename="deblurring_nafnet_2025may.onnx",
-    destination="models/opencv_zoo/deblurring_nafnet_2025may.onnx",
-    source_url="https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/deblurring_nafnet/deblurring_nafnet_2025may.onnx",
-    code_license="MIT",
-    weights_license="MIT (OpenCV Zoo model directory)",
-    conservative_default=True,
-    expected_sha256="07263f416febecce10193dd648e950b22e397cf521eedab1a114ef77b2bc9587",
-    max_bytes=100_000_000,
-    notes=(
-        "Official OpenCV Zoo NAFNet ONNX checkpoint. The Git-LFS object published by OpenCV Zoo "
-        "declares size 91,736,251 bytes and SHA-256 07263f416f...9587. Runtime uses tiled OpenCV-DNN "
-        "inference and the pipeline identity guardrail can roll back the result."
-    ),
-)
+# Backward-compatible name used by existing tests/code.
+OPENCV_NAFNET = standard_manifest_by_key()["opencv_nafnet_deblur"]
 
 
 @dataclass(frozen=True)
@@ -41,37 +26,43 @@ class ProductionModelBootstrap:
     def deblur_ready(self) -> bool:
         return "opencv_nafnet_deblur" in self.paths
 
+    @property
+    def semantic_ready(self) -> bool:
+        return "face_parsing_resnet18_onnx" in self.paths
+
+    @property
+    def pose_ready(self) -> bool:
+        return "head_pose_mobilenetv2_onnx" in self.paths
+
+    @property
+    def standard_ready(self) -> bool:
+        return self.deblur_ready and self.semantic_ready and self.pose_ready
+
 
 def ensure_production_pretrained_models(
     root: str | Path | None = None,
     *,
     face_timeout_seconds: int = 15,
-    restoration_timeout_seconds: int = 75,
+    restoration_timeout_seconds: int = 90,
 ) -> ProductionModelBootstrap:
-    """Ensure verified pretrained models used by the normal automatic path.
+    """Ensure the verified non-generative pretrained production pack.
 
-    Download failures are non-fatal: the caller receives exact errors and the
-    conservative deterministic implementation remains available. Only models with
-    pinned SHA-256 values are downloaded automatically.
+    Models are downloaded sequentially and checked by SHA-256. Network/model
+    failures remain non-fatal so the conservative deterministic fallbacks still
+    work offline. No training or fine-tuning occurs on the user's computer.
     """
     target_root = Path(root).resolve() if root is not None else models_root().resolve()
     core = ensure_core_pretrained_models(target_root, timeout_seconds=face_timeout_seconds)
     paths = dict(core.paths)
     errors = dict(core.errors)
 
-    manifest = OPENCV_NAFNET
-    try:
-        status = inspect_model(manifest, target_root)
-        if bool(status["exists"]) and status.get("checksum_ok") is not False:
-            paths[manifest.key] = Path(str(status["path"]))
-        else:
-            paths[manifest.key] = download_model(
-                manifest,
-                target_root,
-                accept_license=True,
-                timeout_seconds=restoration_timeout_seconds,
-            )
-    except (DownloadError, OSError, ValueError, RuntimeError) as exc:
-        errors[manifest.key] = str(exc)
-
+    standard = ensure_standard_pretrained_models(
+        target_root,
+        timeout_seconds=restoration_timeout_seconds,
+    )
+    paths.update(standard.paths)
+    errors.update(standard.errors)
     return ProductionModelBootstrap(target_root, paths, errors)
+
+
+PRODUCTION_MANIFESTS = STANDARD_MODELS
