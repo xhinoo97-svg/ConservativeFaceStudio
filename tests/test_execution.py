@@ -108,3 +108,43 @@ def test_alignment_and_selection_preserve_dimensions() -> None:
     assert result.image.shape == primary.shape
     assert executor.workspace.provenance_map is not None
     assert executor.workspace.provenance_map.shape == primary.shape[:2]
+
+
+def test_alignment_filters_references_rejected_by_identity_verification() -> None:
+    primary = textured()
+    matrix = np.float32([[1, 0, 2], [0, 1, -1]])
+    matching = cv2.warpAffine(primary, matrix, (96, 96), borderMode=cv2.BORDER_REFLECT)
+    rejected = np.full_like(primary, 230)
+    workspace = Workspace(
+        primary=primary,
+        references=[matching, rejected],
+        metadata={
+            "reference_identity_verification_available": True,
+            "reference_identity_verified": [True, False],
+            "reference_identity_scores": [0.81, 0.12],
+        },
+    )
+    executor = BlockExecutor(workspace)
+    result = executor.execute(block(BlockKind.ALIGN))
+
+    assert result.details["identity_filter_applied"] is True
+    assert result.details["rejected_identity"] == 1
+    assert result.details["source_indices"] == [0]
+    assert len(executor.workspace.aligned_references) == 1
+    assert executor.workspace.metadata["aligned_reference_source_indices"] == [0]
+    assert executor.workspace.metadata["aligned_reference_identity_scores"] == [0.81]
+
+
+def test_pixel_quality_fallback_uses_occlusion_masks_not_quality_maps() -> None:
+    primary = textured()
+    reference = primary.copy()
+    reference[20:40, 20:40] = 255
+    executor = BlockExecutor(Workspace(primary=primary, references=[reference]))
+    executor.workspace.aligned_references = [reference]
+    executor.workspace.occlusion_masks = [
+        np.zeros(primary.shape[:2], dtype=np.uint8),
+        np.pad(np.full((20, 20), 255, dtype=np.uint8), ((20, 56), (20, 56))),
+    ]
+    result = executor.execute(block(BlockKind.REGION_SELECT))
+    assert result.details["engine"] == "pixel-quality-fallback"
+    assert result.image.shape == primary.shape
