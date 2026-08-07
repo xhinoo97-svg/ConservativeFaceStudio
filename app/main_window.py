@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
 
 import cv2
@@ -13,19 +15,20 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSlider,
+    QProgressBar,
     QVBoxLayout,
     QWidget,
 )
 
-from .restoration import DeblurSettings, conservative_deblur, quality_enhance
+from .automatic import AutomaticPipelineRunner, AutomaticRunResult
+from .execution import Workspace
 
 
 class ImagePanel(QLabel):
     def __init__(self, text: str) -> None:
         super().__init__(text)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumSize(420, 420)
+        self.setMinimumSize(480, 480)
         self.setStyleSheet("border: 1px solid #777; background: #202020; color: white;")
         self._image: np.ndarray | None = None
 
@@ -52,182 +55,141 @@ class ImagePanel(QLabel):
 
 
 class MainWindow(QMainWindow):
+    """Interfaccia automatica: carica foto, avvia pipeline, scarica risultati."""
+
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Conservative Face Studio — Block Pipeline V1")
-        self.resize(1180, 760)
+        self.setWindowTitle("Conservative Face Studio — Automatic Strict Mode")
+        self.resize(1120, 760)
 
-        self.original: np.ndarray | None = None
-        self.current: np.ndarray | None = None
-        self.preview: np.ndarray | None = None
-        self.source_path: Path | None = None
-        self.block_index = 0
+        self.primary: np.ndarray | None = None
+        self.references: list[np.ndarray] = []
+        self.source_paths: list[Path] = []
+        self.run_result: AutomaticRunResult | None = None
+        self.run_directory: Path | None = None
 
         root = QWidget()
         self.setCentralWidget(root)
-        main_layout = QVBoxLayout(root)
+        layout = QVBoxLayout(root)
 
-        self.status = QLabel("Blocco 0: importa una fotografia principale")
+        self.status = QLabel("1. Carica una o più foto. La prima sarà la foto principale.")
         self.status.setStyleSheet("font-size: 16px; font-weight: 600;")
-        main_layout.addWidget(self.status)
+        layout.addWidget(self.status)
 
-        image_layout = QHBoxLayout()
-        self.before_panel = ImagePanel("Originale / risultato accettato")
-        self.after_panel = ImagePanel("Anteprima del blocco")
-        image_layout.addWidget(self.before_panel)
-        image_layout.addWidget(self.after_panel)
-        main_layout.addLayout(image_layout)
+        panels = QHBoxLayout()
+        self.before_panel = ImagePanel("Foto principale")
+        self.after_panel = ImagePanel("Risultato finale")
+        panels.addWidget(self.before_panel)
+        panels.addWidget(self.after_panel)
+        layout.addLayout(panels)
+
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 13)
+        self.progress.setValue(0)
+        layout.addWidget(self.progress)
 
         controls = QHBoxLayout()
-        self.open_button = QPushButton("Importa foto")
-        self.run_button = QPushButton("Esegui blocco")
-        self.accept_button = QPushButton("Accetta")
-        self.retry_button = QPushButton("Riprova")
-        self.skip_button = QPushButton("Salta")
-        self.next_button = QPushButton("Blocco successivo")
-        self.export_button = QPushButton("Esporta foto finale")
+        self.load_button = QPushButton("Carica foto")
+        self.start_button = QPushButton("Inizia")
+        self.download_button = QPushButton("Scarica risultati ZIP")
+        controls.addWidget(self.load_button)
+        controls.addWidget(self.start_button)
+        controls.addWidget(self.download_button)
+        layout.addLayout(controls)
 
-        for button in (
-            self.open_button,
-            self.run_button,
-            self.accept_button,
-            self.retry_button,
-            self.skip_button,
-            self.next_button,
-            self.export_button,
-        ):
-            controls.addWidget(button)
-        main_layout.addLayout(controls)
-
-        sliders = QHBoxLayout()
-        sliders.addWidget(QLabel("Intensità"))
-        self.strength_slider = QSlider(Qt.Orientation.Horizontal)
-        self.strength_slider.setRange(0, 20)
-        self.strength_slider.setValue(10)
-        sliders.addWidget(self.strength_slider)
-        main_layout.addLayout(sliders)
-
-        self.open_button.clicked.connect(self.open_image)
-        self.run_button.clicked.connect(self.run_current_block)
-        self.accept_button.clicked.connect(self.accept_preview)
-        self.retry_button.clicked.connect(self.run_current_block)
-        self.skip_button.clicked.connect(self.skip_block)
-        self.next_button.clicked.connect(self.next_block)
-        self.export_button.clicked.connect(self.export_image)
-
+        self.load_button.clicked.connect(self.load_images)
+        self.start_button.clicked.connect(self.start_pipeline)
+        self.download_button.clicked.connect(self.download_results)
         self._update_controls()
 
-    def open_image(self) -> None:
-        filename, _ = QFileDialog.getOpenFileName(
+    def load_images(self) -> None:
+        filenames, _ = QFileDialog.getOpenFileNames(
             self,
-            "Seleziona foto principale",
+            "Seleziona foto principale e riferimenti",
             "",
             "Immagini (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)",
         )
-        if not filename:
+        if not filenames:
             return
-        image = cv2.imread(filename, cv2.IMREAD_COLOR)
-        if image is None:
-            QMessageBox.critical(self, "Errore", "Impossibile leggere l'immagine selezionata.")
-            return
+        images: list[np.ndarray] = []
+        for filename in filenames:
+            image = cv2.imread(filename, cv2.IMREAD_COLOR)
+            if image is None:
+                QMessageBox.critical(self, "Errore", f"Impossibile leggere:\n{filename}")
+                return
+            images.append(image)
 
-        self.source_path = Path(filename)
-        self.original = image
-        self.current = image.copy()
-        self.preview = None
-        self.block_index = 1
-        self.before_panel.set_cv_image(self.current)
+        primary_shape = images[0].shape[:2]
+        normalized = [images[0]]
+        for image in images[1:]:
+            if image.shape[:2] != primary_shape:
+                image = cv2.resize(image, (primary_shape[1], primary_shape[0]), interpolation=cv2.INTER_AREA)
+            normalized.append(image)
+
+        self.primary = normalized[0]
+        self.references = normalized[1:]
+        self.source_paths = [Path(item) for item in filenames]
+        self.run_result = None
+        self.before_panel.set_cv_image(self.primary)
         self.after_panel.clear()
-        self.after_panel.setText("Anteprima del blocco")
-        self._set_status()
+        self.after_panel.setText("Risultato finale")
+        self.progress.setValue(0)
+        self.status.setText(f"Caricate {len(normalized)} foto. Premi Inizia.")
         self._update_controls()
 
-    def run_current_block(self) -> None:
-        if self.current is None:
+    def start_pipeline(self) -> None:
+        if self.primary is None:
             return
-        strength = self.strength_slider.value() / 10.0
+        self.load_button.setEnabled(False)
+        self.start_button.setEnabled(False)
+        self.download_button.setEnabled(False)
+        self.progress.setRange(0, 0)
+        self.status.setText("Pipeline automatica in esecuzione…")
+
         try:
-            if self.block_index == 1:
-                self.preview = conservative_deblur(
-                    self.current,
-                    DeblurSettings(
-                        denoise=max(1, int(3 + strength * 4)),
-                        sharpen=strength,
-                        contrast=1.0,
-                    ),
-                )
-            elif self.block_index == 2:
-                self.preview = quality_enhance(self.current)
-            else:
-                self.preview = self.current.copy()
-            self.after_panel.set_cv_image(self.preview)
+            self.run_directory = Path(tempfile.mkdtemp(prefix="ConservativeFaceStudio-"))
+            stem = self.source_paths[0].stem if self.source_paths else "restauro"
+            output = self.run_directory / f"{stem}_finale.png"
+            runner = AutomaticPipelineRunner(
+                Workspace(primary=self.primary.copy(), references=[item.copy() for item in self.references])
+            )
+            self.run_result = runner.run(output)
+            final = cv2.imread(str(self.run_result.final_image), cv2.IMREAD_COLOR)
+            if final is None:
+                raise RuntimeError("Il risultato finale non è leggibile")
+            self.after_panel.set_cv_image(final)
+            self.progress.setRange(0, 13)
+            self.progress.setValue(13)
+            self.status.setText("Elaborazione completata. Premi Scarica risultati ZIP.")
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "Errore nel blocco", str(exc))
-        self._update_controls()
+            self.progress.setRange(0, 13)
+            self.progress.setValue(0)
+            self.status.setText("Elaborazione non completata")
+            QMessageBox.critical(self, "Errore pipeline", str(exc))
+        finally:
+            self._update_controls()
 
-    def accept_preview(self) -> None:
-        if self.preview is None:
+    def download_results(self) -> None:
+        if self.run_result is None:
             return
-        self.current = self.preview.copy()
-        self.preview = None
-        self.before_panel.set_cv_image(self.current)
-        self.after_panel.clear()
-        self.after_panel.setText("Risultato accettato. Passa al blocco successivo.")
-        self._update_controls()
-
-    def skip_block(self) -> None:
-        self.preview = None
-        self.next_block()
-
-    def next_block(self) -> None:
-        if self.current is None:
-            return
-        self.preview = None
-        self.block_index = min(self.block_index + 1, 3)
-        self.after_panel.clear()
-        self.after_panel.setText("Anteprima del blocco")
-        self._set_status()
-        self._update_controls()
-
-    def export_image(self) -> None:
-        if self.current is None:
-            return
-        suggested = "restauro_finale.png"
-        if self.source_path is not None:
-            suggested = f"{self.source_path.stem}_restaurata.png"
-        filename, selected_filter = QFileDialog.getSaveFileName(
+        suggested = self.run_result.blocks_zip.name
+        filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Esporta foto finale",
+            "Salva ZIP completo",
             suggested,
-            "PNG (*.png);;JPEG (*.jpg *.jpeg);;TIFF (*.tif *.tiff)",
+            "Archivio ZIP (*.zip)",
         )
         if not filename:
             return
-        suffix = Path(filename).suffix.lower()
-        if not suffix:
-            filename += ".png" if "PNG" in selected_filter else ".jpg"
-        ok = cv2.imwrite(filename, self.current)
-        if not ok:
-            QMessageBox.critical(self, "Errore", "Non è stato possibile salvare il file.")
-            return
-        QMessageBox.information(self, "Esportazione completata", f"Foto salvata in:\n{filename}")
-
-    def _set_status(self) -> None:
-        labels = {
-            0: "Blocco 0: importa una fotografia principale",
-            1: "Blocco 1: deblur, denoise e nitidezza conservativa",
-            2: "Blocco 2: contrasto locale e recupero qualità",
-            3: "Pipeline iniziale completata: esporta la foto finale",
-        }
-        self.status.setText(labels[self.block_index])
+        destination = Path(filename)
+        if destination.suffix.lower() != ".zip":
+            destination = destination.with_suffix(".zip")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.run_result.blocks_zip, destination)
+        QMessageBox.information(self, "Download completato", f"Archivio salvato in:\n{destination}")
 
     def _update_controls(self) -> None:
-        has_image = self.current is not None
-        has_preview = self.preview is not None
-        processable = has_image and self.block_index in (1, 2)
-        self.run_button.setEnabled(processable)
-        self.accept_button.setEnabled(has_preview)
-        self.retry_button.setEnabled(processable)
-        self.skip_button.setEnabled(processable)
-        self.next_button.setEnabled(has_image and not has_preview and self.block_index < 3)
-        self.export_button.setEnabled(has_image)
+        has_images = self.primary is not None
+        self.load_button.setEnabled(True)
+        self.start_button.setEnabled(has_images)
+        self.download_button.setEnabled(self.run_result is not None)
