@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 
 from app.execution import BlockExecutionError, BlockExecutor, ExecutionResult
+from app.exporting import export_image_atomic
 from app.pipeline import BlockKind, BlockSpec
 from app.reference_memory import specific_reference_memory_fusion
 from app.restoration import detect_occlusion_candidates
@@ -26,6 +29,76 @@ class StrictBlockExecutor(BlockExecutor):
         self._handlers[BlockKind.REGION_SELECT] = self._specific_memory_select
         self._handlers[BlockKind.INPAINT] = self._reference_repair
         self._handlers[BlockKind.FRONTALIZE] = self._pose_normalize
+        self._handlers[BlockKind.UPSCALE] = self._strict_upscale
+
+    def execute(self, block: BlockSpec, **parameters: Any) -> ExecutionResult:
+        result = super().execute(block, **parameters)
+        if block.kind is not BlockKind.EXPORT:
+            return result
+
+        details = dict(result.details)
+        output = Path(details["path"])
+        attachments: list[Path] = [output]
+        provenance_sidecar = details.get("provenance_path")
+        if provenance_sidecar:
+            attachments.append(Path(provenance_sidecar))
+
+        source_map = self.workspace.provenance_map
+        if source_map is not None:
+            if source_map.shape != result.image.shape[:2]:
+                source_map = cv2.resize(
+                    source_map,
+                    (result.image.shape[1], result.image.shape[0]),
+                    interpolation=cv2.INTER_NEAREST,
+                )
+                self.workspace.provenance_map = source_map.astype(np.uint16)
+            source_path = output.with_name(output.stem + ".source-map.png")
+            export_image_atomic(source_map.astype(np.uint16), source_path)
+            attachments.append(source_path)
+            details["source_map_path"] = str(source_path)
+            details["source_map_legend"] = "0=primary image; N=reference image N"
+
+        confidence = self.workspace.metadata.get("specific_reference_confidence")
+        if isinstance(confidence, np.ndarray):
+            if confidence.shape != result.image.shape[:2]:
+                confidence = cv2.resize(
+                    confidence,
+                    (result.image.shape[1], result.image.shape[0]),
+                    interpolation=cv2.INTER_NEAREST,
+                )
+                self.workspace.metadata["specific_reference_confidence"] = confidence.astype(np.uint8)
+            confidence_path = output.with_name(output.stem + ".reference-confidence.png")
+            export_image_atomic(confidence.astype(np.uint8), confidence_path)
+            attachments.append(confidence_path)
+            details["reference_confidence_path"] = str(confidence_path)
+            details["reference_confidence_scale"] = "0..255"
+
+        archive_path = Path(details["blocks_zip"])
+        archive = self.block_artifacts.export_zip(
+            archive_path,
+            project=self.project,
+            attachments=attachments,
+        )
+        details["blocks_zip"] = str(archive)
+        details["archive_attachments"] = [path.name for path in attachments if path.is_file()]
+        snapshot = self.block_artifacts.replace_last(result.image, details)
+        details["snapshot_sha256"] = snapshot.sha256
+        if self.project.operations:
+            self.project.operations[-1].parameters.update({
+                "blocks_zip": str(archive),
+                "archive_attachments": details["archive_attachments"],
+                "source_map_path": details.get("source_map_path"),
+                "reference_confidence_path": details.get("reference_confidence_path"),
+                "snapshot_sha256": snapshot.sha256,
+            })
+            # Rebuild once more so the manifest contains the final export-operation metadata.
+            archive = self.block_artifacts.export_zip(
+                archive_path,
+                project=self.project,
+                attachments=attachments,
+            )
+            details["blocks_zip"] = str(archive)
+        return ExecutionResult(result.block, result.image, details)
 
     def _strict_occlusion(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         base = super()._occlusion(block, p)
@@ -165,6 +238,24 @@ class StrictBlockExecutor(BlockExecutor):
             "source_pixel_counts": list(repaired.source_pixel_counts),
         })
 
+    @staticmethod
+    def _pose_matrix(landmarks: np.ndarray, roll_degrees: float, scale: float) -> np.ndarray:
+        points = np.asarray(landmarks, dtype=np.float32)
+        center = tuple(((points[0] + points[1]) * 0.5).tolist())
+        best_matrix: np.ndarray | None = None
+        best_residual = float("inf")
+        homogeneous = np.column_stack((points, np.ones(len(points), dtype=np.float32)))
+        for sign in (1.0, -1.0):
+            matrix = cv2.getRotationMatrix2D(center, sign * float(roll_degrees), float(scale))
+            transformed = homogeneous @ matrix.T
+            residual = abs(float(transformed[1, 1] - transformed[0, 1]))
+            if residual < best_residual:
+                best_residual = residual
+                best_matrix = matrix
+        if best_matrix is None:
+            raise RuntimeError("Trasformazione posa non determinabile")
+        return best_matrix.astype(np.float32)
+
     def _pose_normalize(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         landmarks = self.workspace.metadata.get("primary_landmarks5")
         if landmarks is None:
@@ -176,6 +267,31 @@ class StrictBlockExecutor(BlockExecutor):
             maximum_angle=float(p.get("maximum_angle", 12.0)),
             maximum_scale=float(p.get("maximum_scale", 1.12)),
         )
+        if pose.applied:
+            matrix = self._pose_matrix(landmarks, pose.roll_degrees, pose.scale)
+            h, w = pose.image.shape[:2]
+            if self.workspace.provenance_map is not None:
+                self.workspace.provenance_map = cv2.warpAffine(
+                    self.workspace.provenance_map,
+                    matrix,
+                    (w, h),
+                    flags=cv2.INTER_NEAREST,
+                    borderMode=cv2.BORDER_CONSTANT,
+                    borderValue=0,
+                ).astype(np.uint16)
+            confidence = self.workspace.metadata.get("specific_reference_confidence")
+            if isinstance(confidence, np.ndarray):
+                self.workspace.metadata["specific_reference_confidence"] = cv2.warpAffine(
+                    confidence,
+                    matrix,
+                    (w, h),
+                    flags=cv2.INTER_NEAREST,
+                    borderMode=cv2.BORDER_CONSTANT,
+                    borderValue=0,
+                ).astype(np.uint8)
+            points = np.asarray(landmarks, dtype=np.float32)
+            transformed = np.column_stack((points, np.ones(len(points), dtype=np.float32))) @ matrix.T
+            self.workspace.metadata["primary_landmarks5"] = transformed.astype(np.float32)
         return ExecutionResult(block.key, pose.image, {
             "engine": "observed-2d-roll-normalization",
             "conservative": True,
@@ -184,5 +300,26 @@ class StrictBlockExecutor(BlockExecutor):
             "scale": pose.scale,
             "supported_fraction": pose.supported_fraction,
             "yaw_synthesized": False,
+            "provenance_geometry_updated": bool(pose.applied),
             "reason": pose.reason,
         })
+
+    def _strict_upscale(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        result = super()._upscale(block, p)
+        h, w = result.image.shape[:2]
+        if self.workspace.provenance_map is not None:
+            self.workspace.provenance_map = cv2.resize(
+                self.workspace.provenance_map,
+                (w, h),
+                interpolation=cv2.INTER_NEAREST,
+            ).astype(np.uint16)
+        confidence = self.workspace.metadata.get("specific_reference_confidence")
+        if isinstance(confidence, np.ndarray):
+            self.workspace.metadata["specific_reference_confidence"] = cv2.resize(
+                confidence,
+                (w, h),
+                interpolation=cv2.INTER_NEAREST,
+            ).astype(np.uint8)
+        details = dict(result.details)
+        details["provenance_geometry_updated"] = self.workspace.provenance_map is not None
+        return ExecutionResult(block.key, result.image, details)
