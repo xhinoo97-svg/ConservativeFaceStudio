@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -28,6 +29,16 @@ class AutomaticRunResult:
 class AutomaticPipelineRunner:
     """Esegue l'intera pipeline senza conferme intermedie, mantenendo audit e strict mode."""
 
+    _GUARDRAIL_METADATA_KEYS = (
+        "specific_reference_confidence",
+        "specific_reference_memory",
+        "inpaint_target_mask",
+        "inpaint_observed_mask",
+        "inpaint_generated_mask",
+        "inpaint_unresolved_mask",
+        "primary_landmarks5",
+    )
+
     def __init__(self, workspace: Workspace) -> None:
         self.executor = StrictBlockExecutor(workspace)
         core_paths = workspace.metadata.get("core_model_paths")
@@ -52,7 +63,45 @@ class AutomaticPipelineRunner:
         if callback is not None:
             callback(int(index), str(name))
 
-    def _apply_guardrail(self, block, before: np.ndarray, result: ExecutionResult) -> ExecutionResult:
+    def _snapshot_guardrail_state(self) -> dict[str, Any]:
+        workspace = self.executor.workspace
+        provenance = None if workspace.provenance_map is None else workspace.provenance_map.copy()
+        metadata: dict[str, tuple[bool, Any]] = {}
+        for key in self._GUARDRAIL_METADATA_KEYS:
+            if key not in workspace.metadata:
+                metadata[key] = (False, None)
+                continue
+            value = workspace.metadata[key]
+            if isinstance(value, np.ndarray):
+                stored = value.copy()
+            else:
+                stored = copy.deepcopy(value)
+            metadata[key] = (True, stored)
+        return {"provenance_map": provenance, "metadata": metadata}
+
+    def _restore_guardrail_state(self, state: dict[str, Any]) -> None:
+        workspace = self.executor.workspace
+        provenance = state.get("provenance_map")
+        workspace.provenance_map = None if provenance is None else np.asarray(provenance).copy()
+        metadata = state.get("metadata", {})
+        if not isinstance(metadata, dict):
+            return
+        for key, item in metadata.items():
+            present, value = item
+            if not present:
+                workspace.metadata.pop(key, None)
+            elif isinstance(value, np.ndarray):
+                workspace.metadata[key] = value.copy()
+            else:
+                workspace.metadata[key] = copy.deepcopy(value)
+
+    def _apply_guardrail(
+        self,
+        block,
+        before: np.ndarray,
+        result: ExecutionResult,
+        state_before: dict[str, Any] | None = None,
+    ) -> ExecutionResult:
         if block.kind in {BlockKind.IMPORT, BlockKind.EXPORT, BlockKind.IDENTITY_CHECK}:
             return result
         anchors = list(self.executor.workspace.references) or [self._original_anchor]
@@ -87,8 +136,11 @@ class AutomaticPipelineRunner:
         else:
             restored = before.copy()
             self.executor.workspace.primary = restored.copy()
+        if state_before is not None:
+            self._restore_guardrail_state(state_before)
         details["rolled_back"] = True
         details["rollback_reason"] = decision.reason
+        details["workspace_state_restored"] = state_before is not None
         details.pop("snapshot_sha256", None)
         replacement = self.executor.block_artifacts.replace_last(restored, details)
         details["snapshot_sha256"] = replacement.sha256
@@ -97,6 +149,7 @@ class AutomaticPipelineRunner:
                 "identity_guardrail": details["identity_guardrail"],
                 "rolled_back": True,
                 "rollback_reason": decision.reason,
+                "workspace_state_restored": details["workspace_state_restored"],
                 "snapshot_sha256": replacement.sha256,
             })
         return ExecutionResult(result.block, restored, details)
@@ -137,8 +190,9 @@ class AutomaticPipelineRunner:
 
             try:
                 before = self.executor.workspace.copy_primary()
+                state_before = self._snapshot_guardrail_state()
                 raw = self.executor.execute(block, **parameters)
-                result = self._apply_guardrail(block, before, raw)
+                result = self._apply_guardrail(block, before, raw, state_before)
                 results.append(result)
                 self._emit_progress(index, block.title + (" — rollback" if result.details.get("rolled_back") else ""))
             except BlockExecutionError as exc:
