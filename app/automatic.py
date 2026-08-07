@@ -6,8 +6,9 @@ from typing import Any, Callable
 
 import numpy as np
 
-from app.execution import BlockExecutionError, BlockExecutor, ExecutionResult, Workspace
+from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.pipeline import BlockKind
+from app.strict_execution import StrictBlockExecutor
 from app.validation import evaluate_identity_guardrail
 
 
@@ -23,7 +24,7 @@ class AutomaticPipelineRunner:
     """Esegue l'intera pipeline senza conferme intermedie, mantenendo audit e strict mode."""
 
     def __init__(self, workspace: Workspace) -> None:
-        self.executor = BlockExecutor(workspace)
+        self.executor = StrictBlockExecutor(workspace)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
@@ -114,9 +115,7 @@ class AutomaticPipelineRunner:
         raise RuntimeError("Pipeline terminata senza blocco export")
 
     def _skip_reason(self, kind: BlockKind) -> str | None:
-        if kind in {BlockKind.INPAINT, BlockKind.FRONTALIZE}:
-            return "Modulo opzionale non installato o disattivato in strict mode"
         has_references = bool(self.executor.workspace.references)
-        if kind in {BlockKind.ALIGN, BlockKind.REGION_SELECT, BlockKind.FUSION} and not has_references:
+        if kind in {BlockKind.ALIGN, BlockKind.REGION_SELECT, BlockKind.INPAINT, BlockKind.FUSION} and not has_references:
             return "Nessuna fotografia di riferimento disponibile"
         return None
