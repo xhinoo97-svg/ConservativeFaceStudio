@@ -59,9 +59,35 @@ STANDARD_MODELS: tuple[ModelManifest, ...] = (
             "only normalizes supported 2D roll; it never synthesizes an unseen side of the face."
         ),
     ),
+    ModelManifest(
+        key="opencv_lama_inpaint",
+        title="OpenCV Zoo LaMa inpainting 2025jan",
+        filename="inpainting_lama_2025jan.onnx",
+        destination="models/lama/inpainting_lama_2025jan.onnx",
+        source_url=(
+            "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/"
+            "models/inpainting_lama/inpainting_lama_2025jan.onnx"
+        ),
+        code_license="Apache-2.0",
+        weights_license="Apache-2.0 (OpenCV Zoo model directory)",
+        conservative_default=False,
+        expected_sha256="7df918ac3921d3daf0aae1d219776cf0dc4e4935f035af81841b40adcf74fdf2",
+        max_bytes=105_000_000,
+        notes=(
+            "Official OpenCV Zoo LaMa ONNX checkpoint. It is a generative fallback only for residual "
+            "holes that could not be reconstructed from real same-identity references. Generated pixels "
+            "must be marked in provenance and pass the identity rollback gate."
+        ),
+    ),
 )
 
 STANDARD_MODEL_KEYS = tuple(item.key for item in STANDARD_MODELS)
+STANDARD_STRICT_KEYS = (
+    "opencv_nafnet_deblur",
+    "face_parsing_resnet18_onnx",
+    "head_pose_mobilenetv2_onnx",
+)
+STANDARD_GENERATIVE_KEYS = ("opencv_lama_inpaint",)
 
 
 @dataclass(frozen=True)
@@ -72,7 +98,11 @@ class StandardModelBootstrap:
 
     @property
     def ready(self) -> bool:
-        return all(key in self.paths for key in STANDARD_MODEL_KEYS)
+        return all(key in self.paths for key in STANDARD_STRICT_KEYS)
+
+    @property
+    def generative_ready(self) -> bool:
+        return all(key in self.paths for key in STANDARD_GENERATIVE_KEYS)
 
 
 def standard_manifest_by_key() -> dict[str, ModelManifest]:
@@ -84,10 +114,11 @@ def ensure_standard_pretrained_models(
     *,
     timeout_seconds: int = 90,
 ) -> StandardModelBootstrap:
-    """Install the verified non-generative standard model pack.
+    """Install the verified standard ONNX model pack sequentially.
 
-    Downloads happen sequentially: only one model is transferred/loaded at a time.
-    Missing network access is recorded rather than turning the pipeline into an error.
+    The LaMa checkpoint is downloaded and registered, but conservative_default=False:
+    strict repair still prioritizes observed same-identity reference pixels and uses
+    LaMa only for small unresolved residuals under explicit verified-generative policy.
     """
     target_root = Path(root).resolve() if root is not None else models_root().resolve()
     paths: dict[str, Path] = {}
