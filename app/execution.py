@@ -10,7 +10,7 @@ import numpy as np
 from app.alignment import align_from_points, align_to_reference, quality_map, select_best_observed_pixels
 from app.block_artifacts import BlockArtifactArchive
 from app.exporting import export_image_atomic
-from app.face_analysis import OpenCVHaarBackend, choose_backend, cosine_similarity
+from app.face_analysis import choose_backend, cosine_similarity
 from app.history import ImageHistory
 from app.pipeline import BlockKind, BlockSpec, PipelineState, default_pipeline, validate_pipeline
 from app.project import OperationRecord, ProjectDocument
@@ -145,7 +145,7 @@ class BlockExecutor:
         return ExecutionResult(block.key, quality_enhance(self.workspace.primary), {})
 
     def _landmarks(self, block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        backend = OpenCVHaarBackend()
+        backend = choose_backend(prefer_embeddings=bool(parameters.get("prefer_model", True)))
         primary = backend.analyze(self.workspace.primary)
         references = []
         for image in self.workspace.references:
@@ -155,6 +155,7 @@ class BlockExecutor:
                 references.append(None)
         self.workspace.metadata["primary_landmarks5"] = primary.landmarks5
         self.workspace.metadata["reference_landmarks5"] = [None if item is None else item.landmarks5 for item in references]
+        self.workspace.metadata["face_backend"] = primary.backend
         return ExecutionResult(block.key, self.workspace.copy_primary(), {
             "backend": primary.backend,
             "bbox": list(primary.bbox),
