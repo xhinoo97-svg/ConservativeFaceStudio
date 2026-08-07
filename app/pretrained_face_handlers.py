@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 
+from app.alignment import align_from_points, align_to_reference
 from app.execution import BlockExecutionError, ExecutionResult
 from app.face_analysis import cosine_similarity
 from app.opencv_zoo_face import OpenCVZooFaceEngine
@@ -13,7 +14,13 @@ from app.pretrained_values import FACE_MODEL_DEFAULTS
 
 
 def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path]) -> None:
-    """Install verified YuNet/SFace handlers with safe CPU/OpenCL fallback."""
+    """Install verified YuNet/SFace handlers with safe CPU/OpenCL fallback.
+
+    Full-face references use SFace identity verification. A partial crop that cannot
+    produce an embedding is not automatically treated as a mismatch: it may still be
+    retained if strict local feature alignment succeeds. A real low SFace score is a
+    hard rejection.
+    """
     yunet = model_paths.get("opencv_yunet")
     sface = model_paths.get("opencv_sface")
     if yunet is None:
@@ -44,8 +51,6 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
     except Exception:
         return
 
-    # Private runtime object: it is intentionally not included in project JSON.
-    # AutomaticPipelineRunner can reuse it for post-block identity guardrails.
     if landmark_engine.recognizer is not None:
         executor.workspace.metadata["_identity_backend"] = landmark_engine
 
@@ -89,6 +94,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "reference_identity_scores": identity_scores,
                     "reference_identity_verified": identity_verified,
                     "reference_identity_verification_available": primary.embedding is not None,
+                    "reference_partial_candidates": [item is None for item in refs],
                     "face_backend": backend,
                 }
             )
@@ -104,6 +110,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "landmark_confidence": float(primary.score),
                     "yunet_score_threshold": FACE_MODEL_DEFAULTS.yunet_score_threshold,
                     "reference_faces": int(sum(item is not None for item in refs)),
+                    "partial_reference_candidates": int(sum(item is None for item in refs)),
                     "reference_identity_scores": identity_scores,
                     "reference_identity_verified": int(sum(identity_verified)),
                     "reference_bbox_count": int(sum(item is not None for item in executor.workspace.metadata["reference_bboxes"])),
@@ -120,6 +127,101 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
 
     executor._handlers[BlockKind.LANDMARKS] = landmarks_handler
 
+    def partial_aware_align_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+        aligned: list[np.ndarray] = []
+        diagnostics: list[dict[str, Any]] = []
+        source_indices: list[int] = []
+        aligned_scores: list[float | None] = []
+        aligned_verified: list[bool] = []
+        partial_geometry_verified: list[bool] = []
+
+        primary_points = executor.workspace.metadata.get("primary_landmarks5")
+        ref_points = executor.workspace.metadata.get("reference_landmarks5", [])
+        identity_scores = executor.workspace.metadata.get("reference_identity_scores", [])
+        identity_available = bool(executor.workspace.metadata.get("reference_identity_verification_available", False))
+        rejected_identity = 0
+        rejected_geometry = 0
+
+        for index, reference in enumerate(executor.workspace.references):
+            score = identity_scores[index] if isinstance(identity_scores, list) and index < len(identity_scores) else None
+            # A real SFace score below threshold is a mismatch. None means the crop was
+            # too partial for a full-face embedding and is allowed to try geometry.
+            if identity_available and score is not None and float(score) < FACE_MODEL_DEFAULTS.sface_same_identity_cosine:
+                rejected_identity += 1
+                diagnostics.append({
+                    "source_index": index,
+                    "rejected": True,
+                    "reason": "sface_identity_mismatch",
+                    "identity_score": float(score),
+                })
+                continue
+
+            points = ref_points[index] if isinstance(ref_points, list) and index < len(ref_points) else None
+            method = ""
+            geometry_verified = False
+            try:
+                if primary_points is not None and points is not None:
+                    result = align_from_points(reference, points, primary_points, executor.workspace.primary.shape[:2])
+                    method = "landmarks5-ransac"
+                    geometry_verified = True
+                else:
+                    result = align_to_reference(reference, executor.workspace.primary)
+                    method = "partial-sift-orb-ransac"
+                    geometry_verified = (
+                        result.matches >= 6
+                        and result.inlier_ratio >= 0.50
+                        and result.reprojection_error <= 4.0
+                    )
+                    if not geometry_verified:
+                        raise ValueError("reference parziale senza supporto geometrico sufficiente")
+            except Exception as exc:
+                rejected_geometry += 1
+                diagnostics.append({
+                    "source_index": index,
+                    "rejected": True,
+                    "reason": "partial_geometry_rejected" if score is None else "alignment_failed",
+                    "error": str(exc),
+                    "identity_score": None if score is None else float(score),
+                })
+                continue
+
+            aligned.append(result.image)
+            source_indices.append(index)
+            aligned_scores.append(None if score is None else float(score))
+            full_identity_verified = score is not None and float(score) >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
+            aligned_verified.append(bool(full_identity_verified))
+            partial_geometry_verified.append(bool(score is None and geometry_verified))
+            diagnostics.append({
+                "source_index": index,
+                "method": method,
+                "matches": result.matches,
+                "inlier_ratio": result.inlier_ratio,
+                "reprojection_error": result.reprojection_error,
+                "identity_score": None if score is None else float(score),
+                "identity_status": "sface_verified" if full_identity_verified else "partial_geometry_verified",
+            })
+
+        executor.workspace.aligned_references = aligned
+        executor.workspace.metadata["aligned_reference_source_indices"] = source_indices
+        executor.workspace.metadata["aligned_reference_identity_scores"] = aligned_scores
+        executor.workspace.metadata["aligned_reference_identity_verified"] = aligned_verified
+        executor.workspace.metadata["aligned_reference_partial_geometry_verified"] = partial_geometry_verified
+        return ExecutionResult(
+            block.key,
+            executor.workspace.copy_primary(),
+            {
+                "aligned": len(aligned),
+                "rejected_identity": rejected_identity,
+                "rejected_geometry": rejected_geometry,
+                "partial_geometry_verified": int(sum(partial_geometry_verified)),
+                "identity_filter_applied": identity_available,
+                "source_indices": source_indices,
+                "diagnostics": diagnostics,
+            },
+        )
+
+    executor._handlers[BlockKind.ALIGN] = partial_aware_align_handler
+
     if sface is None or original_identity is None:
         return
 
@@ -130,8 +232,6 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
         return
 
     def identity_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
-        # 0.363 is the OpenCV Zoo SFace cosine reference threshold. A caller may
-        # request a stricter value but cannot silently weaken the pretrained gate.
         minimum = max(
             float(parameters.get("minimum", FACE_MODEL_DEFAULTS.sface_same_identity_cosine)),
             FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
@@ -145,6 +245,8 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 try:
                     reference = identity_engine.analyze(image)
                 except ValueError:
+                    # Partial references are not evidence against the reconstructed
+                    # identity; they were already gated by strict local geometry.
                     continue
                 if reference.embedding is not None:
                     scores.append(cosine_similarity(primary.embedding, reference.embedding))
@@ -164,6 +266,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "best": float(best),
                     "minimum": minimum,
                     "official_reference_threshold": FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
+                    "partial_references_not_used_as_negative_identity_evidence": True,
                 },
             )
         except BlockExecutionError:
