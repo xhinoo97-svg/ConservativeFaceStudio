@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import zipfile
 from pathlib import Path
@@ -32,10 +33,22 @@ def test_automatic_pipeline_exports_every_block(tmp_path: Path) -> None:
         names = archive.namelist()
         block_images = [name for name in names if name.startswith("blocks/") and name.endswith(".png")]
         assert len(block_images) == 13
+        assert f"results/{result.final_image.name}" in names
+        assert f"results/{result.provenance.name}" in names
+
         manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["version"] == 2
         assert manifest["snapshot_count"] == 13
         assert manifest["snapshots"][0]["block"] == "import"
         assert manifest["snapshots"][-1]["block"] == "export"
+        attachments = {item["filename"]: item for item in manifest["attachments"]}
+        assert result.final_image.name in attachments
+        assert result.provenance.name in attachments
+
+        final_bytes = archive.read(f"results/{result.final_image.name}")
+        provenance_bytes = archive.read(f"results/{result.provenance.name}")
+        assert hashlib.sha256(final_bytes).hexdigest() == attachments[result.final_image.name]["sha256"]
+        assert hashlib.sha256(provenance_bytes).hexdigest() == attachments[result.provenance.name]["sha256"]
 
 
 def test_automatic_pipeline_uses_references_without_confirmation(tmp_path: Path) -> None:
