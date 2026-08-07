@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from .automatic import AutomaticRunResult
 from .execution import Workspace
+from .imaging import fit_to_canvas
 from .worker import PipelineWorker
 
 
@@ -63,6 +64,7 @@ class MainWindow(QMainWindow):
 
         self.primary: np.ndarray | None = None
         self.references: list[np.ndarray] = []
+        self.reference_normalization: list[dict[str, float | int]] = []
         self.source_paths: list[Path] = []
         self.run_result: AutomaticRunResult | None = None
         self.run_directory: Path | None = None
@@ -117,13 +119,15 @@ class MainWindow(QMainWindow):
 
         primary_shape = images[0].shape[:2]
         normalized = [images[0]]
+        normalization: list[dict[str, float | int]] = []
         for image in images[1:]:
-            if image.shape[:2] != primary_shape:
-                image = cv2.resize(image, (primary_shape[1], primary_shape[0]), interpolation=cv2.INTER_AREA)
-            normalized.append(image)
+            fitted, metadata = fit_to_canvas(image, primary_shape)
+            normalized.append(fitted)
+            normalization.append(metadata)
 
         self.primary = normalized[0]
         self.references = normalized[1:]
+        self.reference_normalization = normalization
         self.source_paths = [Path(item) for item in filenames]
         self.run_result = None
         self.before_panel.set_cv_image(self.primary)
@@ -140,7 +144,11 @@ class MainWindow(QMainWindow):
         self.run_directory = Path(tempfile.mkdtemp(prefix="ConservativeFaceStudio-"))
         stem = self.source_paths[0].stem if self.source_paths else "restauro"
         output = self.run_directory / f"{stem}_finale.png"
-        workspace = Workspace(primary=self.primary.copy(), references=[item.copy() for item in self.references])
+        workspace = Workspace(
+            primary=self.primary.copy(),
+            references=[item.copy() for item in self.references],
+            metadata={"reference_normalization": list(self.reference_normalization)},
+        )
 
         thread = QThread(self)
         worker = PipelineWorker(workspace, output, upscale=2)
