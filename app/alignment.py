@@ -12,6 +12,7 @@ class AlignmentResult:
     matrix: np.ndarray
     matches: int
     inlier_ratio: float
+    reprojection_error: float = 0.0
 
 
 def _gray(image: np.ndarray) -> np.ndarray:
@@ -23,6 +24,103 @@ def _gray(image: np.ndarray) -> np.ndarray:
         code = cv2.COLOR_BGRA2GRAY if image.shape[2] == 4 else cv2.COLOR_BGR2GRAY
         return cv2.cvtColor(image, code)
     raise ValueError("Formato immagine non supportato")
+
+
+def _point_array(points: np.ndarray, name: str) -> np.ndarray:
+    array = np.asarray(points, dtype=np.float32)
+    if array.ndim != 2 or array.shape[1] != 2 or len(array) < 3:
+        raise ValueError(f"{name} deve avere forma Nx2 con almeno 3 punti")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{name} contiene valori non finiti")
+    return array
+
+
+def _validate_transform(matrix: np.ndarray, minimum_scale: float, maximum_scale: float) -> float:
+    linear = matrix[:, :2]
+    determinant = float(np.linalg.det(linear))
+    scale = abs(determinant) ** 0.5
+    if determinant <= 0 or not minimum_scale <= scale <= maximum_scale:
+        raise ValueError(f"Scala o orientamento non plausibili: {scale:.3f}")
+    return scale
+
+
+def align_from_points(
+    moving: np.ndarray,
+    source_points: np.ndarray,
+    target_points: np.ndarray,
+    output_shape: tuple[int, int],
+    *,
+    ransac_threshold: float = 3.0,
+    minimum_inlier_ratio: float = 0.6,
+    maximum_reprojection_error: float = 5.0,
+) -> AlignmentResult:
+    """Allinea mediante punti osservati con controlli RANSAC e di riproiezione."""
+    if moving is None or moving.size == 0:
+        raise ValueError("Immagine non valida")
+    source = _point_array(source_points, "source_points")
+    target = _point_array(target_points, "target_points")
+    if source.shape != target.shape:
+        raise ValueError("Gli insiemi di punti devono avere la stessa forma")
+    height, width = output_shape
+    if height <= 0 or width <= 0 or ransac_threshold <= 0:
+        raise ValueError("Parametri geometrici non validi")
+
+    matrix, inliers = cv2.estimateAffinePartial2D(
+        source,
+        target,
+        method=cv2.RANSAC,
+        ransacReprojThreshold=float(ransac_threshold),
+        maxIters=3000,
+        confidence=0.995,
+        refineIters=20,
+    )
+    if matrix is None or inliers is None:
+        raise ValueError("Trasformazione non stimabile")
+    _validate_transform(matrix, 0.55, 1.8)
+
+    inlier_mask = inliers.reshape(-1).astype(bool)
+    ratio = float(np.mean(inlier_mask))
+    if ratio < minimum_inlier_ratio:
+        raise ValueError(f"Allineamento instabile: inlier ratio {ratio:.3f}")
+
+    homogeneous = np.column_stack((source, np.ones(len(source), dtype=np.float32)))
+    projected = homogeneous @ matrix.T
+    errors = np.linalg.norm(projected - target, axis=1)
+    relevant = errors[inlier_mask]
+    mean_error = float(np.mean(relevant)) if relevant.size else float("inf")
+    if mean_error > maximum_reprojection_error:
+        raise ValueError(f"Errore di riproiezione troppo alto: {mean_error:.3f}px")
+
+    aligned = cv2.warpAffine(
+        moving,
+        matrix,
+        (width, height),
+        flags=cv2.INTER_LANCZOS4,
+        borderMode=cv2.BORDER_REFLECT_101,
+    )
+    return AlignmentResult(aligned, matrix.astype(np.float32), len(source), ratio, mean_error)
+
+
+def normalize_points(points: np.ndarray, image_shape: tuple[int, int]) -> np.ndarray:
+    array = _point_array(points, "points").copy()
+    height, width = image_shape
+    if height <= 0 or width <= 0:
+        raise ValueError("Dimensioni immagine non valide")
+    array[:, 0] /= float(width)
+    array[:, 1] /= float(height)
+    return array
+
+
+def denormalize_points(points: np.ndarray, image_shape: tuple[int, int]) -> np.ndarray:
+    array = _point_array(points, "points").copy()
+    if np.any(array < 0.0) or np.any(array > 1.0):
+        raise ValueError("I punti normalizzati devono essere compresi tra 0 e 1")
+    height, width = image_shape
+    if height <= 0 or width <= 0:
+        raise ValueError("Dimensioni immagine non valide")
+    array[:, 0] *= float(width)
+    array[:, 1] *= float(height)
+    return array
 
 
 def align_to_reference(
@@ -55,21 +153,23 @@ def align_to_reference(
     if matrix is None or inliers is None:
         raise ValueError("Trasformazione non stimabile")
 
-    linear = matrix[:, :2]
-    determinant = float(np.linalg.det(linear))
-    scale = abs(determinant) ** 0.5
-    if not 0.75 <= scale <= 1.35:
-        raise ValueError(f"Scala di allineamento non plausibile: {scale:.3f}")
-    inlier_ratio = float(inliers.mean())
+    _validate_transform(matrix, 0.75, 1.35)
+    inlier_mask = inliers.reshape(-1).astype(bool)
+    inlier_ratio = float(np.mean(inlier_mask))
     if inlier_ratio < 0.35:
         raise ValueError(f"Allineamento instabile: inlier ratio {inlier_ratio:.3f}")
+
+    homogeneous = np.column_stack((source, np.ones(len(source), dtype=np.float32)))
+    projected = homogeneous @ matrix.T
+    errors = np.linalg.norm(projected - target, axis=1)
+    reprojection_error = float(np.mean(errors[inlier_mask]))
 
     height, width = reference.shape[:2]
     aligned = cv2.warpAffine(
         moving, matrix, (width, height), flags=cv2.INTER_LANCZOS4,
         borderMode=cv2.BORDER_CONSTANT, borderValue=0,
     )
-    return AlignmentResult(aligned, matrix, len(good), inlier_ratio)
+    return AlignmentResult(aligned, matrix, len(good), inlier_ratio, reprojection_error)
 
 
 def quality_map(image: np.ndarray, occlusion_mask: np.ndarray | None = None) -> np.ndarray:
