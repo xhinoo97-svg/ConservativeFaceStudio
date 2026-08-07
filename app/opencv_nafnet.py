@@ -7,48 +7,107 @@ import numpy as np
 
 
 class NafNetDeblurEngine:
-    """OpenCV-DNN wrapper for the official OpenCV Zoo NAFNet ONNX model.
+    """Low-memory wrapper for the official OpenCV Zoo NAFNet ONNX model.
 
-    The model is fully convolutional. Inference is tiled to keep peak memory low on
-    older laptops; only one network instance is used at a time. OpenCL is attempted
-    when requested and the caller can recreate the engine on CPU after a driver
-    failure.
+    OpenCV DNN is kept for the optional OpenCL path.  On CPU we prefer ONNX Runtime,
+    because OpenCV 5's new graph engine can currently throw an opaque C++ exception
+    for this NAFNet graph on Windows.  If OpenCL inference fails, the same engine
+    falls back to ONNX Runtime CPU automatically.  Inference remains tiled so the
+    EliteBook-class target does not need to hold a full-resolution activation graph.
     """
 
     def __init__(self, model_path: str | Path, *, target: str = "cpu", tile_size: int = 384, overlap: int = 32) -> None:
         path = Path(model_path).resolve()
         if not path.is_file():
             raise RuntimeError(f"NAFNet non trovato: {path}")
-        self.net = cv2.dnn.readNetFromONNX(str(path))
-        self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-        if str(target).lower() == "opencl" and hasattr(cv2.dnn, "DNN_TARGET_OPENCL"):
-            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_OPENCL)
-            self.target = "opencl"
-        else:
-            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-            self.target = "cpu"
+        self.model_path = path
         self.tile_size = max(128, int(tile_size))
         self.overlap = max(0, min(int(overlap), self.tile_size // 3))
+        self.net = None
+        self._ort_session = None
+        self._ort_input_name: str | None = None
+
+        requested = str(target).lower()
+        if requested == "opencl" and hasattr(cv2.dnn, "DNN_TARGET_OPENCL"):
+            net = cv2.dnn.readNetFromONNX(str(path))
+            net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+            net.setPreferableTarget(cv2.dnn.DNN_TARGET_OPENCL)
+            self.net = net
+            self.target = "opencl"
+        else:
+            self.target = "cpu-onnxruntime"
+
+    def _ensure_ort(self):
+        if self._ort_session is not None:
+            return self._ort_session
+        try:
+            import onnxruntime as ort
+        except ImportError as exc:  # pragma: no cover - dependency is packaged in production
+            raise RuntimeError("onnxruntime non disponibile per NAFNet CPU") from exc
+
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = 2
+        options.inter_op_num_threads = 1
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        session = ort.InferenceSession(
+            str(self.model_path),
+            sess_options=options,
+            providers=["CPUExecutionProvider"],
+        )
+        inputs = session.get_inputs()
+        if len(inputs) != 1:
+            raise RuntimeError(f"NAFNet ONNX inatteso: {len(inputs)} input")
+        self._ort_input_name = inputs[0].name
+        self._ort_session = session
+        return session
+
+    @staticmethod
+    def _blob(image: np.ndarray) -> np.ndarray:
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        return np.transpose(rgb.astype(np.float32) / 255.0, (2, 0, 1))[None, ...]
+
+    @staticmethod
+    def _postprocess(output: np.ndarray, height: int, width: int) -> np.ndarray:
+        array = np.asarray(output)
+        if array.ndim == 4:
+            array = array[0]
+        if array.ndim != 3 or array.shape[0] != 3:
+            raise RuntimeError(f"Output NAFNet inatteso: shape={array.shape}")
+        result = np.transpose(array, (1, 2, 0))
+        result = np.clip(result * 255.0, 0, 255).astype(np.uint8)
+        result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+        return result[:height, :width]
+
+    def _forward_ort(self, blob: np.ndarray) -> np.ndarray:
+        session = self._ensure_ort()
+        assert self._ort_input_name is not None
+        outputs = session.run(None, {self._ort_input_name: blob})
+        if not outputs:
+            raise RuntimeError("NAFNet ONNX Runtime non ha prodotto output")
+        return np.asarray(outputs[0])
+
+    def _forward(self, blob: np.ndarray) -> np.ndarray:
+        if self.net is not None:
+            try:
+                self.net.setInput(blob)
+                return np.asarray(self.net.forward())
+            except cv2.error:
+                # Driver/OpenCV graph-engine incompatibility: do not lose the entire
+                # restoration pipeline.  Release the OpenCV network and retry on the
+                # deterministic CPU provider already shipped with the application.
+                self.net = None
+                self.target = "cpu-onnxruntime-fallback"
+        return self._forward_ort(blob)
 
     def _infer_tile(self, image: np.ndarray) -> np.ndarray:
         h, w = image.shape[:2]
         pad_h = (32 - h % 32) % 32
         pad_w = (32 - w % 32) % 32
         padded = cv2.copyMakeBorder(image, 0, pad_h, 0, pad_w, cv2.BORDER_REFLECT_101)
-        blob = cv2.dnn.blobFromImage(
-            padded,
-            scalefactor=1.0 / 255.0,
-            size=(padded.shape[1], padded.shape[0]),
-            mean=(0.0, 0.0, 0.0),
-            swapRB=True,
-            crop=False,
-        )
-        self.net.setInput(blob)
-        output = self.net.forward()[0]
-        result = np.transpose(output, (1, 2, 0))
-        result = np.clip(result * 255.0, 0, 255).astype(np.uint8)
-        result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
-        return result[:h, :w]
+        blob = self._blob(padded)
+        output = self._forward(blob)
+        return self._postprocess(output, h, w)
 
     @staticmethod
     def _axis_weights(length: int, overlap: int, at_start: bool, at_end: bool) -> np.ndarray:
