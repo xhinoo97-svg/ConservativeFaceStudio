@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.execution import BlockExecutionError, BlockExecutor, ExecutionResult, Workspace
 from app.pipeline import BlockKind
@@ -21,6 +21,12 @@ class AutomaticPipelineRunner:
 
     def __init__(self, workspace: Workspace) -> None:
         self.executor = BlockExecutor(workspace)
+        self.on_progress: Callable[[int, str], None] | None = None
+
+    def _emit_progress(self, index: int, name: str) -> None:
+        callback = self.on_progress
+        if callback is not None:
+            callback(int(index), str(name))
 
     def run(
         self,
@@ -34,7 +40,8 @@ class AutomaticPipelineRunner:
         blocks = self.executor.pipeline.blocks
         results: list[ExecutionResult] = []
 
-        for block in blocks:
+        for index, block in enumerate(blocks, start=1):
+            self._emit_progress(index - 1, f"Avvio: {block.title}")
             if block.kind is BlockKind.EXPORT:
                 result = self.executor.execute(
                     block,
@@ -42,6 +49,7 @@ class AutomaticPipelineRunner:
                     blocks_zip=output_path.with_suffix(output_path.suffix + ".blocks.zip"),
                 )
                 results.append(result)
+                self._emit_progress(index, block.title)
                 provenance = result.details.get("provenance_path")
                 return AutomaticRunResult(
                     final_image=Path(result.details["path"]),
@@ -61,21 +69,25 @@ class AutomaticPipelineRunner:
             reason = self._skip_reason(block.kind)
             if reason is not None:
                 results.append(self.executor.record_skipped(block, reason))
+                self._emit_progress(index, f"{block.title} — saltato")
                 continue
 
             try:
                 results.append(self.executor.execute(block, **parameters))
+                self._emit_progress(index, block.title)
             except BlockExecutionError as exc:
                 if block.kind in {BlockKind.IMPORT, BlockKind.IDENTITY_CHECK}:
                     raise
                 results.append(self.executor.record_skipped(block, str(exc)))
+                self._emit_progress(index, f"{block.title} — saltato")
             except ValueError as exc:
                 results.append(self.executor.record_skipped(block, str(exc)))
+                self._emit_progress(index, f"{block.title} — saltato")
 
         raise RuntimeError("Pipeline terminata senza blocco export")
 
     def _skip_reason(self, kind: BlockKind) -> str | None:
-        if kind in {BlockKind.LANDMARKS, BlockKind.INPAINT, BlockKind.FRONTALIZE}:
+        if kind in {BlockKind.INPAINT, BlockKind.FRONTALIZE}:
             return "Modulo opzionale non installato o disattivato in strict mode"
         has_references = bool(self.executor.workspace.references)
         if kind in {BlockKind.ALIGN, BlockKind.REGION_SELECT, BlockKind.FUSION} and not has_references:
