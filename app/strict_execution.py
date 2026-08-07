@@ -20,6 +20,28 @@ from app.strict_repair import (
 )
 
 
+def _remap_aligned_provenance(local_map: np.ndarray, source_indices: list[int]) -> np.ndarray:
+    """Map aligned-reference slots back to the original imported reference numbers.
+
+    Alignment may reject a wrong-identity or undetectable reference. Downstream fusion
+    then numbers only the surviving aligned references (1..N). Export provenance must
+    still identify the original imported photograph, otherwise a filtered reference can
+    silently make every later source-map label wrong.
+    """
+    local = np.asarray(local_map)
+    if local.ndim != 2:
+        raise ValueError("La provenance map deve essere bidimensionale")
+    result = np.zeros(local.shape, dtype=np.uint16)
+    for aligned_slot, original_index in enumerate(source_indices, start=1):
+        if original_index < 0:
+            raise ValueError("Indice riferimento originale non valido")
+        result[local == aligned_slot] = np.uint16(original_index + 1)
+    unknown = (local > 0) & (result == 0)
+    if np.any(unknown):
+        raise ValueError("Provenance locale contiene un riferimento non mappabile")
+    return result
+
+
 class StrictBlockExecutor(BlockExecutor):
     """Estende il motore base con soli interventi supportati da pixel osservati."""
 
@@ -56,7 +78,7 @@ class StrictBlockExecutor(BlockExecutor):
             export_image_atomic(source_map.astype(np.uint16), source_path)
             attachments.append(source_path)
             details["source_map_path"] = str(source_path)
-            details["source_map_legend"] = "0=primary image; N=reference image N"
+            details["source_map_legend"] = "0=primary image; N=original imported reference image N"
 
         confidence = self.workspace.metadata.get("specific_reference_confidence")
         if isinstance(confidence, np.ndarray):
@@ -91,7 +113,6 @@ class StrictBlockExecutor(BlockExecutor):
                 "reference_confidence_path": details.get("reference_confidence_path"),
                 "snapshot_sha256": snapshot.sha256,
             })
-            # Rebuild once more so the manifest contains the final export-operation metadata.
             archive = self.block_artifacts.export_zip(
                 archive_path,
                 project=self.project,
@@ -126,6 +147,19 @@ class StrictBlockExecutor(BlockExecutor):
         })
         return ExecutionResult(block.key, base.image, details)
 
+    def _aligned_source_indices(self) -> list[int]:
+        stored = self.workspace.metadata.get("aligned_reference_source_indices")
+        if isinstance(stored, list) and len(stored) == len(self.workspace.aligned_references):
+            try:
+                indices = [int(item) for item in stored]
+            except (TypeError, ValueError):
+                indices = []
+            if indices and all(0 <= item < len(self.workspace.references) for item in indices):
+                return indices
+            if not indices and not self.workspace.aligned_references:
+                return []
+        return list(range(len(self.workspace.aligned_references)))
+
     def _specific_memory_select(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
         if not self.workspace.aligned_references:
             raise BlockExecutionError("Nessun riferimento allineato disponibile per la memoria specifica")
@@ -159,20 +193,22 @@ class StrictBlockExecutor(BlockExecutor):
             maximum_replace_fraction=float(p.get("maximum_replace_fraction", 0.35)),
             agreement_colour_threshold=float(p.get("agreement_colour_threshold", 22.0)),
         )
-        self.workspace.provenance_map = memory.provenance_map.copy()
+        source_indices = self._aligned_source_indices()
+        provenance = _remap_aligned_provenance(memory.provenance_map, source_indices)
+        self.workspace.provenance_map = provenance
         self.workspace.metadata["specific_reference_confidence"] = memory.confidence_map.copy()
         summary = [asdict(item) for item in memory.decisions]
         self.workspace.metadata["specific_reference_memory"] = summary
+        counts = np.bincount(provenance.ravel(), minlength=len(self.workspace.references) + 1).tolist()
         return ExecutionResult(block.key, memory.image, {
             "engine": "dmd-inspired-specific-memory",
             "conservative": True,
             "generic_dictionary_used": False,
             "reference_count": len(self.workspace.aligned_references),
+            "aligned_reference_source_indices": source_indices,
             "top_k": int(p.get("top_k", 2)),
             "transferred_pixels": memory.transferred_pixels,
-            "source_pixel_counts": np.bincount(
-                memory.provenance_map.ravel(), minlength=len(images)
-            ).tolist(),
+            "source_pixel_counts": counts,
             "regions": summary,
         })
 
@@ -218,16 +254,19 @@ class StrictBlockExecutor(BlockExecutor):
             reference_masks,
             feather_sigma=float(p.get("feather_sigma", 1.2)),
         )
+        source_indices = self._aligned_source_indices()
+        provenance = _remap_aligned_provenance(repaired.provenance_map, source_indices)
         if (
             self.workspace.provenance_map is None
-            or self.workspace.provenance_map.shape != repaired.provenance_map.shape
+            or self.workspace.provenance_map.shape != provenance.shape
         ):
-            self.workspace.provenance_map = repaired.provenance_map.copy()
+            self.workspace.provenance_map = provenance.copy()
         else:
-            used = repaired.provenance_map > 0
-            self.workspace.provenance_map[used] = repaired.provenance_map[used]
+            used = provenance > 0
+            self.workspace.provenance_map[used] = provenance[used]
 
         unresolved_fraction = repaired.unresolved_pixels / max(1, repaired.requested_pixels)
+        counts = np.bincount(provenance.ravel(), minlength=len(self.workspace.references) + 1).tolist()
         return ExecutionResult(block.key, repaired.image, {
             "engine": "observed-reference-repair",
             "conservative": True,
@@ -235,7 +274,8 @@ class StrictBlockExecutor(BlockExecutor):
             "repaired_pixels": repaired.repaired_pixels,
             "unresolved_pixels": repaired.unresolved_pixels,
             "unresolved_fraction": float(unresolved_fraction),
-            "source_pixel_counts": list(repaired.source_pixel_counts),
+            "aligned_reference_source_indices": source_indices,
+            "source_pixel_counts": counts,
         })
 
     @staticmethod
