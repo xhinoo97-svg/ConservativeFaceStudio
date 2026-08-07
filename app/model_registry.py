@@ -36,7 +36,7 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
         code_license="BSD-3-Clause",
         weights_license="Verify upstream release terms before redistribution",
         conservative_default=False,
-        notes="Generative super-resolution; strict mode must keep it disabled by default.",
+        notes="Generative super-resolution; strict mode must keep it disabled by default. Automatic download remains blocked until a trusted SHA-256 is pinned.",
     ),
     ModelManifest(
         key="3ddfa_mb1",
@@ -67,7 +67,7 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
         destination="models/models/buffalo_l",
         source_url=None,
         code_license="MIT",
-        weights_license="Separate license required for many pretrained recognition models",
+        weights_license="Pretrained recognition models require separate usage rights; do not redistribute by default",
         conservative_default=True,
         notes="Never auto-download or redistribute recognition weights without explicit licensing. The adapter only opens a local model pack.",
     ),
@@ -139,17 +139,22 @@ def download_model(
     *,
     accept_license: bool,
     timeout_seconds: int = 60,
+    allow_unverified_download: bool = False,
 ) -> Path:
-    """Download atomico con limite dimensione e verifica checksum.
+    """Download atomico con limiti e verifica SHA-256.
 
-    La chiamata richiede un'accettazione esplicita della licenza. I manifest senza
-    URL ufficiale non vengono scaricati automaticamente.
+    Richiede accettazione esplicita della licenza. Per ridurre il rischio di
+    supply-chain, un download automatico è rifiutato se il manifest non contiene
+    un SHA-256 atteso. ``allow_unverified_download`` esiste solo per sviluppo e
+    non deve essere usato dal flusso UI standard.
     """
     validate_manifest(manifest)
     if not accept_license:
         raise PermissionError("È richiesta l'accettazione esplicita della licenza del modello")
     if manifest.source_url is None:
         raise DownloadError("Nessun URL ufficiale approvato per questo modello")
+    if manifest.expected_sha256 is None and not allow_unverified_download:
+        raise DownloadError("Download automatico bloccato: checksum SHA-256 non registrato")
 
     root_path = Path(root).resolve()
     target = (root_path / manifest.destination).resolve()
