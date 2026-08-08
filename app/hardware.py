@@ -5,6 +5,7 @@ import shutil
 from dataclasses import asdict, dataclass
 
 import cv2
+import numpy as np
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,34 @@ def _opencl_available() -> bool:
         return False
 
 
+def _opencl_self_test() -> bool:
+    """Enable OpenCL only after a tiny deterministic correctness smoke test.
+
+    Driver presence alone is not enough on older integrated Intel GPUs. The test uses
+    a small UMat blur, compares it with CPU output and rejects exceptions, empty output
+    or a meaningful numerical mismatch. Learned-model handlers still keep their own
+    CPU fallback if a particular DNN operator is unsupported.
+    """
+    if not _opencl_available():
+        return False
+    try:
+        cv2.ocl.setUseOpenCL(True)
+        source = np.arange(64 * 64, dtype=np.uint8).reshape(64, 64)
+        cpu = cv2.GaussianBlur(source, (5, 5), 1.1)
+        gpu = cv2.GaussianBlur(cv2.UMat(source), (5, 5), 1.1).get()
+        if gpu is None or gpu.shape != cpu.shape:
+            return False
+        difference = np.abs(cpu.astype(np.int16) - gpu.astype(np.int16))
+        return bool(np.max(difference) <= 1)
+    except Exception:
+        return False
+    finally:
+        try:
+            cv2.ocl.setUseOpenCL(False)
+        except Exception:
+            pass
+
+
 def _cuda_devices() -> int:
     try:
         if hasattr(cv2, "cuda"):
@@ -44,10 +73,10 @@ def _cuda_devices() -> int:
 def detect_hardware_policy(mode: str = "balanced") -> HardwarePolicy:
     """Choose a conservative mixed CPU/GPU policy without stressing the machine.
 
-    Balanced mode deliberately leaves CPU headroom and allows only one learned
-    model at a time. OpenCL is used only when the installed OpenCV build and
-    driver report it as available; otherwise DNN stays on CPU. Dedicated CUDA or
-    Vulkan backends are recorded for modules that can use them later.
+    Balanced mode leaves CPU headroom and permits only one learned model at a time.
+    OpenCL is selected only after both driver discovery and a deterministic UMat
+    correctness self-test; every DNN module is still required to fall back to CPU on
+    inference failure.
     """
     normalized = str(mode).strip().lower()
     if normalized not in {"safe", "balanced", "performance"}:
@@ -58,28 +87,24 @@ def detect_hardware_policy(mode: str = "balanced") -> HardwarePolicy:
         threads = max(1, min(2, logical // 2 or 1))
         tile = 320
     elif normalized == "balanced":
-        # On 4 logical processors this means 2 OpenCV threads; on larger systems
-        # it still avoids consuming every logical processor for long periods.
         threads = max(1, min(4, max(2, logical // 2)))
         tile = 384
     else:
         threads = max(1, min(6, max(2, logical - 1)))
         tile = 512
 
-    opencl = _opencl_available()
+    opencl_available = _opencl_available()
+    opencl_stable = _opencl_self_test() if opencl_available else False
     cuda_devices = _cuda_devices()
     vulkan = shutil.which("realesrgan-ncnn-vulkan") is not None
 
-    # OpenCL is the least invasive cross-vendor acceleration already exposed by
-    # OpenCV. It may map to an Intel/AMD integrated GPU without requiring a new
-    # heavyweight framework. Modules can still fall back to CPU on inference error.
-    target = "opencl" if opencl else "cpu"
+    target = "opencl" if opencl_stable else "cpu"
     return HardwarePolicy(
         mode=normalized,
         logical_processors=logical,
         cv_threads=threads,
-        opencl_available=opencl,
-        opencl_enabled=opencl,
+        opencl_available=opencl_available,
+        opencl_enabled=opencl_stable,
         opencv_cuda_devices=cuda_devices,
         vulkan_realesrgan_available=vulkan,
         dnn_backend="opencv",
@@ -95,5 +120,4 @@ def apply_hardware_policy(policy: HardwarePolicy) -> None:
         if hasattr(cv2, "ocl"):
             cv2.ocl.setUseOpenCL(bool(policy.opencl_enabled))
     except Exception:
-        # Driver/OpenCV mismatch must never prevent the conservative CPU path.
         pass
