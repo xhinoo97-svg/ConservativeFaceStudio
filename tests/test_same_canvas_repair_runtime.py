@@ -104,6 +104,7 @@ def test_primary_anchor_evidence_enables_exact_repair_without_legacy_alignment_f
     workspace.metadata["aligned_reference_original_source_indices"] = [1]
     workspace.metadata["aligned_reference_support_masks"] = [support]
     workspace.metadata["preflight_original_occlusion_masks"] = [seed.copy(), np.zeros_like(seed)]
+    workspace.metadata["same_canvas_imported_primary"] = primary.copy()
     workspace.metadata["same_canvas_primary_anchor"] = {
         "applied": False,
         "matched_original_reference_indices": [1],
@@ -114,15 +115,56 @@ def test_primary_anchor_evidence_enables_exact_repair_without_legacy_alignment_f
     repaired, provenance, details = exact_same_canvas_observed_repair(
         workspace,
         primary,
-        difference_threshold=0.05,
+        difference_threshold=0.075,
         maximum_face_fraction=1.0,
     )
 
     repaired_mask = provenance > 0
     assert details["applied"] is True
     assert details["verified_original_indices"] == [1]
-    assert details["repaired_pixels"] > int(np.count_nonzero(seed))
-    assert np.all(repaired_mask[seed > 0])
-    assert np.array_equal(repaired[repaired_mask], clean[repaired_mask])
-    assert np.all(provenance[repaired_mask] == 1)
+    assert details["repaired_pixels"] >= int(np.count_nonzero(full_damage))
+    assert np.all(repaired_mask[full_damage > 0])
+    assert np.array_equal(repaired[full_damage > 0], clean[full_damage > 0])
+    assert np.all(provenance[full_damage > 0] == 1)
     assert np.array_equal(repaired[~repaired_mask], primary[~repaired_mask])
+
+
+def test_partial_same_canvas_fallback_is_a_verified_exact_donor() -> None:
+    clean = _clean()
+    full_damage = np.zeros(clean.shape[:2], dtype=np.uint8)
+    cv2.rectangle(full_damage, (46, 50), (82, 76), 255, -1)
+    seed = np.zeros_like(full_damage)
+    cv2.rectangle(seed, (58, 58), (70, 68), 255, -1)
+    primary = clean.copy(); primary[full_damage > 0] = (8, 8, 8)
+
+    support = np.zeros_like(full_damage)
+    cv2.rectangle(support, (40, 44), (88, 82), 255, -1)
+    component = np.zeros_like(clean)
+    component[support > 0] = clean[support > 0]
+
+    workspace = Workspace(primary=primary.copy(), references=[component.copy()])
+    workspace.aligned_references = [component.copy()]
+    workspace.occlusion_masks = [seed.copy(), np.zeros_like(seed)]
+    workspace.metadata["primary_bbox"] = (22, 14, 84, 104)
+    workspace.metadata["aligned_reference_source_indices"] = [0]
+    workspace.metadata["aligned_reference_original_source_indices"] = [1]
+    workspace.metadata["aligned_reference_support_masks"] = [support]
+    workspace.metadata["preflight_original_occlusion_masks"] = [seed.copy(), np.zeros_like(seed)]
+    workspace.metadata["same_canvas_imported_primary"] = primary.copy()
+    workspace.metadata["verified_same_canvas_alignment"] = []
+    workspace.metadata["same_canvas_partial_alignment_diagnostics"] = [
+        {"runtime_reference_index": 0, "method": "verified-same-canvas-partial"}
+    ]
+
+    repaired, provenance, details = exact_same_canvas_observed_repair(
+        workspace,
+        primary,
+        maximum_face_fraction=1.0,
+    )
+
+    expected = (full_damage > 0) & (support > 0)
+    assert details["applied"] is True
+    assert details["partial_same_canvas_supported"] is True
+    assert np.all(provenance[expected] == 1)
+    assert np.array_equal(repaired[expected], clean[expected])
+    assert np.array_equal(repaired[~expected], primary[~expected])
