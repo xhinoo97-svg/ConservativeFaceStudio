@@ -39,6 +39,42 @@ def test_reference_consensus_repairs_only_supported_occlusion() -> None:
     )
 
 
+def test_complementary_partial_references_can_confirm_hint_without_overlap() -> None:
+    clean = clean_face()
+    primary = clean.copy()
+    primary[50:78, 42:86] = 0
+    hint = np.zeros((128, 128), dtype=np.uint8)
+    hint[50:78, 42:86] = 255
+
+    left = np.zeros_like(clean)
+    left[:, :68] = clean[:, :68]
+    right = np.zeros_like(clean)
+    right[:, 60:] = clean[:, 60:]
+    left_mask = np.full((128, 128), 255, dtype=np.uint8)
+    left_mask[:, :68] = 0
+    right_mask = np.full((128, 128), 255, dtype=np.uint8)
+    right_mask[:, 60:] = 0
+
+    target = reference_consensus_occlusion_mask(
+        primary,
+        [left, right],
+        hint,
+        [left_mask, right_mask],
+    )
+    repaired = repair_from_observed_references(
+        primary,
+        [left, right],
+        target,
+        [left_mask, right_mask],
+        feather_sigma=0,
+    )
+
+    hinted = hint > 0
+    assert np.count_nonzero(target[hinted]) / np.count_nonzero(hinted) >= 0.90
+    assert repaired.unresolved_pixels == 0
+    assert np.mean(np.abs(repaired.image[hinted].astype(np.int16) - clean[hinted].astype(np.int16))) < 1.0
+
+
 def test_reference_consensus_detects_local_blur_supported_by_two_sharp_references() -> None:
     clean = clean_face()
     primary = clean.copy()
