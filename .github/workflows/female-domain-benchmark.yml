@@ -41,13 +41,13 @@ jobs:
       - name: Domain benchmark unit checks
         shell: pwsh
         run: |
-          python -m compileall -q app tests
+          python -m compileall -q app tests scripts
           python -m pytest -q tests/test_female_domain_benchmark.py
 
       - name: Curated 30-portrait practical benchmark
         shell: pwsh
         run: |
-          python -m app.female_domain_benchmark --output female-domain-benchmark --cache .benchmark-cache/female-domain --limit 30 --size 320 --profile quick --require-sources 24
+          python scripts/run_female_domain_benchmark_resilient.py --output female-domain-benchmark --cache .benchmark-cache/female-domain --limit 30 --size 320 --profile quick --require-sources 24
           $report = Get-Content female-domain-benchmark/female-domain-benchmark.json -Raw | ConvertFrom-Json
           $summary = $report.summary
           Write-Host "resolved portraits=$($report.portrait_count)/$($report.requested_portrait_count)"
