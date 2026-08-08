@@ -23,6 +23,32 @@ def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
     return np.where(item > 0, 255, 0).astype(np.uint8)
 
 
+def _frozen_primary_occlusion(workspace) -> np.ndarray | None:
+    """Return the detector proposal measured before any learned restoration."""
+    stored = workspace.metadata.get("preflight_original_occlusion_masks")
+    if not isinstance(stored, list) or not stored:
+        return None
+    try:
+        return _binary(np.asarray(stored[0]), workspace.primary.shape[:2])
+    except (TypeError, ValueError):
+        return None
+
+
+def _merge_frozen_primary_hint(workspace) -> int:
+    """Keep observed occlusion evidence from being erased by a deblur network."""
+    frozen = _frozen_primary_occlusion(workspace)
+    if frozen is None:
+        return 0
+    shape = workspace.primary.shape[:2]
+    existing = workspace.metadata.get("reference_consensus_occlusion")
+    if not isinstance(existing, np.ndarray) or existing.shape != shape:
+        existing = np.zeros(shape, dtype=np.uint8)
+    merged = cv2.bitwise_or(_binary(existing, shape), frozen)
+    added = int(np.count_nonzero((merged > 0) & (existing == 0)))
+    workspace.metadata["reference_consensus_occlusion"] = merged
+    return added
+
+
 def _effective_masks(workspace) -> tuple[list[np.ndarray] | None, int, int]:
     references = list(workspace.aligned_references)
     if not references:
@@ -145,6 +171,11 @@ def install_partial_reference_runtime(executor) -> None:
         def make_handler(block_kind: BlockKind, wrapped):
             @wraps(wrapped)
             def handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+                frozen_hint_pixels = (
+                    _merge_frozen_primary_hint(executor.workspace)
+                    if block_kind is BlockKind.INPAINT
+                    else 0
+                )
                 hint_diagnostics = (
                     _expand_verified_full_reference_hint(executor.workspace)
                     if block_kind is BlockKind.INPAINT
@@ -164,6 +195,7 @@ def install_partial_reference_runtime(executor) -> None:
                         "detail_reliability_threshold": int(executor.workspace.metadata.get("detail_reliability_threshold", 40)),
                         "detail_reliability_source": str(executor.workspace.metadata.get("detail_reliability_source", "unknown")),
                         "partial_identity_gate_stage": "alignment" if block_kind is BlockKind.INPAINT else None,
+                        "frozen_primary_hint_added_pixels": int(frozen_hint_pixels),
                         "verified_single_reference_hint": hint_diagnostics,
                     }
                 )
