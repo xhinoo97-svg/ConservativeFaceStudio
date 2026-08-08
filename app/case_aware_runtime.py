@@ -60,6 +60,136 @@ def _frozen_primary_reliability(workspace) -> np.ndarray:
     return np.full(shape, 255, dtype=np.uint8)
 
 
+def _same_canvas_partial_verification(
+    workspace,
+    reference: np.ndarray,
+    runtime_reference_index: int,
+) -> tuple[np.ndarray, np.ndarray, dict[str, Any]] | None:
+    """Verify an identity transform for sparse references already on the same canvas.
+
+    This is a fallback for component sheets/masked full-canvas references. Matching
+    dimensions are not sufficient: enough observed pixels must agree photometrically
+    with non-occluded primary pixels. Damage pixels themselves are excluded from the
+    verification, so the reference can still donate them after alignment is accepted.
+    """
+    primary = workspace.primary
+    if reference.shape != primary.shape:
+        return None
+    shape = primary.shape[:2]
+    observed = np.where(np.max(reference, axis=2) > 2, 255, 0).astype(np.uint8)
+    observed_fraction = float(np.mean(observed > 0))
+    if observed_fraction < 0.02 or observed_fraction > 0.72:
+        return None
+
+    frozen_occlusion = workspace.metadata.get("preflight_original_occlusion_masks")
+    primary_occ = np.zeros(shape, dtype=np.uint8)
+    reference_occ = np.zeros(shape, dtype=np.uint8)
+    if isinstance(frozen_occlusion, list):
+        try:
+            if frozen_occlusion:
+                primary_occ = _binary(np.asarray(frozen_occlusion[0]), shape)
+            if runtime_reference_index + 1 < len(frozen_occlusion):
+                reference_occ = _binary(np.asarray(frozen_occlusion[runtime_reference_index + 1]), shape)
+        except Exception:
+            return None
+
+    reliability_maps = workspace.metadata.get("preflight_detail_reliability_maps")
+    reliability = np.full(shape, 255, dtype=np.uint8)
+    if isinstance(reliability_maps, list) and runtime_reference_index + 1 < len(reliability_maps):
+        candidate = np.asarray(reliability_maps[runtime_reference_index + 1])
+        if candidate.shape == shape:
+            reliability = candidate.astype(np.uint8, copy=False)
+
+    reliable_observed = (
+        (observed > 0)
+        & (reference_occ == 0)
+        & (reliability >= int(np.clip(workspace.metadata.get("detail_reliability_threshold", 40), 0, 255)))
+    )
+    comparable = reliable_observed & (primary_occ == 0) & (np.max(primary, axis=2) > 2)
+    reliable_pixels = int(np.count_nonzero(reliable_observed))
+    comparable_pixels = int(np.count_nonzero(comparable))
+    minimum_comparable = max(128, int(round(reliable_pixels * 0.12)))
+    if reliable_pixels <= 0 or comparable_pixels < minimum_comparable:
+        return None
+
+    primary_lab = cv2.cvtColor(primary, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
+    reference_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
+    delta = np.mean(np.abs(primary_lab - reference_lab), axis=2)[comparable]
+    median_delta = float(np.median(delta))
+    p90_delta = float(np.percentile(delta, 90.0))
+    if median_delta > 0.075 or p90_delta > 0.18:
+        return None
+
+    reliable_map = reliability.copy()
+    reliable_map[observed == 0] = 0
+    details = {
+        "runtime_reference_index": int(runtime_reference_index),
+        "observed_fraction": observed_fraction,
+        "reliable_pixels": reliable_pixels,
+        "comparable_pixels": comparable_pixels,
+        "median_lab_delta": median_delta,
+        "p90_lab_delta": p90_delta,
+        "method": "verified-same-canvas-partial",
+    }
+    return observed, reliable_map, details
+
+
+def _supplement_same_canvas_partials(workspace) -> list[dict[str, Any]]:
+    runtime_refs = list(workspace.references)
+    if not runtime_refs:
+        return []
+    existing_runtime = workspace.metadata.get("aligned_reference_source_indices")
+    existing_runtime = [int(v) for v in existing_runtime] if isinstance(existing_runtime, list) else []
+    present = set(existing_runtime)
+
+    aligned = list(workspace.aligned_references)
+    supports = workspace.metadata.get("aligned_reference_support_masks")
+    supports = list(supports) if isinstance(supports, list) and len(supports) == len(aligned) else [np.full(workspace.primary.shape[:2], 255, np.uint8) for _ in aligned]
+    reliability_maps = workspace.metadata.get("aligned_reference_detail_reliability_maps")
+    reliability_maps = list(reliability_maps) if isinstance(reliability_maps, list) and len(reliability_maps) == len(aligned) else [np.full(workspace.primary.shape[:2], 255, np.uint8) for _ in aligned]
+    original_indices = workspace.metadata.get("aligned_reference_original_source_indices")
+    original_indices = [int(v) for v in original_indices] if isinstance(original_indices, list) and len(original_indices) == len(aligned) else list(range(1, len(aligned) + 1))
+    identity_scores = workspace.metadata.get("aligned_reference_identity_scores")
+    identity_scores = list(identity_scores) if isinstance(identity_scores, list) and len(identity_scores) == len(aligned) else [None] * len(aligned)
+    identity_verified = workspace.metadata.get("aligned_reference_identity_verified")
+    identity_verified = list(identity_verified) if isinstance(identity_verified, list) and len(identity_verified) == len(aligned) else [False] * len(aligned)
+    partial_verified = workspace.metadata.get("aligned_reference_partial_geometry_verified")
+    partial_verified = list(partial_verified) if isinstance(partial_verified, list) and len(partial_verified) == len(aligned) else [False] * len(aligned)
+    runtime_order = workspace.metadata.get("runtime_source_order")
+    runtime_order = list(runtime_order) if isinstance(runtime_order, list) and len(runtime_order) == len(runtime_refs) + 1 else list(range(len(runtime_refs) + 1))
+
+    diagnostics: list[dict[str, Any]] = []
+    for runtime_index, reference in enumerate(runtime_refs):
+        if runtime_index in present:
+            continue
+        verified = _same_canvas_partial_verification(workspace, reference, runtime_index)
+        if verified is None:
+            continue
+        support, reliability, details = verified
+        aligned.append(reference.copy())
+        supports.append(support)
+        reliability_maps.append(reliability)
+        existing_runtime.append(runtime_index)
+        original_indices.append(int(runtime_order[runtime_index + 1]))
+        identity_scores.append(None)
+        identity_verified.append(False)
+        partial_verified.append(True)
+        present.add(runtime_index)
+        diagnostics.append(details)
+
+    if diagnostics:
+        workspace.aligned_references = aligned
+        workspace.metadata["aligned_reference_support_masks"] = supports
+        workspace.metadata["aligned_reference_detail_reliability_maps"] = reliability_maps
+        workspace.metadata["aligned_reference_source_indices"] = existing_runtime
+        workspace.metadata["aligned_reference_original_source_indices"] = original_indices
+        workspace.metadata["aligned_reference_identity_scores"] = identity_scores
+        workspace.metadata["aligned_reference_identity_verified"] = identity_verified
+        workspace.metadata["aligned_reference_partial_geometry_verified"] = partial_verified
+    workspace.metadata["same_canvas_partial_alignment_diagnostics"] = diagnostics
+    return diagnostics
+
+
 def install_case_aware_runtime(executor, model_paths: dict[str, str | Path]) -> None:
     """Wire case routing, local component refinement and single-image repair.
 
@@ -75,6 +205,7 @@ def install_case_aware_runtime(executor, model_paths: dict[str, str | Path]) -> 
         def align_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
             result = original_align(block, parameters)
             workspace = executor.workspace
+            supplemental = _supplement_same_canvas_partials(workspace)
             refs = list(workspace.aligned_references)
             supports = workspace.metadata.get("aligned_reference_support_masks")
             points = workspace.metadata.get("primary_landmarks5")
@@ -82,6 +213,8 @@ def install_case_aware_runtime(executor, model_paths: dict[str, str | Path]) -> 
             if not refs or not isinstance(supports, list) or len(supports) != len(refs) or points is None or bbox is None:
                 details = dict(result.details)
                 details["component_micro_refinement"] = "not_applicable"
+                details["same_canvas_partial_recovered"] = len(supplemental)
+                details["same_canvas_partial_diagnostics"] = supplemental
                 return ExecutionResult(result.block, result.image, details)
 
             component_masks = canonical_component_masks(
@@ -141,6 +274,8 @@ def install_case_aware_runtime(executor, model_paths: dict[str, str | Path]) -> 
             details["component_micro_refinement"] = "applied"
             details["component_micro_refinement_accepted"] = int(sum(bool(item.get("accepted")) for item in diagnostics))
             details["component_micro_refinement_diagnostics"] = diagnostics
+            details["same_canvas_partial_recovered"] = len(supplemental)
+            details["same_canvas_partial_diagnostics"] = supplemental
             return ExecutionResult(result.block, result.image, details)
 
         executor._handlers[BlockKind.ALIGN] = align_handler
@@ -162,8 +297,6 @@ def install_case_aware_runtime(executor, model_paths: dict[str, str | Path]) -> 
         workspace.metadata["restoration_case"] = assessment.route.value
         workspace.metadata["restoration_case_assessment"] = {**asdict(assessment), "route": assessment.route.value}
 
-        # Semi-transparent overlays still contain observed structure. Only their
-        # locally unreliable core is eligible for replacement; the rest is preserved.
         reliable = _frozen_primary_reliability(workspace)
         if assessment.route is RestorationCase.TRANSLUCENT_OCCLUSION:
             target = cv2.bitwise_and(target, cv2.bitwise_not(reliable))
@@ -231,7 +364,7 @@ def install_case_aware_runtime(executor, model_paths: dict[str, str | Path]) -> 
             provenance = np.zeros(shape, dtype=np.uint16)
         else:
             provenance = provenance.copy()
-        provenance[repaired_mask > 0] = np.uint16(65534)  # symmetry: explicit low-confidence derived source
+        provenance[repaired_mask > 0] = np.uint16(65534)
         provenance[generated > 0] = GENERATED_PROVENANCE_CODE
         workspace.provenance_map = provenance
         workspace.metadata["inpaint_target_mask"] = target.copy()
