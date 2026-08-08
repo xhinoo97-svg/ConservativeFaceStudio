@@ -45,9 +45,10 @@ def exact_same_canvas_observed_repair(
 
     The same-canvas verifier is intentionally strict and runs during ALIGN. Once that
     identity transform is proven, re-estimating donor geometry during INPAINT can only
-    reduce pixel accuracy. This pass therefore expands only detector-seeded, strong
-    LAB-difference components and copies the corresponding actually observed donor
-    pixel without interpolation. No synthesis, symmetry or unobserved support is used.
+    reduce pixel accuracy. Detector-seeded pixels are transferred directly whenever an
+    observed donor covers them. Strong LAB-difference components may expand that seed,
+    but only inside verified observed support. No synthesis, symmetry or interpolation
+    is used by this pass.
     """
     shape = workspace.primary.shape[:2]
     diagnostics = workspace.metadata.get("verified_same_canvas_alignment")
@@ -112,6 +113,7 @@ def exact_same_canvas_observed_repair(
     bbox = tuple(int(v) for v in bbox_raw) if bbox_raw is not None else None
     face = face_support_mask(shape, bbox) > 0
     face_pixels = max(1, int(np.count_nonzero(face)))
+    seed_bool = seed > 0
     seed_reach = cv2.dilate(seed, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)), iterations=1)
     base_lab = cv2.cvtColor(workspace.primary, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
 
@@ -126,8 +128,8 @@ def exact_same_canvas_observed_repair(
         else [int(value) + 1 for value in runtime_indices_raw]
     )
 
-    for slot, (reference, runtime_index, support_raw, original_index) in enumerate(
-        zip(aligned, runtime_indices_raw, supports_raw, originals)
+    for reference, runtime_index, support_raw, original_index in zip(
+        aligned, runtime_indices_raw, supports_raw, originals
     ):
         runtime_index = int(runtime_index)
         if runtime_index not in verified_runtime or reference.shape != workspace.primary.shape:
@@ -136,9 +138,10 @@ def exact_same_canvas_observed_repair(
         if not np.any(support):
             continue
         reference_valid = np.max(reference, axis=2) > 2
+        observed = support & reference_valid & face
         ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
         difference = np.mean(np.abs(base_lab - ref_lab), axis=2)
-        strong = support & reference_valid & face & (difference >= float(difference_threshold))
+        strong = observed & (difference >= float(difference_threshold))
         strong_mask = strong.astype(np.uint8) * 255
         if np.any(strong):
             strong_mask = cv2.morphologyEx(
@@ -146,8 +149,14 @@ def exact_same_canvas_observed_repair(
                 cv2.MORPH_CLOSE,
                 cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
             )
-            strong = (strong_mask > 0) & support & reference_valid & face
-        selected = _seeded_components(strong, seed_reach)
+            strong = (strong_mask > 0) & observed
+
+        # A verified same-canvas donor does not need a colour-difference threshold for
+        # pixels already identified as damaged. The threshold is only for expanding
+        # beyond the detector seed. This also preserves dark eyes/lines inside an opaque
+        # sticker whose clean value can be numerically close to the sticker colour.
+        seeded_observed = seed_bool & observed
+        selected = seeded_observed | _seeded_components(strong, seed_reach)
         selected &= ~repaired_union
         if not np.any(selected):
             continue
@@ -163,12 +172,13 @@ def exact_same_canvas_observed_repair(
     repaired_pixels = int(np.count_nonzero(repaired_union))
     return result, provenance, {
         "applied": repaired_pixels > 0,
-        "reason": "exact_observed_transfer" if repaired_pixels else "no_seeded_strong_difference",
+        "reason": "exact_observed_transfer" if repaired_pixels else "no_seeded_observed_or_strong_difference",
         "verified_reference_count": len(verified_runtime),
         "repaired_pixels": repaired_pixels,
         "source_pixel_counts": source_counts,
         "difference_threshold": float(difference_threshold),
         "maximum_face_fraction": float(maximum_face_fraction),
+        "seeded_pixels_require_difference_threshold": False,
         "interpolation": "none",
         "generated_pixels": 0,
     }
