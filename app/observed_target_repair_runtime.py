@@ -131,12 +131,7 @@ def repair_observed_target(
     agreement_colour_threshold: float = 24.0,
     maximum_face_fraction: float = 0.40,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-    """Fill damaged pixels from trusted, actually observed aligned donors only.
-
-    Reliability ranks overlapping donors. It does not by default invalidate a smooth
-    but genuinely observed cheek/skin pixel: support, occlusion, geometry and identity
-    gates decide whether the donor pixel exists as evidence.
-    """
+    """Fill damaged pixels from trusted, actually observed aligned donors only."""
     shape = workspace.primary.shape[:2]
     aligned = list(workspace.aligned_references)
     if not aligned:
@@ -269,7 +264,45 @@ def _merge_runtime_state(executor, local_provenance: np.ndarray) -> None:
     executor.workspace.metadata["inpaint_target_mask"] = target
 
 
-def _wrap_target_repair(executor, kind: BlockKind, detail_key: str) -> None:
+def _restore_outside_target(executor, image: np.ndarray, preservation_anchor: np.ndarray) -> tuple[np.ndarray, int]:
+    shape = image.shape[:2]
+    if preservation_anchor.shape != image.shape:
+        return image, 0
+    target = _target_mask(executor.workspace, shape) > 0
+    if not np.any(target):
+        return image, 0
+    outside = ~target
+    changed = np.max(cv2.absdiff(image, preservation_anchor), axis=2) > 0
+    restored_pixels = int(np.count_nonzero(outside & changed))
+    if restored_pixels == 0:
+        return image, 0
+    result = image.copy()
+    result[outside] = preservation_anchor[outside]
+
+    provenance = executor.workspace.provenance_map
+    if isinstance(provenance, np.ndarray) and provenance.shape == shape:
+        provenance = provenance.copy()
+        provenance[outside] = 0
+        executor.workspace.provenance_map = provenance
+    observed = executor.workspace.metadata.get("inpaint_observed_mask")
+    if isinstance(observed, np.ndarray) and observed.shape == shape:
+        observed = _binary(observed, shape)
+        observed[outside] = 0
+        executor.workspace.metadata["inpaint_observed_mask"] = observed
+    symmetry = executor.workspace.metadata.get("inpaint_symmetry_mask")
+    if isinstance(symmetry, np.ndarray) and symmetry.shape == shape:
+        symmetry = _binary(symmetry, shape)
+        symmetry[outside] = 0
+        executor.workspace.metadata["inpaint_symmetry_mask"] = symmetry
+    generated = executor.workspace.metadata.get("inpaint_generated_mask")
+    if isinstance(generated, np.ndarray) and generated.shape == shape:
+        generated = _binary(generated, shape)
+        generated[outside] = 0
+        executor.workspace.metadata["inpaint_generated_mask"] = generated
+    return result, restored_pixels
+
+
+def _wrap_target_repair(executor, kind: BlockKind, detail_key: str, preservation_anchor: np.ndarray) -> None:
     original = executor._handlers.get(kind)
     if original is None:
         return
@@ -284,15 +317,20 @@ def _wrap_target_repair(executor, kind: BlockKind, detail_key: str) -> None:
             agreement_colour_threshold=float(parameters.get("observed_target_agreement_colour_threshold", 24.0)),
             maximum_face_fraction=float(parameters.get("observed_target_maximum_face_fraction", 0.40)),
         )
-        details = dict(base_result.details)
-        details[detail_key] = diagnostics
         if diagnostics.get("applied"):
             _merge_runtime_state(executor, local_provenance)
+        repaired, restored_pixels = _restore_outside_target(executor, repaired, preservation_anchor)
+        diagnostics = dict(diagnostics)
+        diagnostics["outside_target_restored_pixels"] = int(restored_pixels)
+        diagnostics["outside_target_preservation"] = "exact_imported_primary" if restored_pixels else "unchanged"
+        details = dict(base_result.details)
+        details[detail_key] = diagnostics
         return ExecutionResult(base_result.block, repaired, details)
 
     executor._handlers[kind] = handler
 
 
 def install_observed_target_repair_runtime(executor) -> None:
-    _wrap_target_repair(executor, BlockKind.INPAINT, "observed_target_repair")
-    _wrap_target_repair(executor, BlockKind.FUSION, "post_fusion_observed_target_repair")
+    preservation_anchor = executor.workspace.primary.copy()
+    _wrap_target_repair(executor, BlockKind.INPAINT, "observed_target_repair", preservation_anchor)
+    _wrap_target_repair(executor, BlockKind.FUSION, "post_fusion_observed_target_repair", preservation_anchor)
