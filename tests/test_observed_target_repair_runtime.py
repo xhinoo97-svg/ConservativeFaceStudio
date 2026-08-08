@@ -28,12 +28,8 @@ def _workspace(primary: np.ndarray, refs: list[np.ndarray], target: np.ndarray) 
         occlusion_masks=[target.copy()],
         metadata={
             "primary_bbox": (0, 0, shape[1], shape[0]),
-            "aligned_reference_support_masks": [
-                np.where(np.max(item, axis=2) > 2, 255, 0).astype(np.uint8) for item in refs
-            ],
-            "aligned_reference_detail_reliability_maps": [
-                np.full(shape, 255, dtype=np.uint8) for _ in refs
-            ],
+            "aligned_reference_support_masks": [np.where(np.max(item, axis=2) > 2, 255, 0).astype(np.uint8) for item in refs],
+            "aligned_reference_detail_reliability_maps": [np.full(shape, 255, dtype=np.uint8) for _ in refs],
             "aligned_reference_original_source_indices": [index + 1 for index in range(len(refs))],
             "aligned_reference_identity_verified": [True for _ in refs],
             "aligned_reference_partial_geometry_verified": [False for _ in refs],
@@ -123,12 +119,21 @@ def test_same_canvas_primary_anchor_trusts_original_reference_without_legacy_fla
     workspace.metadata["aligned_reference_partial_geometry_verified"] = []
     workspace.metadata["aligned_reference_source_indices"] = [0]
     workspace.metadata["runtime_source_order"] = [0, 3]
-    workspace.metadata["same_canvas_primary_anchor"] = {
-        "applied": True,
-        "matched_original_reference_indices": [3],
-    }
+    workspace.metadata["same_canvas_primary_anchor"] = {"applied": True, "matched_original_reference_indices": [3]}
     result, provenance, details = repair_observed_target(workspace, damaged, maximum_face_fraction=1.0)
     assert details["applied"] is True
     assert details["original_source_indices"] == [3]
     assert np.array_equal(result[target > 0], clean[target > 0])
     assert np.all(provenance[target > 0] == 3)
+
+
+def test_low_detail_observed_pixels_remain_valid_repair_evidence_by_default() -> None:
+    clean, damaged, target = _scene()
+    smooth = np.full_like(clean, (120, 130, 140), dtype=np.uint8)
+    workspace = _workspace(damaged, [smooth], target)
+    workspace.metadata["aligned_reference_detail_reliability_maps"] = [np.zeros(target.shape, dtype=np.uint8)]
+    result, provenance, details = repair_observed_target(workspace, damaged, maximum_face_fraction=1.0)
+    assert details["minimum_reliability"] == 0
+    assert details["applied"] is True
+    assert np.array_equal(result[target > 0], smooth[target > 0])
+    assert np.all(provenance[target > 0] == 1)
