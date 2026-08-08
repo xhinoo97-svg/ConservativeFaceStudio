@@ -63,12 +63,12 @@ def test_real_pose_sources_are_separate_public_domain_identity_references() -> N
         assert source.filename.lower().endswith(".jpg")
 
 
-def test_real_pose_scenario_uses_one_observed_reference_and_is_recoverable() -> None:
+def test_real_pose_scenario_is_observed_alignment_stress_not_pixel_exact_target() -> None:
     clean = _portrait()
     reference = np.roll(clean, 3, axis=1)
     scenario = _real_pose_scenario(clean, reference)
     assert scenario.name == "real_same_identity_pose_reference"
-    assert scenario.recoverable is True
+    assert scenario.recoverable is False
     assert scenario.opaque_without_evidence is False
     assert len(scenario.references) == 1
     assert np.array_equal(scenario.references[0], reference)
