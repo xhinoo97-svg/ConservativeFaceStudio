@@ -60,14 +60,17 @@ def refine_component_translation(
     maximum_shift: float = 5.0,
     minimum_response: float = 0.08,
     minimum_similarity_gain: float = 0.015,
+    minimum_shift_magnitude: float = 0.35,
 ) -> ComponentAlignmentResult:
     """Strict sub-pixel translation refinement for one facial component.
 
     The global affine alignment remains authoritative. This function can only correct
     a small residual translation inside an already aligned component. It cannot scale,
     shear, mirror or reshape facial anatomy. A phase-correlation proposal is accepted
-    only if it produces a measurable improvement in local gradient similarity; this
-    prevents blur or interpolation noise from moving an already aligned donor.
+    only if it produces a measurable improvement in local gradient similarity. Shifts
+    below ``minimum_shift_magnitude`` are deliberately ignored: at that scale the
+    interpolation cost/provenance ambiguity is larger than the geometric benefit for
+    strict observed-pixel transfer.
     """
     if aligned_reference.shape != primary.shape:
         raise ValueError("Reference e primary devono avere la stessa forma")
@@ -88,11 +91,9 @@ def refine_component_translation(
     if np.count_nonzero(local_mask) < 48:
         return ComponentAlignmentResult(aligned_reference.copy(), support_mask.copy(), 0.0, 0.0, 0.0, False)
 
-    # Keep an uncentered copy for the structural before/after gate.
     raw_ref = ref_gray.copy()
     raw_pri = pri_gray.copy()
 
-    # Remove local brightness offset so exposure differences do not drive phase correlation.
     ref_gray = ref_gray - float(np.median(ref_gray[local_mask]))
     pri_gray = pri_gray - float(np.median(pri_gray[local_mask]))
     ref_gray[~local_mask] = 0.0
@@ -113,12 +114,14 @@ def refine_component_translation(
             response if np.isfinite(response) else 0.0, False
         )
 
-    # Do not resample for a numerically negligible shift.
-    if abs(dx) < 0.15 and abs(dy) < 0.15:
+    # A tiny phase-correlation displacement commonly appears when a sharp reference
+    # is compared with the same already-aligned anatomy after blur/compression. Do
+    # not resample those pixels: doing so cannot add trustworthy geometry and would
+    # destroy exact observed-pixel provenance.
+    shift_magnitude = float(np.hypot(dx, dy))
+    if shift_magnitude < max(0.0, float(minimum_shift_magnitude)):
         return ComponentAlignmentResult(aligned_reference.copy(), support_mask.copy(), 0.0, 0.0, response, False)
 
-    # Verify the proposal before touching the full-resolution donor. The test uses
-    # gradient structure so exposure differences and moderate blur have little effect.
     roi_matrix = np.asarray([[1.0, 0.0, dx], [0.0, 1.0, dy]], dtype=np.float32)
     shifted_roi = cv2.warpAffine(
         raw_ref,
