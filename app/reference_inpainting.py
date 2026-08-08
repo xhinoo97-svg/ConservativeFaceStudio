@@ -71,14 +71,7 @@ def _best_context_translation(
     max_shift: int = 5,
     minimum_context_pixels: int = 96,
 ) -> tuple[int, int, float]:
-    """Find a tiny translation from the visible ring around the damaged area.
-
-    Registration tolerates exposure/white-balance changes by comparing median-centred
-    LAB structure and Sobel magnitude. Flat/repeated context can make several shifts
-    score identically; those ties must prefer the smallest displacement, otherwise the
-    scan order can invent a spurious ±max_shift registration and copy the wrong facial
-    location even when the reference is already aligned.
-    """
+    """Find a tiny translation from visible context around the damaged region."""
     shape = primary.shape[:2]
     ring = _context_ring(target_mask) > 0
     base_lab = cv2.cvtColor(primary, cv2.COLOR_BGR2LAB).astype(np.float32)
@@ -174,15 +167,7 @@ def _match_local_photometry(
     max_l_offset: float = 22.0,
     max_chroma_offset: float = 10.0,
 ) -> tuple[np.ndarray, tuple[float, float, float], tuple[float, float, float]]:
-    """Remove local exposure/white-balance seams without changing facial structure.
-
-    The estimate is taken only from visible context surrounding the requested repair.
-    The actual correction is a robust, clamped per-channel BGR translation. A direct
-    BGR translation is intentionally preferred over adding an offset in encoded 8-bit
-    LAB: the LAB round-trip is nonlinear and can amplify a small luminance correction
-    into a larger RGB error in dark/high-chroma facial pixels. LAB deltas are still
-    reported for audit/diagnostics. No gain, sharpening or spatial synthesis is used.
-    """
+    """Reduce a local exposure seam using only the observed context ring."""
     ring = (_context_ring(target_mask) > 0) & (reference_mask == 0)
     if int(np.count_nonzero(ring)) < int(minimum_pixels):
         zero = (0.0, 0.0, 0.0)
@@ -214,7 +199,14 @@ def _agreement_mask(
     *,
     threshold: float = 24.0,
 ) -> np.ndarray:
-    """Return target pixels supported by at least two structurally agreeing references."""
+    """Validate an already-confirmed target against all donors that observe each pixel.
+
+    A target pixel observed by one partial reference remains eligible: the upstream
+    occlusion consensus has already required a primary-image damage hint for such a
+    single-observer pixel. Where two or more references observe the same pixel, their
+    structural agreement remains mandatory. This supports complementary crops without
+    weakening conflict rejection in overlapping areas.
+    """
     if len(references) < 2:
         return target.copy()
 
@@ -263,12 +255,14 @@ def _agreement_mask(
 
     combined = 0.78 * lab_disagreement + 0.22 * normalized_grad
     valid_count = np.sum(valid, axis=0)
-    accepted = (
+    single_observer = target_bool & (valid_count == 1)
+    overlapping_agreement = (
         target_bool
         & (valid_count >= 2)
         & np.isfinite(combined)
         & (combined <= float(threshold))
     )
+    accepted = single_observer | overlapping_agreement
     return accepted.astype(np.uint8) * 255
 
 
