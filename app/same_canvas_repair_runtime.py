@@ -100,6 +100,23 @@ def _adaptive_difference_threshold(
     return threshold, {"baseline_median": median, "baseline_p95": p95, "baseline_mad": mad}
 
 
+def _filled_component(component: np.ndarray) -> np.ndarray:
+    """Fill only holes enclosed by one verified residual component.
+
+    Dark donor pixels can numerically resemble a dark occluder and therefore fall below
+    the residual threshold even though they are spatially inside a verified damage patch.
+    Filling the external contour recovers those enclosed pixels without growing beyond
+    the observed component boundary. The caller still intersects this mask with donor
+    support and the face mask.
+    """
+    mask = np.where(component, 255, 0).astype(np.uint8)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    filled = np.zeros_like(mask)
+    if contours:
+        cv2.drawContours(filled, contours, -1, 255, thickness=cv2.FILLED)
+    return filled > 0
+
+
 def _strong_components(
     strong: np.ndarray,
     seed_reach: np.ndarray,
@@ -112,7 +129,7 @@ def _strong_components(
     binary = cv2.morphologyEx(
         binary,
         cv2.MORPH_CLOSE,
-        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)),
     )
     count, labels = cv2.connectedComponents(binary, connectivity=8)
     keep = np.zeros(binary.shape, dtype=bool)
@@ -125,7 +142,7 @@ def _strong_components(
         if area <= 0:
             continue
         if np.any(component & seed_bool):
-            keep |= component
+            keep |= _filled_component(component)
             continue
         component_strength = float(np.median(difference[component]))
         if area >= 6 and component_strength >= very_strong_cutoff:
