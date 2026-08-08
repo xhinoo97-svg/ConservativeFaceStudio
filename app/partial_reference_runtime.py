@@ -38,15 +38,35 @@ def _effective_masks(workspace) -> tuple[list[np.ndarray] | None, int, int]:
         primary_mask = np.zeros(shape, dtype=np.uint8)
         ref_masks = [np.zeros(shape, dtype=np.uint8) for _ in references]
 
-    # Keep blur/low-detail independent from occlusion.  A blurred region is not
-    # labelled as a sticker, but it is prevented from donating identity-critical
-    # texture when it has almost no observed local structure.
     reliability_threshold = int(np.clip(workspace.metadata.get("detail_reliability_threshold", 40), 0, 255))
-    reliability_maps: list[np.ndarray] = []
-    for reference, existing in zip(references, ref_masks):
-        reliability_maps.append(detail_reliability_map(reference, existing))
+
+    # Prefer the maps frozen on the original photographs and geometrically propagated
+    # during alignment. Recomputing after NAFNet would incorrectly turn network-created
+    # sharpness into observed evidence. The fallback exists only for old projects that
+    # predate the preflight evidence maps.
+    stored_reliability = workspace.metadata.get("aligned_reference_detail_reliability_maps")
+    if isinstance(stored_reliability, list) and len(stored_reliability) == len(references):
+        reliability_maps = []
+        for item in stored_reliability:
+            array = np.asarray(item)
+            if array.shape != shape:
+                reliability_maps = []
+                break
+            reliability_maps.append(array.astype(np.uint8, copy=False))
+    else:
+        reliability_maps = []
+
+    reliability_source = "pre-deblur-aligned"
+    if len(reliability_maps) != len(references):
+        reliability_source = "post-deblur-fallback"
+        reliability_maps = [
+            detail_reliability_map(reference, existing)
+            for reference, existing in zip(references, ref_masks)
+        ]
+
     workspace.metadata["aligned_reference_detail_reliability_maps"] = [item.copy() for item in reliability_maps]
     workspace.metadata["detail_reliability_threshold"] = reliability_threshold
+    workspace.metadata["detail_reliability_source"] = reliability_source
 
     effective = [primary_mask]
     support_gated_pixels = 0
@@ -83,7 +103,7 @@ def _temporary_partial_gate(workspace, *, disable_second_identity_gate: bool) ->
 
 
 def install_partial_reference_runtime(executor) -> None:
-    """Make blocks 7/8 respect observed footprint and local detail reliability."""
+    """Make blocks 7/8 respect observed footprint and original-detail reliability."""
     for kind in (BlockKind.REGION_SELECT, BlockKind.INPAINT):
         original = executor._handlers.get(kind)
         if original is None:
@@ -104,6 +124,7 @@ def install_partial_reference_runtime(executor) -> None:
                         "unsupported_reference_pixels_blocked": int(gated_pixels),
                         "low_detail_reference_pixels_blocked": int(low_detail_pixels),
                         "detail_reliability_threshold": int(executor.workspace.metadata.get("detail_reliability_threshold", 40)),
+                        "detail_reliability_source": str(executor.workspace.metadata.get("detail_reliability_source", "unknown")),
                         "partial_identity_gate_stage": "alignment" if block_kind is BlockKind.INPAINT else None,
                     }
                 )
