@@ -55,6 +55,10 @@ jobs:
         shell: pwsh
         run: python -m app.benchmark --width 768 --height 512 --output benchmark-windows-ci.json
 
+      - name: Prefetch public benchmark portraits
+        shell: pwsh
+        run: python scripts/prefetch_public_portraits.py --cache .benchmark-cache/public-portraits --limit 10
+
       - name: Practical public-portrait benchmark
         shell: pwsh
         run: python -m app.practical_benchmark --output practical-benchmark --cache .benchmark-cache/public-portraits --limit 10 --size 320 --profile quick --fail-on-errors
