@@ -66,7 +66,7 @@ def detail_reliability_map(
 ) -> np.ndarray:
     """Estimate where the *observed input* contains recoverable local detail.
 
-    This map is computed before learned deblurring.  It is deliberately separate from
+    This map is computed before learned deblurring. It is deliberately separate from
     the occlusion mask: a blurred face is not an occlusion, but it must not become a
     high-confidence donor merely because a restoration network later sharpens it.
     The score uses only inexpensive local statistics (standard deviation, Sobel and
@@ -84,9 +84,6 @@ def detail_reliability_map(
     gradient = cv2.GaussianBlur(cv2.magnitude(gx, gy), (0, 0), 2.0)
     lap = cv2.GaussianBlur(np.abs(cv2.Laplacian(gray, cv2.CV_32F, ksize=3)), (0, 0), 2.0)
 
-    # Fixed scaling is intentional.  Per-image normalization would make a completely
-    # blurred face look "reliable" relative to itself.  Values below ~3 are treated
-    # as essentially detail-free; 20+ corresponds to strong observed structure.
     energy = 0.55 * local_std + 0.30 * (gradient / 4.0) + 0.15 * (lap / 4.0)
     reliability = np.clip((energy - 3.0) / 17.0, 0.0, 1.0)
 
@@ -102,13 +99,14 @@ def detail_reliability_map(
 
 
 def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
-    """Conservative multi-signal candidate mask for stickers/scribbles/obscuration.
+    """Conservative proposal for stickers, scribbles and opaque overlays.
 
-    This is deliberately not the final occlusion decision. It produces a broad,
-    deterministic proposal that must later be constrained by face parsing and
-    confirmed against aligned same-identity references. Besides black/white and
-    flat regions, it detects locally implausible chroma and thin high-contrast
-    marks, which are common for stickers and drawn scribbles.
+    Uniform low-variance regions are deliberately *not* considered occlusions by
+    themselves. Skin, walls, highlights and smooth hair can all be locally flat; the
+    previous flat-region rule produced destructive false positives on real partial
+    face photographs. A candidate now needs extreme luminance, implausible local
+    chroma, or a thin high-contrast mark. Face parsing/reference consensus performs
+    the final decision downstream.
     """
     source = _ensure_bgr(image)
     gray = cv2.cvtColor(source, cv2.COLOR_BGR2GRAY)
@@ -117,11 +115,8 @@ def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
     saturation = hsv[:, :, 1]
 
     local_mean = cv2.GaussianBlur(gray, (0, 0), 7)
-    local_sq = cv2.GaussianBlur(gray.astype(np.float32) ** 2, (0, 0), 7)
-    variance = np.maximum(local_sq - local_mean.astype(np.float32) ** 2, 0)
 
     extreme = ((gray < 18) | (gray > 242)).astype(np.uint8) * 255
-    flat = ((variance < 10) & (saturation < 24)).astype(np.uint8) * 255
 
     lab_f = lab.astype(np.float32)
     local_lab = cv2.GaussianBlur(lab_f, (0, 0), 5.0)
@@ -133,8 +128,7 @@ def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
     edge_band = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
     scribble = ((local_luma_delta > 38) & (edge_band > 0)).astype(np.uint8) * 255
 
-    mask = cv2.bitwise_or(extreme, flat)
-    mask = cv2.bitwise_or(mask, chroma_outlier)
+    mask = cv2.bitwise_or(extreme, chroma_outlier)
     mask = cv2.bitwise_or(mask, scribble)
 
     close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -144,10 +138,7 @@ def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
 
 
 def conservative_fusion(base: np.ndarray, reference: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    """Fonde pixel osservati da una foto di riferimento già allineata.
-
-    La maschera 0..255 stabilisce dove usare il riferimento; nessun pixel viene generato.
-    """
+    """Fonde pixel osservati da una foto di riferimento già allineata."""
     base_bgr = _ensure_bgr(base)
     ref_bgr = _ensure_bgr(reference)
     if base_bgr.shape != ref_bgr.shape:
@@ -162,10 +153,7 @@ def conservative_fusion(base: np.ndarray, reference: np.ndarray, mask: np.ndarra
 
 
 def identity_similarity_proxy(before: np.ndarray, after: np.ndarray) -> float:
-    """Controllo deterministico non biometrico basato su istogrammi LAB.
-
-    Serve come guardrail offline; non sostituisce un embedding facciale ArcFace/InsightFace.
-    """
+    """Controllo deterministico non biometrico basato su istogrammi LAB."""
     left = cv2.cvtColor(_ensure_bgr(before), cv2.COLOR_BGR2LAB)
     right = cv2.cvtColor(_ensure_bgr(after), cv2.COLOR_BGR2LAB)
     if left.shape != right.shape:
