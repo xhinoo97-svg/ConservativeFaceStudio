@@ -40,6 +40,31 @@ def test_verified_full_reference_expands_dark_sticker_core() -> None:
     assert np.count_nonzero(expanded & cv2.bitwise_not(face)) == 0
 
 
+def test_hint_expansion_does_not_copy_damaged_reference_into_clean_primary() -> None:
+    clean = _face()
+    damaged_reference = clean.copy()
+    sticker = np.zeros(clean.shape[:2], dtype=np.uint8)
+    cv2.ellipse(sticker, (64, 64), (18, 12), 0, 0, 360, 255, -1)
+    damaged_reference[sticker > 0] = (15, 15, 15)
+    false_positive_seed = np.zeros_like(sticker)
+    cv2.circle(false_positive_seed, (64, 64), 5, 255, -1)
+    face = np.zeros_like(sticker)
+    cv2.ellipse(face, (64, 66), (42, 52), 0, 0, 360, 255, -1)
+
+    expanded, details = expand_verified_single_reference_hint(
+        clean,
+        damaged_reference,
+        np.zeros_like(sticker),
+        face,
+        false_positive_seed,
+        strong_difference_threshold=0.08,
+    )
+
+    assert details["eligible"] is True
+    assert details["reason"] == "no_directional_primary_damage_seed"
+    assert np.count_nonzero(expanded) == 0
+
+
 def test_hint_expansion_abstains_for_partial_reference() -> None:
     clean = _face()
     primary = clean.copy()
@@ -65,11 +90,12 @@ def test_hint_expansion_abstains_for_partial_reference() -> None:
     assert np.array_equal(expanded, existing)
 
 
-def test_hint_expansion_abstains_when_difference_is_too_large() -> None:
+def test_hint_expansion_abstains_when_directional_proposal_is_too_large() -> None:
     clean = _face()
     primary = np.full_like(clean, 250)
     face = np.full(clean.shape[:2], 255, dtype=np.uint8)
     existing = np.zeros_like(face)
+    cv2.circle(existing, (64, 64), 5, 255, -1)
 
     expanded, details = expand_verified_single_reference_hint(
         primary,
@@ -83,4 +109,4 @@ def test_hint_expansion_abstains_when_difference_is_too_large() -> None:
 
     assert details["eligible"] is True
     assert details["reason"] == "proposal_too_large"
-    assert np.array_equal(expanded, existing)
+    assert np.count_nonzero(expanded) <= np.count_nonzero(existing)
