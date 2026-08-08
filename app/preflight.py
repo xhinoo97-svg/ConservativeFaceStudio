@@ -12,7 +12,7 @@ from app.opencv_nafnet import NafNetDeblurEngine
 from app.opencv_semantic_models import HeadPoseEngine
 from app.opencv_zoo_face import OpenCVZooFaceEngine
 from app.pretrained_values import FACE_MODEL_DEFAULTS, RESTORATION_SAFETY_DEFAULTS
-from app.restoration import detect_occlusion_candidates
+from app.restoration import detect_occlusion_candidates, detail_reliability_map
 
 
 @dataclass(frozen=True)
@@ -46,22 +46,13 @@ def _face_crop(image: np.ndarray, bbox: tuple[int, int, int, int]) -> np.ndarray
 
 
 def _quality_score(image: np.ndarray, bbox: tuple[int, int, int, int], detector_score: float) -> float:
-    """Score only genuinely useful face pixels, not sharp sticker/marker edges.
-
-    Large stars and black scribbles can have extremely high Laplacian energy.  A plain
-    sharpness metric would therefore select the *most obstructed* photograph as the
-    best base.  The occlusion proposal is used to exclude those pixels plus a small
-    safety ring before measuring sharpness/exposure.  The remaining visible fraction
-    is itself part of the score, while the detector/face-size terms remain modest.
-    """
+    """Score only genuinely useful face pixels, not sharp sticker/marker edges."""
     crop = _face_crop(image, bbox)
     if crop.size == 0:
         return 0.0
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     proposal = detect_occlusion_candidates(crop)
     visible = (proposal == 0).astype(np.uint8) * 255
-    # Stay away from hard sticker/scribble boundaries whose edge energy would leak
-    # into an otherwise visible skin pixel.
     visible = cv2.erode(visible, np.ones((5, 5), np.uint8), iterations=1)
     active = visible > 0
     active_fraction = float(np.mean(active))
@@ -72,8 +63,6 @@ def _quality_score(image: np.ndarray, bbox: tuple[int, int, int, int], detector_
         sharp = float(np.var(values))
         mean = float(np.mean(gray[active]))
     else:
-        # A nearly fully covered face must not receive a high score just because the
-        # sticker border is sharp. Keep only a very weak whole-crop fallback.
         sharp = 0.15 * float(lap.var())
         mean = float(np.mean(gray))
         active_fraction *= 0.25
@@ -156,8 +145,18 @@ def _deblur_all(images: list[np.ndarray], model_path: Path | None, hardware_poli
 
 
 def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Path]) -> PreflightResult:
-    """Deblur every photograph once, then choose a real same-identity frontal base."""
+    """Process every photo once while preserving pre-restoration evidence quality."""
     originals = [workspace.primary, *workspace.references]
+
+    # Reliability is measured on the observed photographs *before* NAFNet. A learned
+    # deblur may improve appearance, but it must never upgrade missing detail into
+    # evidence. Occlusion and blur remain separate signals throughout the pipeline.
+    original_occlusion = [detect_occlusion_candidates(item) for item in originals]
+    original_reliability = [
+        detail_reliability_map(item, mask)
+        for item, mask in zip(originals, original_occlusion)
+    ]
+
     hardware = workspace.metadata.get("hardware_policy")
     hardware_policy = hardware if isinstance(hardware, dict) else {}
     nafnet_raw = model_paths.get("opencv_nafnet_deblur")
@@ -172,6 +171,8 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
         workspace.references = [item.copy() for item in processed[1:]]
         workspace.metadata["preflight_deblurred_all"] = deblurred_count == len(processed) and len(processed) > 0
         workspace.metadata["runtime_source_order"] = list(range(len(processed)))
+        workspace.metadata["preflight_original_occlusion_masks"] = original_occlusion
+        workspace.metadata["preflight_detail_reliability_maps"] = original_reliability
         return PreflightResult(0, (), deblurred_count, 1, "YuNet/SFace non disponibili: mantenuta la primaria importata")
 
     target = str(hardware_policy.get("dnn_target", "cpu")).lower()
@@ -221,8 +222,6 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
                     pass
             quality = _quality_score(processed[source_index], obs.bbox, obs.score)
             pose_cost = float(np.clip(frontal / 20.0, 0.0, 1.0))
-            # Frontal geometry remains the majority criterion, but a tiny pose advantage
-            # can no longer beat a severely covered/blurred face.
             base_cost = 0.62 * pose_cost + 0.38 * (1.0 - quality)
             ranked.append((base_cost, -quality, source_index))
         if ranked:
@@ -231,12 +230,15 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
 
     selected_image = processed[selected].copy()
     remaining_indices = [i for i in range(len(processed)) if i != selected]
+    runtime_order = [selected, *remaining_indices]
     workspace.primary = selected_image
     workspace.references = [processed[i].copy() for i in remaining_indices]
-    workspace.metadata["runtime_source_order"] = [selected, *remaining_indices]
+    workspace.metadata["runtime_source_order"] = runtime_order
     workspace.metadata["selected_primary_original_source_index"] = selected
     workspace.metadata["preflight_deblurred_all"] = deblurred_count == len(processed) and len(processed) > 0
     workspace.metadata["preflight_deblurred_count"] = deblurred_count
+    workspace.metadata["preflight_original_occlusion_masks"] = [original_occlusion[i] for i in runtime_order]
+    workspace.metadata["preflight_detail_reliability_maps"] = [original_reliability[i] for i in runtime_order]
 
     pose_engine = HeadPoseEngine(pose_raw) if pose_raw is not None and Path(pose_raw).is_file() else None
     candidates: list[PreflightCandidate] = []
