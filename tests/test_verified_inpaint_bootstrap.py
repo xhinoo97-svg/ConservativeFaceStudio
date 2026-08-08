@@ -15,5 +15,9 @@ def test_verified_reference_inpaint_is_installed_without_model_pack() -> None:
     runner = AutomaticPipelineRunner(workspace)
     handler = runner.executor._handlers[BlockKind.INPAINT]
 
-    assert handler.__module__ == "app.pretrained_inpaint_handler"
+    # The final runner is intentionally wrapped by the case-aware runtime. The
+    # wrapper must remain installed even without a model pack so it can route
+    # single-image and multi-reference cases while delegating reference repair to
+    # the verified pretrained handler underneath.
+    assert handler.__module__ == "app.case_aware_runtime"
     assert "core_model_paths" not in workspace.metadata
