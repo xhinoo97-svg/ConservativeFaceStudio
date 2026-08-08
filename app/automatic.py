@@ -9,6 +9,7 @@ import numpy as np
 
 from app.case_aware_runtime import install_case_aware_runtime
 from app.execution import BlockExecutionError, ExecutionResult, Workspace
+from app.observed_restoration_policy import apply_observed_restoration_policy
 from app.partial_reference_runtime import install_partial_reference_runtime
 from app.pipeline import BlockKind
 from app.preflight import preprocess_and_select_front_base
@@ -51,10 +52,12 @@ class AutomaticPipelineRunner:
     def __init__(self, workspace: Workspace) -> None:
         core_paths = workspace.metadata.get("core_model_paths")
         model_paths = core_paths if isinstance(core_paths, dict) else {}
+        observed_sources = [workspace.primary.copy(), *[item.copy() for item in workspace.references]]
 
         if model_paths and not bool(workspace.metadata.get("preflight_completed", False)):
             try:
                 preflight = preprocess_and_select_front_base(workspace, model_paths)
+                apply_observed_restoration_policy(workspace, observed_sources)
                 workspace.metadata["preflight_completed"] = True
                 workspace.metadata["preflight_selected_source_index"] = int(preflight.selected_source_index)
                 workspace.metadata["preflight_identity_cluster_size"] = int(preflight.identity_cluster_size)
