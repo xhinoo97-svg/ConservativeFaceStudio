@@ -19,6 +19,7 @@ from app.pretrained_inpaint_handler import install_verified_inpainting_handler
 from app.pretrained_restoration_handlers import install_pretrained_restoration_handlers
 from app.pretrained_semantic_handlers import install_pretrained_semantic_handlers
 from app.pretrained_values import RESTORATION_SAFETY_DEFAULTS
+from app.primary_anchor_policy import restore_imported_primary_for_same_canvas
 from app.same_canvas_repair_runtime import install_same_canvas_repair_runtime
 from app.strict_execution import StrictBlockExecutor
 from app.validation import evaluate_identity_guardrail
@@ -59,12 +60,22 @@ class AutomaticPipelineRunner:
         if model_paths and not bool(workspace.metadata.get("preflight_completed", False)):
             try:
                 preflight = preprocess_and_select_front_base(workspace, model_paths)
+                anchor_decision = restore_imported_primary_for_same_canvas(workspace, observed_sources)
                 apply_observed_restoration_policy(workspace, observed_sources)
                 workspace.metadata["preflight_completed"] = True
                 workspace.metadata["preflight_selected_source_index"] = int(preflight.selected_source_index)
+                workspace.metadata["preflight_runtime_primary_source_index"] = int(
+                    workspace.metadata.get("selected_primary_original_source_index", preflight.selected_source_index)
+                )
                 workspace.metadata["preflight_identity_cluster_size"] = int(preflight.identity_cluster_size)
                 workspace.metadata["preflight_reason"] = str(preflight.reason)
                 workspace.metadata["preflight_candidate_count"] = len(preflight.candidates)
+                workspace.metadata["primary_anchor_policy"] = {
+                    "applied": bool(anchor_decision.applied),
+                    "reason": str(anchor_decision.reason),
+                    "matched_reference_count": int(anchor_decision.matched_reference_count),
+                    "original_selected_source_index": int(anchor_decision.original_selected_source_index),
+                }
             except Exception as exc:
                 workspace.metadata["preflight_completed"] = False
                 workspace.metadata["preflight_error"] = str(exc)
