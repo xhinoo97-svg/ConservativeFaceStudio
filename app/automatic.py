@@ -8,6 +8,7 @@ from typing import Any, Callable
 import numpy as np
 
 from app.case_aware_runtime import install_case_aware_runtime
+from app.conservative_observed_runtime import install_conservative_observed_runtime
 from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.observed_restoration_policy import apply_observed_restoration_policy
 from app.partial_reference_runtime import install_partial_reference_runtime
@@ -75,6 +76,7 @@ class AutomaticPipelineRunner:
         install_verified_inpainting_handler(self.executor, model_paths)
         install_partial_reference_runtime(self.executor)
         install_case_aware_runtime(self.executor, model_paths)
+        install_conservative_observed_runtime(self.executor)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
@@ -194,9 +196,6 @@ class AutomaticPipelineRunner:
             if block.kind is BlockKind.DEBLUR:
                 parameters.update(deblur or {})
             elif block.kind is BlockKind.ENHANCE:
-                # Automatic mode must not alter every observed pixel merely because an
-                # enhancement block exists. Explicit/manual runs can still request a
-                # non-zero blend through the executor API.
                 parameters["blend"] = 0.0
             elif block.kind is BlockKind.INPAINT:
                 parameters["allow_verified_generative"] = True
