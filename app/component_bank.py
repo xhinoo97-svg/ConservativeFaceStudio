@@ -45,9 +45,10 @@ def canonical_component_masks(
 ) -> dict[str, np.ndarray]:
     """Build conservative facial-component ROIs from observed five-point geometry.
 
-    These masks do not infer hidden anatomy. They only partition the already observed
-    primary-face coordinate system so a partial reference can contribute to regions it
-    geometrically covers after alignment.
+    Component masks intentionally overlap only slightly.  A crop containing one
+    component must not become evidence for a neighbouring component merely because
+    broad anatomical ROIs intersect.  The regions are therefore tighter than the
+    display/face-parsing regions used elsewhere in the application.
     """
     height, width = (int(v) for v in image_shape)
     points = np.asarray(landmarks5, dtype=np.float32)
@@ -68,16 +69,16 @@ def canonical_component_masks(
 
     for name, center in (("left_eye", left_eye), ("right_eye", right_eye)):
         mask = blank()
-        axes = (max(3, int(round(0.28 * eye_distance))), max(3, int(round(0.18 * h))))
+        axes = (max(3, int(round(0.28 * eye_distance))), max(3, int(round(0.15 * h))))
         cv2.ellipse(mask, tuple(np.round(center).astype(int)), axes, 0, 0, 360, 255, -1)
         masks[name] = mask
 
     nose_mask = blank()
-    nose_center = (int(round(nose[0])), int(round(nose[1] + 0.04 * h)))
+    nose_center = (int(round(nose[0])), int(round(nose[1] + 0.02 * h)))
     cv2.ellipse(
         nose_mask,
         nose_center,
-        (max(4, int(round(0.22 * eye_distance))), max(5, int(round(0.18 * h)))),
+        (max(4, int(round(0.20 * eye_distance))), max(5, int(round(0.145 * h)))),
         0,
         0,
         360,
@@ -91,7 +92,7 @@ def canonical_component_masks(
     cv2.ellipse(
         mouth_mask,
         mouth_center,
-        (max(5, int(round(0.62 * mouth_distance))), max(4, int(round(0.13 * h)))),
+        (max(5, int(round(0.60 * mouth_distance))), max(4, int(round(0.105 * h)))),
         0,
         0,
         360,
@@ -110,7 +111,7 @@ def canonical_component_masks(
     ):
         mask = blank()
         p1 = (int(round(max(0, x1))), int(round(max(0, eye_mid_y + 0.06 * h))))
-        p2 = (int(round(min(width - 1, x2))), int(round(min(height - 1, mouth_mid_y + 0.08 * h))))
+        p2 = (int(round(min(width - 1, x2))), int(round(min(height - 1, mouth_mid_y + 0.05 * h))))
         if p2[0] > p1[0] and p2[1] > p1[1]:
             cv2.rectangle(mask, p1, p2, 255, -1)
         masks[name] = mask
@@ -128,7 +129,7 @@ def canonical_component_masks(
     jaw = blank()
     cv2.rectangle(
         jaw,
-        (max(0, x + int(round(0.10 * w))), min(height - 1, int(round(mouth_mid_y + 0.06 * h)))),
+        (max(0, x + int(round(0.10 * w))), min(height - 1, int(round(mouth_mid_y + 0.07 * h)))),
         (min(width - 1, x + int(round(0.90 * w))), min(height - 1, y + int(round(0.98 * h)))),
         255,
         -1,
