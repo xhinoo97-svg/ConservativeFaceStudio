@@ -15,15 +15,28 @@ def test_balanced_policy_leaves_headroom_on_four_logical_processors(monkeypatch)
     assert policy.heavy_tile_size == 384
 
 
-def test_balanced_policy_uses_opencl_when_driver_reports_it(monkeypatch) -> None:
+def test_balanced_policy_uses_opencl_only_when_self_test_passes(monkeypatch) -> None:
     monkeypatch.setattr(hardware.os, "cpu_count", lambda: 8)
     monkeypatch.setattr(hardware, "_opencl_available", lambda: True)
+    monkeypatch.setattr(hardware, "_opencl_self_test", lambda: True)
     monkeypatch.setattr(hardware, "_cuda_devices", lambda: 0)
     monkeypatch.setattr(hardware.shutil, "which", lambda command: None)
     policy = hardware.detect_hardware_policy("balanced")
     assert policy.dnn_target == "opencl"
     assert policy.opencl_enabled is True
     assert policy.cv_threads == 4
+
+
+def test_unstable_opencl_forces_cpu_fallback(monkeypatch) -> None:
+    monkeypatch.setattr(hardware.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(hardware, "_opencl_available", lambda: True)
+    monkeypatch.setattr(hardware, "_opencl_self_test", lambda: False)
+    monkeypatch.setattr(hardware, "_cuda_devices", lambda: 0)
+    monkeypatch.setattr(hardware.shutil, "which", lambda command: None)
+    policy = hardware.detect_hardware_policy("balanced")
+    assert policy.opencl_available is True
+    assert policy.opencl_enabled is False
+    assert policy.dnn_target == "cpu"
 
 
 def test_safe_mode_never_uses_more_than_two_opencv_threads(monkeypatch) -> None:
