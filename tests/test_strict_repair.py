@@ -70,9 +70,13 @@ def test_complementary_partial_references_can_confirm_hint_without_overlap() -> 
     )
 
     hinted = hint > 0
+    repaired_pixels = target > 0
     assert np.count_nonzero(target[hinted]) / np.count_nonzero(hinted) >= 0.90
     assert repaired.unresolved_pixels == 0
-    assert np.mean(np.abs(repaired.image[hinted].astype(np.int16) - clean[hinted].astype(np.int16))) < 1.0
+    assert np.mean(
+        np.abs(repaired.image[repaired_pixels].astype(np.int16) - clean[repaired_pixels].astype(np.int16))
+    ) < 1.0
+    assert np.array_equal(repaired.image[~repaired_pixels], primary[~repaired_pixels])
 
 
 def test_reference_consensus_detects_local_blur_supported_by_two_sharp_references() -> None:
