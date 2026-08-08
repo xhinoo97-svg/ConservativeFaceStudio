@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +15,94 @@ import cv2
 import numpy as np
 
 from app.core_models import ensure_core_pretrained_models
-from app.practical_benchmark import Scenario, _fit_portrait, _partial_reference, download_public_portraits, evaluate_scenario
+from app.practical_benchmark import (
+    PortraitSource,
+    Scenario,
+    _fit_portrait,
+    _partial_reference,
+    download_public_portraits,
+    evaluate_scenario,
+)
+
+
+# Real same-identity references with a different session/pose. Both are NASA works
+# documented as public domain on Wikimedia Commons. They are downloaded at benchmark
+# time and are never redistributed with the application.
+REAL_POSE_REFERENCES: dict[str, PortraitSource] = {
+    "mae_jemison": PortraitSource(
+        "mae_jemison_pose",
+        "Mae Carol Jemison.jpg",
+        "https://commons.wikimedia.org/wiki/File:Mae_Carol_Jemison.jpg",
+    ),
+    "sally_ride": PortraitSource(
+        "sally_ride_pose",
+        "Sally Ride (1984).jpg",
+        "https://commons.wikimedia.org/wiki/File:Sally_Ride_(1984).jpg",
+    ),
+}
+
+
+def _direct_upload_url(filename: str) -> str:
+    normalized = filename.replace(" ", "_")
+    digest = hashlib.md5(normalized.encode("utf-8")).hexdigest()
+    quoted = urllib.parse.quote(normalized, safe="()_,.-")
+    return f"https://upload.wikimedia.org/wikipedia/commons/{digest[0]}/{digest[:2]}/{quoted}"
+
+
+def _download_pose_reference(source: PortraitSource, root: Path, *, attempts: int = 3, timeout: int = 60) -> dict[str, str]:
+    root.mkdir(parents=True, exist_ok=True)
+    target = root / f"{source.key}.jpg"
+    if target.is_file() and cv2.imread(str(target), cv2.IMREAD_COLOR) is not None:
+        return {
+            "key": source.key,
+            "filename": source.filename,
+            "page_url": source.page_url,
+            "download_url": "cache",
+            "license": source.license,
+            "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "local_path": str(target),
+        }
+
+    candidates = (_direct_upload_url(source.filename), source.download_url)
+    last_error: Exception | None = None
+    for url in candidates:
+        for attempt in range(attempts):
+            try:
+                request = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": "ConservativeFaceStudio-benchmark/1.2 (+https://github.com/xhinoo97-svg/ConservativeFaceStudio)",
+                        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                    },
+                )
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    payload = response.read()
+                target.write_bytes(payload)
+                image = cv2.imread(str(target), cv2.IMREAD_COLOR)
+                if image is None or image.size == 0:
+                    target.unlink(missing_ok=True)
+                    raise RuntimeError("downloaded pose reference is not a decodable image")
+                return {
+                    "key": source.key,
+                    "filename": source.filename,
+                    "page_url": source.page_url,
+                    "download_url": url,
+                    "license": source.license,
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "local_path": str(target),
+                }
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, RuntimeError) as exc:
+                last_error = exc
+                target.unlink(missing_ok=True)
+                if attempt + 1 < attempts:
+                    retry_after = 0.0
+                    if isinstance(exc, urllib.error.HTTPError):
+                        try:
+                            retry_after = float(exc.headers.get("Retry-After", "0"))
+                        except (TypeError, ValueError):
+                            retry_after = 0.0
+                    time.sleep(max(retry_after, min(6.0, 1.0 * (2**attempt))))
+    raise RuntimeError(f"unable to download real pose reference {source.key}: {last_error}")
 
 
 def _rect_mask(shape: tuple[int, int], x1: float, y1: float, x2: float, y2: float) -> np.ndarray:
@@ -22,7 +114,6 @@ def _rect_mask(shape: tuple[int, int], x1: float, y1: float, x2: float, y2: floa
 
 def _disk_blur(image: np.ndarray, radius: int) -> np.ndarray:
     radius = max(1, int(radius))
-    size = radius * 2 + 1
     yy, xx = np.ogrid[-radius : radius + 1, -radius : radius + 1]
     kernel = ((xx * xx + yy * yy) <= radius * radius).astype(np.float32)
     kernel /= max(float(kernel.sum()), 1.0)
@@ -62,17 +153,37 @@ def make_extended_scenarios(clean: np.ndarray) -> tuple[Scenario, ...]:
     )
 
 
+def _real_pose_scenario(clean: np.ndarray, reference: np.ndarray) -> Scenario:
+    h, w = clean.shape[:2]
+    central_damage = _rect_mask((h, w), 0.28, 0.30, 0.72, 0.78)
+    central_opaque = _opaque_damage(clean, central_damage)
+    return Scenario("real_same_identity_pose_reference", central_opaque, (reference,), central_damage, True)
+
+
 def run_matrix(output: Path, *, cache: Path, limit: int = 10, size: int = 320) -> dict[str, Any]:
     output.mkdir(parents=True, exist_ok=True)
     sources = download_public_portraits(cache, limit=limit)
     bootstrap = ensure_core_pretrained_models(output / "core-models", timeout_seconds=60)
+
+    pose_sources: dict[str, dict[str, str]] = {}
+    pose_download_errors: dict[str, str] = {}
+    pose_cache = cache / "real-pose-references"
+    for identity_key, source in REAL_POSE_REFERENCES.items():
+        try:
+            pose_sources[identity_key] = _download_pose_reference(source, pose_cache)
+        except Exception as exc:
+            pose_download_errors[identity_key] = str(exc)
+
     report: dict[str, Any] = {
         "format": "ConservativeFaceStudio extended practical scenario matrix",
-        "version": 1,
+        "version": 2,
         "portrait_count": len(sources),
-        "scenario_count_per_portrait": 8,
-        "note": "Scores remain decomposed metrics; no universal 95% claim. Opaque single-image half-face cases are explicitly non-recoverable ground-truth cases.",
+        "base_scenario_count_per_portrait": 8,
+        "real_pose_scenario_identity_count": len(pose_sources),
+        "note": "Scores remain decomposed metrics; no universal 95% claim. Opaque single-image half-face cases are explicitly non-recoverable ground-truth cases. Real-pose scenarios use separately photographed public-domain images of the same identity, never synthetic crops of the ground truth.",
         "sources": sources,
+        "real_pose_sources": pose_sources,
+        "real_pose_download_errors": pose_download_errors,
         "core_models_ready": bootstrap.ready,
         "core_model_errors": bootstrap.errors,
         "cases": [],
@@ -85,7 +196,15 @@ def run_matrix(output: Path, *, cache: Path, limit: int = 10, size: int = 320) -
             continue
         clean = _fit_portrait(image, size=size)
         portrait_dir = output / item["key"]
-        for scenario in make_extended_scenarios(clean):
+        scenarios = list(make_extended_scenarios(clean))
+
+        pose_item = pose_sources.get(item["key"])
+        if pose_item is not None:
+            pose_image = cv2.imread(pose_item["local_path"], cv2.IMREAD_COLOR)
+            if pose_image is not None and pose_image.size:
+                scenarios.append(_real_pose_scenario(clean, _fit_portrait(pose_image, size=size)))
+
+        for scenario in scenarios:
             try:
                 metrics = evaluate_scenario(clean, scenario, portrait_dir, core_paths=bootstrap.paths if bootstrap.ready else None)
                 metrics["portrait"] = item["key"]
