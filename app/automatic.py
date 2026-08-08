@@ -73,8 +73,6 @@ class AutomaticPipelineRunner:
             install_pretrained_restoration_handlers(self.executor, model_paths)
             install_pretrained_semantic_handlers(self.executor, model_paths)
         install_verified_inpainting_handler(self.executor, model_paths)
-        # First constrain partial references to their real observed support, then add
-        # the case router/single-image fallback and local component refinement.
         install_partial_reference_runtime(self.executor)
         install_case_aware_runtime(self.executor, model_paths)
         self.on_progress: Callable[[int, str], None] | None = None
@@ -195,6 +193,11 @@ class AutomaticPipelineRunner:
             parameters: dict[str, Any] = {}
             if block.kind is BlockKind.DEBLUR:
                 parameters.update(deblur or {})
+            elif block.kind is BlockKind.ENHANCE:
+                # Automatic mode must not alter every observed pixel merely because an
+                # enhancement block exists. Explicit/manual runs can still request a
+                # non-zero blend through the executor API.
+                parameters["blend"] = 0.0
             elif block.kind is BlockKind.INPAINT:
                 parameters["allow_verified_generative"] = True
                 parameters["maximum_generated_face_fraction"] = 0.015
@@ -230,10 +233,6 @@ class AutomaticPipelineRunner:
 
     def _skip_reason(self, kind: BlockKind) -> str | None:
         has_references = bool(self.executor.workspace.references)
-        # Inpaint is intentionally NOT skipped in single-image mode: the case-aware
-        # runtime can preserve translucent evidence, try low-confidence symmetry and
-        # optionally use the verified LaMa residual fallback. Align/Region/Fusion still
-        # require external references and are recorded as explicit no-op snapshots.
         if kind in {BlockKind.ALIGN, BlockKind.REGION_SELECT, BlockKind.FUSION} and not has_references:
             return "Nessuna fotografia di riferimento disponibile"
         return None
