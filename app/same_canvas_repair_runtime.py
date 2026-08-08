@@ -101,14 +101,7 @@ def _adaptive_difference_threshold(
 
 
 def _filled_component(component: np.ndarray) -> np.ndarray:
-    """Fill only holes enclosed by one verified residual component.
-
-    Dark donor pixels can numerically resemble a dark occluder and therefore fall below
-    the residual threshold even though they are spatially inside a verified damage patch.
-    Filling the external contour recovers those enclosed pixels without growing beyond
-    the observed component boundary. The caller still intersects this mask with donor
-    support and the face mask.
-    """
+    """Fill only holes enclosed by one verified residual component."""
     mask = np.where(component, 255, 0).astype(np.uint8)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     filled = np.zeros_like(mask)
@@ -151,6 +144,35 @@ def _strong_components(
     return keep, unseeded_pixels
 
 
+def _seed_connected_hysteresis(
+    verified: np.ndarray,
+    difference: np.ndarray,
+    observed: np.ndarray,
+    *,
+    weak_threshold: float,
+    maximum_iterations: int = 64,
+) -> np.ndarray:
+    """Grow verified damage only through adjacent weak residual evidence.
+
+    This recovers dark facial details whose donor value can sit close to a dark
+    occluder numerically. Growth is impossible through unchanged pixels, outside donor
+    support, or outside the face because the caller supplies an observed mask already
+    constrained to those regions.
+    """
+    selected = verified & observed
+    if not np.any(selected):
+        return selected
+    weak = observed & (difference >= float(max(0.008, weak_threshold)))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    for _ in range(max(1, int(maximum_iterations))):
+        grown = (cv2.dilate(selected.astype(np.uint8) * 255, kernel, iterations=1) > 0) & weak
+        updated = selected | grown
+        if np.array_equal(updated, selected):
+            break
+        selected = updated
+    return _filled_component(selected) & observed
+
+
 def _limit_expansion(
     seed_selected: np.ndarray,
     expansion: np.ndarray,
@@ -183,14 +205,7 @@ def exact_same_canvas_observed_repair(
     difference_threshold: float = 0.075,
     maximum_face_fraction: float = 0.25,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-    """Repair only from donor pixels whose same-canvas geometry is already verified.
-
-    The immutable imported primary is used for donor-difference expansion. The detector
-    mask remains a seed, not a hard ceiling: verified same-canvas residual components may
-    extend the target when the detector has low recall. Partial same-canvas references are
-    accepted only inside their actually observed support. No synthesis or interpolation is
-    used and visible pixels outside verified residual evidence remain unchanged.
-    """
+    """Repair only from donor pixels whose same-canvas geometry is already verified."""
     shape = workspace.primary.shape[:2]
     aligned = list(workspace.aligned_references)
     runtime_indices_raw = workspace.metadata.get("aligned_reference_source_indices")
@@ -239,6 +254,7 @@ def exact_same_canvas_observed_repair(
     source_counts: dict[int, int] = {}
     seed_pixel_count = 0
     expanded_pixel_count = 0
+    hysteresis_pixel_count = 0
     unseeded_strong_pixel_count = 0
     threshold_diagnostics: list[dict[str, Any]] = []
 
@@ -263,20 +279,33 @@ def exact_same_canvas_observed_repair(
         expansion, unseeded_pixels = _strong_components(strong, seed_reach, difference, adaptive_threshold)
         expansion &= observed & ~repaired_union
         unseeded_strong_pixel_count += int(unseeded_pixels)
+
+        seeded_observed = seed_bool & observed & ~repaired_union
+        verified_envelope = _filled_component(expansion | seeded_observed)
+        verified_envelope &= observed & ~repaired_union
+        weak_threshold = max(
+            float(baseline_stats.get("baseline_p95", 0.0)) + 0.006,
+            float(adaptive_threshold) * 0.35,
+        )
+        hysteresis_envelope = _seed_connected_hysteresis(
+            verified_envelope,
+            difference,
+            observed & ~repaired_union,
+            weak_threshold=weak_threshold,
+        )
+        hysteresis_pixel_count += int(np.count_nonzero(hysteresis_envelope & ~verified_envelope))
         threshold_diagnostics.append({
             "slot": int(slot),
             "runtime_reference_index": int(runtime_indices[slot]),
             "original_source_index": int(original_index),
             "adaptive_difference_threshold": float(adaptive_threshold),
+            "hysteresis_weak_threshold": float(weak_threshold),
             **baseline_stats,
         })
 
-        seeded_observed = seed_bool & observed & ~repaired_union
-        verified_envelope = _filled_component(expansion | seeded_observed)
-        verified_envelope &= observed & ~repaired_union
         selected = _limit_expansion(
             seeded_observed,
-            verified_envelope,
+            hysteresis_envelope,
             difference,
             maximum_pixels - int(np.count_nonzero(repaired_union)),
         )
@@ -302,6 +331,7 @@ def exact_same_canvas_observed_repair(
         "repaired_pixels": repaired_pixels,
         "seed_repaired_pixels": int(seed_pixel_count),
         "expanded_repaired_pixels": int(expanded_pixel_count),
+        "hysteresis_recovered_pixels": int(hysteresis_pixel_count),
         "unseeded_strong_component_pixels": int(unseeded_strong_pixel_count),
         "source_pixel_counts": source_counts,
         "difference_threshold_ceiling": float(difference_threshold),
