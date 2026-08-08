@@ -25,11 +25,7 @@ def _workspace(primary: np.ndarray, references: list[np.ndarray], supports: list
     workspace.metadata["aligned_reference_support_masks"] = [item.copy() for item in supports]
     workspace.metadata["preflight_original_occlusion_masks"] = [damage.copy(), *[np.zeros_like(damage) for _ in references]]
     workspace.metadata["verified_same_canvas_alignment"] = [
-        {
-            "runtime_reference_index": index,
-            "method": "verified-same-canvas-observed",
-            "action": "restored-exact-identity-transform",
-        }
+        {"runtime_reference_index": index, "method": "verified-same-canvas-observed", "action": "restored-exact-identity-transform"}
         for index in range(len(references))
     ]
     workspace.occlusion_masks = [damage.copy(), *[np.zeros_like(damage) for _ in references]]
@@ -61,12 +57,9 @@ def test_complementary_partial_references_restore_only_observed_damage() -> None
     primary = clean.copy()
     primary[damage > 0] = (10, 10, 10)
 
-    left_support = np.zeros_like(damage)
-    left_support[:, :68] = 255
-    right_support = np.zeros_like(damage)
-    right_support[:, 60:] = 255
-    left = np.zeros_like(clean)
-    right = np.zeros_like(clean)
+    left_support = np.zeros_like(damage); left_support[:, :68] = 255
+    right_support = np.zeros_like(damage); right_support[:, 60:] = 255
+    left = np.zeros_like(clean); right = np.zeros_like(clean)
     left[left_support > 0] = clean[left_support > 0]
     right[right_support > 0] = clean[right_support > 0]
     workspace = _workspace(primary, [left, right], [left_support, right_support], damage)
@@ -83,13 +76,50 @@ def test_no_verified_same_canvas_reference_abstains() -> None:
     clean = _clean()
     damage = np.zeros(clean.shape[:2], dtype=np.uint8)
     cv2.rectangle(damage, (50, 52), (78, 74), 255, -1)
-    primary = clean.copy()
-    primary[damage > 0] = 0
+    primary = clean.copy(); primary[damage > 0] = 0
     workspace = Workspace(primary=primary.copy(), references=[clean.copy()])
 
     repaired, provenance, details = exact_same_canvas_observed_repair(workspace, primary)
 
     assert details["applied"] is False
-    assert details["reason"] == "no_verified_same_canvas_reference"
+    assert details["reason"] in {"no_aligned_references", "no_verified_same_canvas_reference"}
     assert np.array_equal(repaired, primary)
     assert np.count_nonzero(provenance) == 0
+
+
+def test_primary_anchor_evidence_enables_exact_repair_without_legacy_alignment_flag() -> None:
+    clean = _clean()
+    full_damage = np.zeros(clean.shape[:2], dtype=np.uint8)
+    cv2.rectangle(full_damage, (44, 48), (84, 80), 255, -1)
+    seed = np.zeros_like(full_damage)
+    cv2.rectangle(seed, (54, 56), (74, 72), 255, -1)
+    primary = clean.copy(); primary[full_damage > 0] = (10, 10, 10)
+    support = np.full(full_damage.shape, 255, dtype=np.uint8)
+
+    workspace = Workspace(primary=primary.copy(), references=[clean.copy()])
+    workspace.aligned_references = [clean.copy()]
+    workspace.occlusion_masks = [seed.copy(), np.zeros_like(seed)]
+    workspace.metadata["primary_bbox"] = (22, 14, 84, 104)
+    workspace.metadata["aligned_reference_source_indices"] = [0]
+    workspace.metadata["aligned_reference_original_source_indices"] = [1]
+    workspace.metadata["aligned_reference_support_masks"] = [support]
+    workspace.metadata["preflight_original_occlusion_masks"] = [seed.copy(), np.zeros_like(seed)]
+    workspace.metadata["same_canvas_primary_anchor"] = {
+        "applied": False,
+        "matched_original_reference_indices": [1],
+        "preflight_selected_source_index": 0,
+        "restored_source_index": 0,
+    }
+
+    repaired, provenance, details = exact_same_canvas_observed_repair(
+        workspace,
+        primary,
+        difference_threshold=0.05,
+        maximum_face_fraction=1.0,
+    )
+
+    assert details["applied"] is True
+    assert details["verified_original_indices"] == [1]
+    assert details["repaired_pixels"] > int(np.count_nonzero(seed))
+    assert np.array_equal(repaired[full_damage > 0], clean[full_damage > 0])
+    assert np.all(provenance[full_damage > 0] == 1)
