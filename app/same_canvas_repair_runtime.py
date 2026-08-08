@@ -152,13 +152,7 @@ def _seed_connected_hysteresis(
     weak_threshold: float,
     maximum_iterations: int = 64,
 ) -> np.ndarray:
-    """Grow verified damage only through adjacent weak residual evidence.
-
-    This recovers dark facial details whose donor value can sit close to a dark
-    occluder numerically. Growth is impossible through unchanged pixels, outside donor
-    support, or outside the face because the caller supplies an observed mask already
-    constrained to those regions.
-    """
+    """Grow verified damage only through adjacent weak residual evidence."""
     selected = verified & observed
     if not np.any(selected):
         return selected
@@ -171,6 +165,50 @@ def _seed_connected_hysteresis(
             break
         selected = updated
     return _filled_component(selected) & observed
+
+
+def _seed_connected_flat_occluder(
+    primary: np.ndarray,
+    seed_bool: np.ndarray,
+    observed: np.ndarray,
+    *,
+    maximum_colour_distance: float = 10.0,
+) -> tuple[np.ndarray, float]:
+    """Recover a flat-colour occluder component connected to verified damage seeds.
+
+    Difference-only selection misses genuine damage pixels when the hidden clean detail
+    happens to be numerically close to a dark sticker/scribble.  This path uses only
+    the imported primary: it estimates the seed colour, finds the connected flat-colour
+    component, and still clips it to verified donor support/face geometry.
+    """
+    seeded = seed_bool & observed
+    if np.count_nonzero(seeded) < 4:
+        return np.zeros(seed_bool.shape, dtype=bool), 0.0
+
+    source = primary.astype(np.float32)
+    seed_values = source[seeded]
+    median_colour = np.median(seed_values, axis=0)
+    seed_distance = np.max(np.abs(seed_values - median_colour), axis=1)
+    robust_spread = float(np.percentile(seed_distance, 95.0)) if seed_distance.size else 0.0
+    tolerance = float(np.clip(robust_spread + 3.0, 3.0, max(3.0, maximum_colour_distance)))
+    colour_distance = np.max(np.abs(source - median_colour.reshape(1, 1, 3)), axis=2)
+    candidate = observed & (colour_distance <= tolerance)
+    if not np.any(candidate):
+        return np.zeros(seed_bool.shape, dtype=bool), tolerance
+
+    candidate_u8 = np.where(candidate, 255, 0).astype(np.uint8)
+    candidate_u8 = cv2.morphologyEx(
+        candidate_u8,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+    )
+    count, labels = cv2.connectedComponents(candidate_u8, connectivity=8)
+    selected = np.zeros(seed_bool.shape, dtype=bool)
+    for label in range(1, count):
+        component = labels == label
+        if np.any(component & seeded):
+            selected |= component
+    return selected & observed, tolerance
 
 
 def _limit_expansion(
@@ -255,6 +293,7 @@ def exact_same_canvas_observed_repair(
     seed_pixel_count = 0
     expanded_pixel_count = 0
     hysteresis_pixel_count = 0
+    flat_occluder_pixel_count = 0
     unseeded_strong_pixel_count = 0
     threshold_diagnostics: list[dict[str, Any]] = []
 
@@ -293,19 +332,27 @@ def exact_same_canvas_observed_repair(
             observed & ~repaired_union,
             weak_threshold=weak_threshold,
         )
+        flat_envelope, flat_tolerance = _seed_connected_flat_occluder(
+            frozen_primary,
+            seed_bool,
+            observed & ~repaired_union,
+        )
+        combined_envelope = (hysteresis_envelope | flat_envelope) & observed & ~repaired_union
         hysteresis_pixel_count += int(np.count_nonzero(hysteresis_envelope & ~verified_envelope))
+        flat_occluder_pixel_count += int(np.count_nonzero(flat_envelope & ~hysteresis_envelope))
         threshold_diagnostics.append({
             "slot": int(slot),
             "runtime_reference_index": int(runtime_indices[slot]),
             "original_source_index": int(original_index),
             "adaptive_difference_threshold": float(adaptive_threshold),
             "hysteresis_weak_threshold": float(weak_threshold),
+            "flat_occluder_colour_tolerance": float(flat_tolerance),
             **baseline_stats,
         })
 
         selected = _limit_expansion(
             seeded_observed,
-            hysteresis_envelope,
+            combined_envelope,
             difference,
             maximum_pixels - int(np.count_nonzero(repaired_union)),
         )
@@ -332,6 +379,7 @@ def exact_same_canvas_observed_repair(
         "seed_repaired_pixels": int(seed_pixel_count),
         "expanded_repaired_pixels": int(expanded_pixel_count),
         "hysteresis_recovered_pixels": int(hysteresis_pixel_count),
+        "flat_occluder_recovered_pixels": int(flat_occluder_pixel_count),
         "unseeded_strong_component_pixels": int(unseeded_strong_pixel_count),
         "source_pixel_counts": source_counts,
         "difference_threshold_ceiling": float(difference_threshold),
