@@ -28,6 +28,8 @@ def test_automatic_pipeline_exports_every_block(tmp_path: Path) -> None:
     assert result.blocks_zip.exists()
     assert result.provenance is not None and result.provenance.exists()
     assert len(result.results) == 13
+    by_block = {item.block: item for item in result.results}
+    assert by_block["enhance"].details.get("blend") == 0.0
 
     with zipfile.ZipFile(result.blocks_zip, "r") as archive:
         names = archive.namelist()
