@@ -60,7 +60,7 @@ def refine_component_translation(
     maximum_shift: float = 5.0,
     minimum_response: float = 0.08,
     minimum_similarity_gain: float = 0.015,
-    minimum_shift_magnitude: float = 0.35,
+    minimum_shift_magnitude: float = 0.75,
 ) -> ComponentAlignmentResult:
     """Strict sub-pixel translation refinement for one facial component.
 
@@ -114,10 +114,10 @@ def refine_component_translation(
             response if np.isfinite(response) else 0.0, False
         )
 
-    # A tiny phase-correlation displacement commonly appears when a sharp reference
-    # is compared with the same already-aligned anatomy after blur/compression. Do
-    # not resample those pixels: doing so cannot add trustworthy geometry and would
-    # destroy exact observed-pixel provenance.
+    # A subpixel phase-correlation displacement commonly appears when a sharp
+    # reference is compared with the same already-aligned anatomy after blur or
+    # compression. In strict mode, resampling such a tiny proposal weakens exact
+    # observed-pixel provenance for negligible geometric benefit.
     shift_magnitude = float(np.hypot(dx, dy))
     if shift_magnitude < max(0.0, float(minimum_shift_magnitude)):
         return ComponentAlignmentResult(aligned_reference.copy(), support_mask.copy(), 0.0, 0.0, response, False)
