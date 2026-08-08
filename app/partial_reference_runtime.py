@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from functools import wraps
 from typing import Any, Iterator
 
 import cv2
@@ -56,7 +57,7 @@ def _temporary_partial_gate(workspace, *, disable_second_identity_gate: bool) ->
         if effective is not None:
             workspace.occlusion_masks = effective
         # Every aligned reference has already passed either SFace or strict local
-        # geometry.  A second all-or-nothing SFace gate would incorrectly discard
+        # geometry. A second all-or-nothing SFace gate would incorrectly discard
         # nose-only/eye-only crops because they cannot produce a full-face embedding.
         if disable_second_identity_gate:
             workspace.metadata["reference_identity_verification_available"] = False
@@ -70,13 +71,19 @@ def _temporary_partial_gate(workspace, *, disable_second_identity_gate: bool) ->
 
 
 def install_partial_reference_runtime(executor) -> None:
-    """Make blocks 7/8 respect the true observed footprint of partial photographs."""
+    """Make blocks 7/8 respect the true observed footprint of partial photographs.
+
+    The wrapper deliberately preserves the wrapped handler metadata. This keeps the
+    installed pretrained handler discoverable/auditable while adding only a temporary
+    support-mask gate around its execution.
+    """
     for kind in (BlockKind.REGION_SELECT, BlockKind.INPAINT):
         original = executor._handlers.get(kind)
         if original is None:
             continue
 
         def make_handler(block_kind: BlockKind, wrapped):
+            @wraps(wrapped)
             def handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
                 with _temporary_partial_gate(
                     executor.workspace,
