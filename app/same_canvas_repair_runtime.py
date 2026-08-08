@@ -63,9 +63,6 @@ def _verified_donor_slots(workspace, runtime_indices: list[int], originals: list
         int(value)
         for value in anchor.get("matched_original_reference_indices", [])
     } if isinstance(anchor, dict) and isinstance(anchor.get("matched_original_reference_indices"), list) else set()
-
-    # Return both representations so callers can keep provenance in original source ids
-    # while accepting legacy runtime-slot evidence during migration.
     return verified_runtime, verified_original
 
 
@@ -191,8 +188,29 @@ def exact_same_canvas_observed_repair(
     }
 
 
-def install_same_canvas_repair_runtime(executor) -> None:
-    original = executor._handlers.get(BlockKind.INPAINT)
+def _merge_exact_state(executor, local_provenance: np.ndarray) -> None:
+    current = executor.workspace.provenance_map
+    if not isinstance(current, np.ndarray) or current.shape != local_provenance.shape:
+        current = np.zeros(local_provenance.shape, dtype=np.uint16)
+    else:
+        current = current.copy()
+    used = local_provenance > 0
+    current[used] = local_provenance[used]
+    executor.workspace.provenance_map = current
+
+    target = executor.workspace.metadata.get("inpaint_target_mask")
+    target = _binary(target, local_provenance.shape) if isinstance(target, np.ndarray) and target.shape == local_provenance.shape else np.zeros(local_provenance.shape, dtype=np.uint8)
+    target[used] = 255
+    executor.workspace.metadata["inpaint_target_mask"] = target
+
+    observed = executor.workspace.metadata.get("inpaint_observed_mask")
+    observed = _binary(observed, local_provenance.shape) if isinstance(observed, np.ndarray) and observed.shape == local_provenance.shape else np.zeros(local_provenance.shape, dtype=np.uint8)
+    observed[used] = 255
+    executor.workspace.metadata["inpaint_observed_mask"] = observed
+
+
+def _wrap_exact_repair(executor, kind: BlockKind, detail_key: str) -> None:
+    original = executor._handlers.get(kind)
     if original is None:
         return
 
@@ -206,26 +224,17 @@ def install_same_canvas_repair_runtime(executor) -> None:
             maximum_face_fraction=float(parameters.get("maximum_occlusion_fraction", 0.25)),
         )
         details = dict(base_result.details)
-        details["same_canvas_exact_repair"] = diagnostics
+        details[detail_key] = diagnostics
         if diagnostics.get("applied"):
-            current = executor.workspace.provenance_map
-            if not isinstance(current, np.ndarray) or current.shape != local_provenance.shape:
-                current = np.zeros(local_provenance.shape, dtype=np.uint16)
-            else:
-                current = current.copy()
-            used = local_provenance > 0
-            current[used] = local_provenance[used]
-            executor.workspace.provenance_map = current
-
-            target = executor.workspace.metadata.get("inpaint_target_mask")
-            target = _binary(target, local_provenance.shape) if isinstance(target, np.ndarray) and target.shape == local_provenance.shape else np.zeros(local_provenance.shape, dtype=np.uint8)
-            target[used] = 255
-            executor.workspace.metadata["inpaint_target_mask"] = target
-
-            observed = executor.workspace.metadata.get("inpaint_observed_mask")
-            observed = _binary(observed, local_provenance.shape) if isinstance(observed, np.ndarray) and observed.shape == local_provenance.shape else np.zeros(local_provenance.shape, dtype=np.uint8)
-            observed[used] = 255
-            executor.workspace.metadata["inpaint_observed_mask"] = observed
+            _merge_exact_state(executor, local_provenance)
         return ExecutionResult(base_result.block, repaired, details)
 
-    executor._handlers[BlockKind.INPAINT] = handler
+    executor._handlers[kind] = handler
+
+
+def install_same_canvas_repair_runtime(executor) -> None:
+    # FUSION may overwrite pixels repaired at INPAINT. Apply the exact observed donor
+    # transfer again after FUSION so the identity guardrail evaluates the preserved
+    # evidence rather than a later blend that erased it.
+    _wrap_exact_repair(executor, BlockKind.INPAINT, "same_canvas_exact_repair")
+    _wrap_exact_repair(executor, BlockKind.FUSION, "post_fusion_same_canvas_exact_repair")
