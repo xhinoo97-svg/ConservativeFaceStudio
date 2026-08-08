@@ -3,7 +3,12 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from app.practical_benchmark_matrix import _disk_blur, make_extended_scenarios
+from app.practical_benchmark_matrix import (
+    REAL_POSE_REFERENCES,
+    _disk_blur,
+    _real_pose_scenario,
+    make_extended_scenarios,
+)
 
 
 def _portrait() -> np.ndarray:
@@ -47,3 +52,24 @@ def test_disk_defocus_is_deterministic_and_heavier_radius_changes_more() -> None
     heavy_error = float(np.mean(np.abs(clean.astype(np.float32) - heavy.astype(np.float32))))
     assert mild_error > 0.0
     assert heavy_error > mild_error
+
+
+def test_real_pose_sources_are_separate_public_domain_identity_references() -> None:
+    assert set(REAL_POSE_REFERENCES) == {"mae_jemison", "sally_ride"}
+    for identity_key, source in REAL_POSE_REFERENCES.items():
+        assert source.key != identity_key
+        assert "commons.wikimedia.org/wiki/File:" in source.page_url
+        assert "Public domain" in source.license
+        assert source.filename.lower().endswith(".jpg")
+
+
+def test_real_pose_scenario_uses_one_observed_reference_and_is_recoverable() -> None:
+    clean = _portrait()
+    reference = np.roll(clean, 3, axis=1)
+    scenario = _real_pose_scenario(clean, reference)
+    assert scenario.name == "real_same_identity_pose_reference"
+    assert scenario.recoverable is True
+    assert scenario.opaque_without_evidence is False
+    assert len(scenario.references) == 1
+    assert np.array_equal(scenario.references[0], reference)
+    assert np.count_nonzero(scenario.damage_mask) > 0
