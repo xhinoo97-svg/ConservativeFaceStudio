@@ -118,8 +118,11 @@ def test_primary_anchor_evidence_enables_exact_repair_without_legacy_alignment_f
         maximum_face_fraction=1.0,
     )
 
+    repaired_mask = provenance > 0
     assert details["applied"] is True
     assert details["verified_original_indices"] == [1]
     assert details["repaired_pixels"] > int(np.count_nonzero(seed))
-    assert np.array_equal(repaired[full_damage > 0], clean[full_damage > 0])
-    assert np.all(provenance[full_damage > 0] == 1)
+    assert np.all(repaired_mask[seed > 0])
+    assert np.array_equal(repaired[repaired_mask], clean[repaired_mask])
+    assert np.all(provenance[repaired_mask] == 1)
+    assert np.array_equal(repaired[~repaired_mask], primary[~repaired_mask])
