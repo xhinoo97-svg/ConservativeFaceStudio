@@ -158,13 +158,17 @@ def _median_reference_with_support(
     """Median of observed reference pixels only; unsupported crop padding is ignored."""
     stack = np.stack(refs, axis=0).astype(np.float32)
     support = np.stack([mask > 0 for mask in support_masks], axis=0)
-    support3 = support[..., None]
-    values = np.where(support3, stack, np.nan)
-    with np.errstate(all="ignore"):
-        median = np.nanmedian(values, axis=0)
-    fallback = np.zeros(stack.shape[1:], dtype=np.float32)
-    median = np.where(np.isfinite(median), median, fallback)
-    return np.clip(median, 0, 255).astype(np.uint8)
+    h, w = stack.shape[1:3]
+    result = np.zeros((h, w, 3), dtype=np.float32)
+
+    # Compute only where at least one reference is actually observed. This avoids
+    # nanmedian warnings for crop padding while keeping the median semantics exact.
+    observed_any = np.any(support, axis=0)
+    ys, xs = np.nonzero(observed_any)
+    for y, x in zip(ys.tolist(), xs.tolist()):
+        valid = support[:, y, x]
+        result[y, x] = np.median(stack[valid, y, x], axis=0)
+    return np.clip(result, 0, 255).astype(np.uint8)
 
 
 def _shift_mask(mask: np.ndarray, dx: float, dy: float) -> np.ndarray:
@@ -195,13 +199,7 @@ def specific_reference_memory_fusion(
     local_refinement_max_shift: float = 4.0,
     local_refinement_min_response: float = 0.10,
 ) -> SpecificReferenceMemoryResult:
-    """DMD-inspired specific memory using only actually observed reference pixels.
-
-    Every facial region receives its own small residual translation refinement after
-    the global alignment. This is deliberately limited to translation only: a mouth,
-    eye or nose donor may move a few pixels to match the primary, but it cannot scale,
-    shear, mirror or reshape anatomy. Weak local evidence abstains automatically.
-    """
+    """DMD-inspired specific memory using only actually observed reference pixels."""
     if len(images) < 2:
         raise ValueError("Serve almeno una fotografia di riferimento")
     base = _validate_image(images[0])
@@ -218,10 +216,7 @@ def specific_reference_memory_fusion(
     ref_masks = masks[1:]
     primary_mask = masks[0]
     if reference_support_masks is None:
-        support_masks = [
-            np.where(np.max(reference, axis=2) > 2, 255, 0).astype(np.uint8)
-            for reference in refs
-        ]
+        support_masks = [np.where(np.max(reference, axis=2) > 2, 255, 0).astype(np.uint8) for reference in refs]
     else:
         if len(reference_support_masks) != len(refs):
             raise ValueError("Numero reference/support mask non compatibile")
@@ -232,7 +227,6 @@ def specific_reference_memory_fusion(
     provenance = np.zeros(shape[:2], dtype=np.uint16)
     confidence_map = np.zeros(shape[:2], dtype=np.uint8)
     decisions: list[MemoryRegionDecision] = []
-
     primary_quality_map = _pixel_quality(base)
 
     for name, region_mask in regions.items():
@@ -241,18 +235,16 @@ def specific_reference_memory_fusion(
         if area == 0:
             decisions.append(MemoryRegionDecision(name, 0.0, 0.0, (), 0, 0, ()))
             continue
-
         primary_visible = active & (primary_mask == 0)
         primary_quality = float(np.mean(primary_quality_map[primary_visible])) if np.any(primary_visible) else 0.0
 
-        # Region-specific donor alignment. We only spend the phase-correlation/warp
-        # cost when the reference genuinely observes a useful fraction of this region.
         regional_refs: list[np.ndarray] = []
         regional_masks: list[np.ndarray] = []
         regional_support: list[np.ndarray] = []
         regional_quality: list[np.ndarray] = []
         for reference, ref_mask, support_mask in zip(refs, ref_masks, support_masks):
             coverage = float(np.count_nonzero(active & (support_mask > 0)) / max(1, area))
+            refined = None
             if coverage >= 0.18:
                 refined = refine_component_translation(
                     reference,
@@ -262,9 +254,6 @@ def specific_reference_memory_fusion(
                     maximum_shift=float(local_refinement_max_shift),
                     minimum_response=float(local_refinement_min_response),
                 )
-            else:
-                refined = None
-
             if refined is not None and refined.accepted:
                 regional_refs.append(refined.image)
                 regional_support.append(refined.support_mask)
@@ -278,7 +267,6 @@ def specific_reference_memory_fusion(
 
         median_reference = _median_reference_with_support(regional_refs, regional_support)
         candidates: list[MemoryCandidate] = []
-
         for ref_index, (reference, ref_mask, ref_quality_map, support_mask) in enumerate(
             zip(regional_refs, regional_masks, regional_quality, regional_support), start=1
         ):
@@ -288,16 +276,8 @@ def specific_reference_memory_fusion(
                 continue
             quality = float(np.mean(ref_quality_map[valid]))
             compare_mask = valid & primary_visible
-            similarity = (
-                _multiscale_similarity(base, reference, compare_mask.astype(np.uint8) * 255)
-                if np.count_nonzero(compare_mask) >= 24
-                else 0.5
-            )
-            agreement = (
-                _reference_agreement(reference, median_reference, region_mask, valid)
-                if len(regional_refs) > 1
-                else similarity
-            )
+            similarity = _multiscale_similarity(base, reference, compare_mask.astype(np.uint8) * 255) if np.count_nonzero(compare_mask) >= 24 else 0.5
+            agreement = _reference_agreement(reference, median_reference, region_mask, valid) if len(regional_refs) > 1 else similarity
             score = _candidate_score(quality, primary_quality, similarity, agreement, visibility)
             candidates.append(MemoryCandidate(ref_index, quality, similarity, agreement, visibility, score))
 
@@ -312,12 +292,8 @@ def specific_reference_memory_fusion(
             source_masks = [regional_masks[index - 1] for index in selected_indices]
             source_qualities = [regional_quality[index - 1] for index in selected_indices]
             source_support = [regional_support[index - 1] for index in selected_indices]
-
             eligible = active & (primary_mask == 0)
-            valid_stack = np.stack(
-                [(mask == 0) & (support > 0) for mask, support in zip(source_masks, source_support)],
-                axis=0,
-            )
+            valid_stack = np.stack([(mask == 0) & (support > 0) for mask, support in zip(source_masks, source_support)], axis=0)
             quality_stack = np.stack(source_qualities, axis=0).copy()
             quality_stack[~valid_stack] = -np.inf
             best_local_slot = np.argmax(quality_stack, axis=0)
@@ -341,7 +317,6 @@ def specific_reference_memory_fusion(
                 region_cap = min(region_cap, 0.08)
                 if confidence < max(minimum_region_confidence, 0.76):
                     eligible[:] = False
-
             eligible_count = int(np.count_nonzero(eligible))
             cap = max(0, int(round(area * region_cap)))
             if eligible_count > cap > 0:
@@ -364,17 +339,7 @@ def specific_reference_memory_fusion(
                 confidence_map[eligible] = np.uint8(round(np.clip(confidence, 0.0, 1.0) * 255.0))
                 transferred = int(np.count_nonzero(eligible))
 
-        decisions.append(
-            MemoryRegionDecision(
-                name=name,
-                confidence=confidence,
-                primary_quality=primary_quality,
-                selected_sources=tuple(item.source_index for item in selected),
-                transferred_pixels=transferred,
-                candidate_count=len(candidates),
-                candidates=tuple(candidates),
-            )
-        )
+        decisions.append(MemoryRegionDecision(name, confidence, primary_quality, tuple(item.source_index for item in selected), transferred, len(candidates), tuple(candidates)))
 
     return SpecificReferenceMemoryResult(
         image=output,
