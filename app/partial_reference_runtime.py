@@ -9,7 +9,9 @@ import numpy as np
 
 from app.execution import ExecutionResult
 from app.pipeline import BlockKind, BlockSpec
+from app.reference_hint_runtime import expand_verified_single_reference_hint
 from app.restoration import detail_reliability_map
+from app.strict_repair import face_support_mask
 
 
 def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
@@ -82,6 +84,37 @@ def _effective_masks(workspace) -> tuple[list[np.ndarray] | None, int, int]:
     return effective, support_gated_pixels, low_detail_gated_pixels
 
 
+def _expand_verified_full_reference_hint(workspace) -> dict[str, Any]:
+    references = list(workspace.aligned_references)
+    if len(references) != 1:
+        return {"eligible": False, "reason": "not_single_reference", "added_pixels": 0}
+    if not bool(workspace.metadata.get("reference_identity_verification_available", False)):
+        return {"eligible": False, "reason": "identity_not_verified", "added_pixels": 0}
+
+    shape = workspace.primary.shape[:2]
+    current = workspace.occlusion_masks
+    reference_mask = (
+        _binary(current[1], shape)
+        if isinstance(current, list) and len(current) == 2
+        else np.zeros(shape, dtype=np.uint8)
+    )
+    bbox_raw = workspace.metadata.get("primary_bbox")
+    bbox = tuple(int(v) for v in bbox_raw) if bbox_raw is not None else None
+    face = face_support_mask(shape, bbox)
+    existing = workspace.metadata.get("reference_consensus_occlusion")
+    if not isinstance(existing, np.ndarray) or existing.shape != shape:
+        existing = np.zeros(shape, dtype=np.uint8)
+    expanded, diagnostics = expand_verified_single_reference_hint(
+        workspace.primary,
+        references[0],
+        reference_mask,
+        face,
+        existing,
+    )
+    workspace.metadata["reference_consensus_occlusion"] = expanded
+    return diagnostics
+
+
 @contextmanager
 def _temporary_partial_gate(workspace, *, disable_second_identity_gate: bool) -> Iterator[tuple[bool, int, int]]:
     effective, gated_pixels, low_detail_pixels = _effective_masks(workspace)
@@ -112,6 +145,11 @@ def install_partial_reference_runtime(executor) -> None:
         def make_handler(block_kind: BlockKind, wrapped):
             @wraps(wrapped)
             def handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+                hint_diagnostics = (
+                    _expand_verified_full_reference_hint(executor.workspace)
+                    if block_kind is BlockKind.INPAINT
+                    else {"eligible": False, "reason": "not_inpaint", "added_pixels": 0}
+                )
                 with _temporary_partial_gate(
                     executor.workspace,
                     disable_second_identity_gate=block_kind is BlockKind.INPAINT,
@@ -126,6 +164,7 @@ def install_partial_reference_runtime(executor) -> None:
                         "detail_reliability_threshold": int(executor.workspace.metadata.get("detail_reliability_threshold", 40)),
                         "detail_reliability_source": str(executor.workspace.metadata.get("detail_reliability_source", "unknown")),
                         "partial_identity_gate_stage": "alignment" if block_kind is BlockKind.INPAINT else None,
+                        "verified_single_reference_hint": hint_diagnostics,
                     }
                 )
                 return ExecutionResult(result.block, result.image, details)
