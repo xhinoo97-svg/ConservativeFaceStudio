@@ -7,7 +7,7 @@ import json
 import math
 import urllib.parse
 import urllib.request
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -154,18 +154,33 @@ def make_scenarios(clean: np.ndarray, *, seed: int = 20260808, profile: str = "f
     h, w = clean.shape[:2]
     full = np.full((h, w), 255, dtype=np.uint8)
     sticker = _ellipse_mask((h, w), (0.50, 0.50), (0.16, 0.11))
-    eye_band = np.zeros((h, w), dtype=np.uint8); cv2.rectangle(eye_band, (int(.23*w), int(.31*h)), (int(.77*w), int(.48*h)), 255, -1)
+    eye_band = np.zeros((h, w), dtype=np.uint8)
+    cv2.rectangle(eye_band, (int(.23*w), int(.31*h)), (int(.77*w), int(.48*h)), 255, -1)
     nose = _ellipse_mask((h, w), (0.50, 0.53), (0.11, 0.15))
     mouth = _ellipse_mask((h, w), (0.50, 0.68), (0.18, 0.10))
-    left = np.zeros((h, w), dtype=np.uint8); left[:, : w // 2 + w // 20] = 255
-    right = np.zeros((h, w), dtype=np.uint8); right[:, w // 2 - w // 20 :] = 255
+    left = np.zeros((h, w), dtype=np.uint8)
+    left[:, : w // 2 + w // 20] = 255
+    right = np.zeros((h, w), dtype=np.uint8)
+    right[:, w // 2 - w // 20 :] = 255
 
-    opaque = clean.copy(); opaque[sticker > 0] = (18, 18, 18)
+    opaque = clean.copy()
+    opaque[sticker > 0] = (18, 18, 18)
+
+    # A case marked recoverable must have real source evidence for every damaged pixel.
+    # The previous component case damaged the whole sticker although eye/nose/mouth
+    # references covered only part of it, making a >=95 gate demand unsupported pixels.
+    component_support = cv2.bitwise_or(cv2.bitwise_or(eye_band, nose), mouth)
+    component_damage = cv2.bitwise_and(sticker, component_support)
+    component_opaque = clean.copy()
+    component_opaque[component_damage > 0] = (18, 18, 18)
+
     scribble = clean.copy()
     for offset in (-18, -6, 6, 18):
         cv2.line(scribble, (int(.33*w), int(.50*h)+offset), (int(.67*w), int(.43*h)+offset), (10, 10, 10), max(4, w // 65))
     scribble_mask = np.any(scribble != clean, axis=2).astype(np.uint8) * 255
-    translucent = clean.copy(); overlay = np.zeros_like(clean); overlay[:] = (210, 60, 180)
+    translucent = clean.copy()
+    overlay = np.zeros_like(clean)
+    overlay[:] = (210, 60, 180)
     alpha_mask = _ellipse_mask((h, w), (0.50, 0.50), (0.20, 0.15))
     blended = cv2.addWeighted(clean, 0.58, overlay, 0.42, 0)
     translucent[alpha_mask > 0] = blended[alpha_mask > 0]
@@ -180,7 +195,13 @@ def make_scenarios(clean: np.ndarray, *, seed: int = 20260808, profile: str = "f
         Scenario("opaque_sticker_single", opaque, (), sticker, False, True),
         Scenario("opaque_sticker_full_reference", opaque, (clean.copy(),), sticker, True),
         Scenario("scribble_two_partial", scribble, (_partial_reference(clean, left), _partial_reference(clean, right)), scribble_mask, True),
-        Scenario("component_only_references", opaque, (_partial_reference(clean, eye_band), _partial_reference(clean, nose), _partial_reference(clean, mouth)), sticker, True),
+        Scenario(
+            "component_only_references",
+            component_opaque,
+            (_partial_reference(clean, eye_band), _partial_reference(clean, nose), _partial_reference(clean, mouth)),
+            component_damage,
+            True,
+        ),
     )
     if profile == "quick":
         chosen = {"gaussian_heavy_single", "opaque_sticker_single", "opaque_sticker_full_reference", "scribble_two_partial", "component_only_references"}
@@ -196,7 +217,8 @@ def _masked_mae(reference: np.ndarray, candidate: np.ndarray, mask: np.ndarray) 
 
 
 def _iou(reference_mask: np.ndarray, candidate_mask: np.ndarray) -> float | None:
-    a = reference_mask > 0; b = candidate_mask > 0
+    a = reference_mask > 0
+    b = candidate_mask > 0
     union = int(np.count_nonzero(a | b))
     if union == 0:
         return None
@@ -204,8 +226,11 @@ def _iou(reference_mask: np.ndarray, candidate_mask: np.ndarray) -> float | None
 
 
 def _precision_recall(reference_mask: np.ndarray, candidate_mask: np.ndarray) -> tuple[float | None, float | None]:
-    truth = reference_mask > 0; pred = candidate_mask > 0
-    tp = int(np.count_nonzero(truth & pred)); fp = int(np.count_nonzero(~truth & pred)); fn = int(np.count_nonzero(truth & ~pred))
+    truth = reference_mask > 0
+    pred = candidate_mask > 0
+    tp = int(np.count_nonzero(truth & pred))
+    fp = int(np.count_nonzero(~truth & pred))
+    fn = int(np.count_nonzero(truth & ~pred))
     precision = None if tp + fp == 0 else float(tp / (tp + fp))
     recall = None if tp + fn == 0 else float(tp / (tp + fn))
     return precision, recall
@@ -224,7 +249,13 @@ def _score(identity: float, ssim: float, damage_mae: float, outside_mae: float, 
         "outside_region_preservation": preservation_component,
         "provenance_discipline": provenance_component,
     }
-    score = 100.0 * (0.35*identity_component + 0.20*ssim_component + 0.30*recovery_component + 0.10*preservation_component + 0.05*provenance_component)
+    score = 100.0 * (
+        0.35 * identity_component
+        + 0.20 * ssim_component
+        + 0.30 * recovery_component
+        + 0.10 * preservation_component
+        + 0.05 * provenance_component
+    )
     return float(score), components
 
 
@@ -233,8 +264,10 @@ def _landmark_error(runner: AutomaticPipelineRunner, clean: np.ndarray, final: n
     if backend is None:
         return None, None
     try:
-        a = backend.analyze(clean); b = backend.analyze(final)
-        pa = getattr(a, "landmarks5", None); pb = getattr(b, "landmarks5", None)
+        a = backend.analyze(clean)
+        b = backend.analyze(final)
+        pa = getattr(a, "landmarks5", None)
+        pb = getattr(b, "landmarks5", None)
         if pa is None or pb is None:
             return None, getattr(backend, "name", None)
         return normalized_landmark_error(np.asarray(pa), np.asarray(pb)), getattr(backend, "name", None)
@@ -335,10 +368,10 @@ def run_public_benchmark(output: Path, *, cache: Path, limit: int = 10, size: in
     bootstrap = ensure_core_pretrained_models(output / "core-models", timeout_seconds=60)
     report: dict[str, Any] = {
         "format": "ConservativeFaceStudio practical public-portrait benchmark",
-        "version": 1,
+        "version": 2,
         "profile": profile,
         "portrait_count": len(resolved),
-        "metric_note": "The 0-100 conservative recovery score is composite; 95 is a target only for cases with sufficient recoverable evidence, never a universal identity percentage.",
+        "metric_note": "The 0-100 conservative recovery score is composite; 95 is a target only for cases where the supplied evidence covers the benchmark damage, never a universal identity percentage.",
         "score_weights": {"identity": 0.35, "ssim": 0.20, "damaged_region_recovery": 0.30, "outside_region_preservation": 0.10, "provenance_discipline": 0.05},
         "core_models_ready": bootstrap.ready,
         "core_model_errors": bootstrap.errors,
@@ -375,7 +408,8 @@ def run_public_benchmark(output: Path, *, cache: Path, limit: int = 10, size: in
     fields = ["portrait", "scenario", "recoverable", "reference_count", "conservative_recovery_score", "psnr_before", "psnr_after", "ssim_after", "damage_mae_before", "damage_mae_after", "identity_similarity", "landmark_nme", "occlusion_iou", "reference_fraction", "symmetry_fraction", "generated_fraction", "target95_applicable", "target95_passed", "abstention_correct", "error"]
     with (output / "practical-benchmark.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
-        writer.writeheader(); writer.writerows(report["cases"])
+        writer.writeheader()
+        writer.writerows(report["cases"])
     return report
 
 
