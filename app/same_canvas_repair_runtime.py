@@ -272,9 +272,11 @@ def exact_same_canvas_observed_repair(
         })
 
         seeded_observed = seed_bool & observed & ~repaired_union
+        verified_envelope = _filled_component(expansion | seeded_observed)
+        verified_envelope &= observed & ~repaired_union
         selected = _limit_expansion(
             seeded_observed,
-            expansion,
+            verified_envelope,
             difference,
             maximum_pixels - int(np.count_nonzero(repaired_union)),
         )
