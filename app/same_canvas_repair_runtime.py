@@ -34,6 +34,41 @@ def _seeded_components(candidate: np.ndarray, seed: np.ndarray) -> np.ndarray:
     return keep
 
 
+def _original_source_indices(workspace, runtime_indices: list[int], count: int) -> list[int]:
+    explicit = workspace.metadata.get("aligned_reference_original_source_indices")
+    if isinstance(explicit, list) and len(explicit) == count:
+        return [max(1, int(value)) for value in explicit]
+    order_raw = workspace.metadata.get("runtime_source_order")
+    order = [int(value) for value in order_raw] if isinstance(order_raw, list) else []
+    resolved: list[int] = []
+    for runtime_reference_index in runtime_indices:
+        slot = int(runtime_reference_index) + 1
+        original = order[slot] if 0 <= slot < len(order) else slot
+        resolved.append(max(1, int(original)))
+    return resolved
+
+
+def _verified_donor_slots(workspace, runtime_indices: list[int], originals: list[int]) -> tuple[set[int], set[int]]:
+    diagnostics = workspace.metadata.get("verified_same_canvas_alignment")
+    verified_runtime = {
+        int(item.get("runtime_reference_index"))
+        for item in diagnostics
+        if isinstance(item, dict)
+        and item.get("method") == "verified-same-canvas-observed"
+        and item.get("runtime_reference_index") is not None
+    } if isinstance(diagnostics, list) else set()
+
+    anchor = workspace.metadata.get("same_canvas_primary_anchor")
+    verified_original = {
+        int(value)
+        for value in anchor.get("matched_original_reference_indices", [])
+    } if isinstance(anchor, dict) and isinstance(anchor.get("matched_original_reference_indices"), list) else set()
+
+    # Return both representations so callers can keep provenance in original source ids
+    # while accepting legacy runtime-slot evidence during migration.
+    return verified_runtime, verified_original
+
+
 def exact_same_canvas_observed_repair(
     workspace,
     image: np.ndarray,
@@ -41,51 +76,37 @@ def exact_same_canvas_observed_repair(
     difference_threshold: float = 0.075,
     maximum_face_fraction: float = 0.25,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-    """Replace damaged pixels only from references proven to share exact canvas geometry.
+    """Replace damage from donors whose same-canvas geometry was already verified.
 
-    The same-canvas verifier is intentionally strict and runs during ALIGN. Once that
-    identity transform is proven, re-estimating donor geometry during INPAINT can only
-    reduce pixel accuracy. Detector-seeded pixels are transferred directly whenever an
-    observed donor covers them. Strong LAB-difference components may expand that seed,
-    but only inside verified observed support. No synthesis, symmetry or interpolation
-    is used by this pass.
+    Detector pixels are transferred directly. LAB-difference components can expand the
+    seed only when they touch it and remain inside verified observed donor support. No
+    synthesis, mirroring or interpolation is used by this pass.
     """
     shape = workspace.primary.shape[:2]
-    diagnostics = workspace.metadata.get("verified_same_canvas_alignment")
-    if not isinstance(diagnostics, list) or not diagnostics:
+    aligned = list(workspace.aligned_references)
+    runtime_indices_raw = workspace.metadata.get("aligned_reference_source_indices")
+    supports_raw = workspace.metadata.get("aligned_reference_support_masks")
+    if not aligned:
+        return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "no_aligned_references", "repaired_pixels": 0}
+    if not isinstance(runtime_indices_raw, list) or len(runtime_indices_raw) != len(aligned):
+        return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "missing_runtime_source_mapping", "repaired_pixels": 0}
+    if not isinstance(supports_raw, list) or len(supports_raw) != len(aligned):
+        return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "missing_observed_support", "repaired_pixels": 0}
+
+    runtime_indices = [int(value) for value in runtime_indices_raw]
+    originals = _original_source_indices(workspace, runtime_indices, len(aligned))
+    verified_runtime, verified_original = _verified_donor_slots(workspace, runtime_indices, originals)
+    verified_slots = [
+        runtime_indices[index] in verified_runtime or originals[index] in verified_original
+        for index in range(len(aligned))
+    ]
+    if not any(verified_slots):
         return image.copy(), np.zeros(shape, dtype=np.uint16), {
             "applied": False,
             "reason": "no_verified_same_canvas_reference",
             "repaired_pixels": 0,
-        }
-
-    aligned = list(workspace.aligned_references)
-    runtime_indices_raw = workspace.metadata.get("aligned_reference_source_indices")
-    supports_raw = workspace.metadata.get("aligned_reference_support_masks")
-    originals_raw = workspace.metadata.get("aligned_reference_original_source_indices")
-    if not isinstance(runtime_indices_raw, list) or len(runtime_indices_raw) != len(aligned):
-        return image.copy(), np.zeros(shape, dtype=np.uint16), {
-            "applied": False,
-            "reason": "missing_runtime_source_mapping",
-            "repaired_pixels": 0,
-        }
-    if not isinstance(supports_raw, list) or len(supports_raw) != len(aligned):
-        return image.copy(), np.zeros(shape, dtype=np.uint16), {
-            "applied": False,
-            "reason": "missing_observed_support",
-            "repaired_pixels": 0,
-        }
-
-    verified_runtime = {
-        int(item.get("runtime_reference_index"))
-        for item in diagnostics
-        if isinstance(item, dict) and item.get("method") == "verified-same-canvas-observed"
-    }
-    if not verified_runtime:
-        return image.copy(), np.zeros(shape, dtype=np.uint16), {
-            "applied": False,
-            "reason": "no_verified_runtime_slot",
-            "repaired_pixels": 0,
+            "verified_runtime_indices": sorted(verified_runtime),
+            "verified_original_indices": sorted(verified_original),
         }
 
     frozen = workspace.metadata.get("preflight_original_occlusion_masks")
@@ -103,11 +124,7 @@ def exact_same_canvas_observed_repair(
         except (TypeError, ValueError):
             pass
     if not np.any(seed):
-        return image.copy(), np.zeros(shape, dtype=np.uint16), {
-            "applied": False,
-            "reason": "no_observed_damage_seed",
-            "repaired_pixels": 0,
-        }
+        return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "no_observed_damage_seed", "repaired_pixels": 0}
 
     bbox_raw = workspace.metadata.get("primary_bbox")
     bbox = tuple(int(v) for v in bbox_raw) if bbox_raw is not None else None
@@ -122,17 +139,8 @@ def exact_same_canvas_observed_repair(
     repaired_union = np.zeros(shape, dtype=bool)
     source_counts: dict[int, int] = {}
 
-    originals = (
-        [int(value) for value in originals_raw]
-        if isinstance(originals_raw, list) and len(originals_raw) == len(aligned)
-        else [int(value) + 1 for value in runtime_indices_raw]
-    )
-
-    for reference, runtime_index, support_raw, original_index in zip(
-        aligned, runtime_indices_raw, supports_raw, originals
-    ):
-        runtime_index = int(runtime_index)
-        if runtime_index not in verified_runtime or reference.shape != workspace.primary.shape:
+    for slot, (reference, support_raw, original_index) in enumerate(zip(aligned, supports_raw, originals)):
+        if not verified_slots[slot] or reference.shape != workspace.primary.shape:
             continue
         support = _binary(np.asarray(support_raw), shape) > 0
         if not np.any(support):
@@ -151,10 +159,6 @@ def exact_same_canvas_observed_repair(
             )
             strong = (strong_mask > 0) & observed
 
-        # A verified same-canvas donor does not need a colour-difference threshold for
-        # pixels already identified as damaged. The threshold is only for expanding
-        # beyond the detector seed. This also preserves dark eyes/lines inside an opaque
-        # sticker whose clean value can be numerically close to the sticker colour.
         seeded_observed = seed_bool & observed
         selected = seeded_observed | _seeded_components(strong, seed_reach)
         selected &= ~repaired_union
@@ -173,12 +177,15 @@ def exact_same_canvas_observed_repair(
     return result, provenance, {
         "applied": repaired_pixels > 0,
         "reason": "exact_observed_transfer" if repaired_pixels else "no_seeded_observed_or_strong_difference",
-        "verified_reference_count": len(verified_runtime),
+        "verified_reference_count": int(sum(verified_slots)),
+        "verified_runtime_indices": sorted(verified_runtime),
+        "verified_original_indices": sorted(verified_original),
         "repaired_pixels": repaired_pixels,
         "source_pixel_counts": source_counts,
         "difference_threshold": float(difference_threshold),
         "maximum_face_fraction": float(maximum_face_fraction),
         "seeded_pixels_require_difference_threshold": False,
+        "strong_difference_expands_seed": True,
         "interpolation": "none",
         "generated_pixels": 0,
     }
@@ -211,18 +218,12 @@ def install_same_canvas_repair_runtime(executor) -> None:
             executor.workspace.provenance_map = current
 
             target = executor.workspace.metadata.get("inpaint_target_mask")
-            if isinstance(target, np.ndarray) and target.shape == local_provenance.shape:
-                target = _binary(target, local_provenance.shape)
-            else:
-                target = np.zeros(local_provenance.shape, dtype=np.uint8)
+            target = _binary(target, local_provenance.shape) if isinstance(target, np.ndarray) and target.shape == local_provenance.shape else np.zeros(local_provenance.shape, dtype=np.uint8)
             target[used] = 255
             executor.workspace.metadata["inpaint_target_mask"] = target
 
             observed = executor.workspace.metadata.get("inpaint_observed_mask")
-            if isinstance(observed, np.ndarray) and observed.shape == local_provenance.shape:
-                observed = _binary(observed, local_provenance.shape)
-            else:
-                observed = np.zeros(local_provenance.shape, dtype=np.uint8)
+            observed = _binary(observed, local_provenance.shape) if isinstance(observed, np.ndarray) and observed.shape == local_provenance.shape else np.zeros(local_provenance.shape, dtype=np.uint8)
             observed[used] = 255
             executor.workspace.metadata["inpaint_observed_mask"] = observed
         return ExecutionResult(base_result.block, repaired, details)
