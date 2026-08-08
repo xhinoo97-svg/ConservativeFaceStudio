@@ -49,6 +49,41 @@ def test_verified_reference_repair_recovers_sticker_from_matching_references() -
     )
 
 
+def test_complementary_partial_references_repair_single_observer_target_pixels() -> None:
+    clean = _face()
+    mask = _target()
+    damaged = clean.copy()
+    damaged[mask > 0] = 0
+
+    left_support = np.zeros(mask.shape, dtype=np.uint8)
+    left_support[:, :68] = 255
+    right_support = np.zeros(mask.shape, dtype=np.uint8)
+    right_support[:, 60:] = 255
+    left = np.zeros_like(clean)
+    right = np.zeros_like(clean)
+    left[left_support > 0] = clean[left_support > 0]
+    right[right_support > 0] = clean[right_support > 0]
+    left_blocked = cv2.bitwise_not(left_support)
+    right_blocked = cv2.bitwise_not(right_support)
+
+    result = verified_reference_repair(
+        damaged,
+        [left, right],
+        mask,
+        [left_blocked, right_blocked],
+        identity_verification_available=False,
+        minimum_context_score=0.0,
+        agreement_threshold=5.0,
+        feather_sigma=0.0,
+    )
+
+    assert result.repaired_pixels == result.requested_pixels
+    assert result.unresolved_pixels == 0
+    assert result.agreement_rejected_pixels == 0
+    assert np.mean(np.abs(result.image[mask > 0].astype(np.int16) - clean[mask > 0].astype(np.int16))) < 1.0
+    assert np.array_equal(result.image[mask == 0], damaged[mask == 0])
+
+
 def test_identity_filter_rejects_wrong_reference() -> None:
     clean = _face()
     damaged = clean.copy()
