@@ -19,6 +19,7 @@ from app.pretrained_inpaint_handler import install_verified_inpainting_handler
 from app.pretrained_restoration_handlers import install_pretrained_restoration_handlers
 from app.pretrained_semantic_handlers import install_pretrained_semantic_handlers
 from app.pretrained_values import RESTORATION_SAFETY_DEFAULTS
+from app.same_canvas_repair_runtime import install_same_canvas_repair_runtime
 from app.strict_execution import StrictBlockExecutor
 from app.validation import evaluate_identity_guardrail
 
@@ -77,6 +78,7 @@ class AutomaticPipelineRunner:
         install_partial_reference_runtime(self.executor)
         install_case_aware_runtime(self.executor, model_paths)
         install_conservative_observed_runtime(self.executor)
+        install_same_canvas_repair_runtime(self.executor)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
