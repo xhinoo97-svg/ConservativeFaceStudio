@@ -155,19 +155,30 @@ def _median_reference_with_support(
     refs: list[np.ndarray],
     support_masks: list[np.ndarray],
 ) -> np.ndarray:
-    """Median of observed reference pixels only; unsupported crop padding is ignored."""
+    """Median of observed reference pixels only; unsupported crop padding is ignored.
+
+    The previous implementation iterated every observed pixel in Python. Sorting the
+    very small reference axis gives the exact same supported median while keeping the
+    hot path vectorised for CPU-only machines.
+    """
     stack = np.stack(refs, axis=0).astype(np.float32)
     support = np.stack([mask > 0 for mask in support_masks], axis=0)
-    h, w = stack.shape[1:3]
-    result = np.zeros((h, w, 3), dtype=np.float32)
+    counts = np.sum(support, axis=0).astype(np.intp)
+    observed_any = counts > 0
 
-    # Compute only where at least one reference is actually observed. This avoids
-    # nanmedian warnings for crop padding while keeping the median semantics exact.
-    observed_any = np.any(support, axis=0)
-    ys, xs = np.nonzero(observed_any)
-    for y, x in zip(ys.tolist(), xs.tolist()):
-        valid = support[:, y, x]
-        result[y, x] = np.median(stack[valid, y, x], axis=0)
+    result = np.zeros(stack.shape[1:], dtype=np.float32)
+    if not np.any(observed_any):
+        return result.astype(np.uint8)
+
+    lower_index = np.maximum((counts - 1) // 2, 0)
+    upper_index = np.maximum(counts // 2, 0)
+    for channel in range(3):
+        values = np.where(support, stack[..., channel], np.inf)
+        values.sort(axis=0)
+        lower = np.take_along_axis(values, lower_index[None, ...], axis=0)[0]
+        upper = np.take_along_axis(values, upper_index[None, ...], axis=0)[0]
+        median = 0.5 * (lower + upper)
+        result[..., channel][observed_any] = median[observed_any]
     return np.clip(result, 0, 255).astype(np.uint8)
 
 
@@ -182,6 +193,33 @@ def _shift_mask(mask: np.ndarray, dx: float, dy: float) -> np.ndarray:
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=255,
     )
+
+
+def _agreement_mask(
+    source_images: list[np.ndarray],
+    valid_stack: np.ndarray,
+    threshold: float,
+) -> np.ndarray:
+    """Accept singleton support; require colour agreement only where donors overlap.
+
+    Complementary crops are useful precisely because they may observe different facial
+    regions. Requiring all selected donors at every destination pixel discards that
+    evidence. On overlap we remain strict and abstain when any donor pair disagrees.
+    """
+    support_count = np.sum(valid_stack, axis=0)
+    accepted = support_count > 0
+    if len(source_images) < 2:
+        return accepted
+
+    labs = [cv2.cvtColor(image, cv2.COLOR_BGR2LAB).astype(np.float32) for image in source_images]
+    for first in range(len(source_images) - 1):
+        for second in range(first + 1, len(source_images)):
+            overlap = valid_stack[first] & valid_stack[second]
+            if not np.any(overlap):
+                continue
+            gap = np.mean(np.abs(labs[first] - labs[second]), axis=2)
+            accepted[overlap] &= gap[overlap] <= threshold
+    return accepted
 
 
 def specific_reference_memory_fusion(
@@ -302,11 +340,7 @@ def specific_reference_memory_fusion(
             eligible &= np.isfinite(best_local_quality) & (local_gain >= minimum_quality_gain)
 
             if len(source_images) >= 2:
-                first_lab = cv2.cvtColor(source_images[0], cv2.COLOR_BGR2LAB).astype(np.float32)
-                second_lab = cv2.cvtColor(source_images[1], cv2.COLOR_BGR2LAB).astype(np.float32)
-                pair_gap = np.mean(np.abs(first_lab - second_lab), axis=2)
-                pair_valid = valid_stack[0] & valid_stack[1]
-                eligible &= pair_valid & (pair_gap <= agreement_colour_threshold)
+                eligible &= _agreement_mask(source_images, valid_stack, agreement_colour_threshold)
             else:
                 only = selected[0]
                 if only.similarity < 0.82 or only.agreement < 0.82:
