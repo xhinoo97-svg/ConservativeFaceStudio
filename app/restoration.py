@@ -60,6 +60,47 @@ def quality_enhance(image: np.ndarray, clip_limit: float = 1.7, blend: float = 0
     return cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
 
 
+def detail_reliability_map(
+    image: np.ndarray,
+    occlusion_mask: np.ndarray | None = None,
+) -> np.ndarray:
+    """Estimate where the *observed input* contains recoverable local detail.
+
+    This map is computed before learned deblurring.  It is deliberately separate from
+    the occlusion mask: a blurred face is not an occlusion, but it must not become a
+    high-confidence donor merely because a restoration network later sharpens it.
+    The score uses only inexpensive local statistics (standard deviation, Sobel and
+    Laplacian energy) so it is safe on the target 8th-generation Intel laptop.
+    """
+    source = _ensure_bgr(image)
+    gray = cv2.cvtColor(source, cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    mean = cv2.GaussianBlur(gray, (0, 0), 3.0)
+    mean_sq = cv2.GaussianBlur(gray * gray, (0, 0), 3.0)
+    local_std = np.sqrt(np.maximum(mean_sq - mean * mean, 0.0))
+
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    gradient = cv2.GaussianBlur(cv2.magnitude(gx, gy), (0, 0), 2.0)
+    lap = cv2.GaussianBlur(np.abs(cv2.Laplacian(gray, cv2.CV_32F, ksize=3)), (0, 0), 2.0)
+
+    # Fixed scaling is intentional.  Per-image normalization would make a completely
+    # blurred face look "reliable" relative to itself.  Values below ~3 are treated
+    # as essentially detail-free; 20+ corresponds to strong observed structure.
+    energy = 0.55 * local_std + 0.30 * (gradient / 4.0) + 0.15 * (lap / 4.0)
+    reliability = np.clip((energy - 3.0) / 17.0, 0.0, 1.0)
+
+    if occlusion_mask is not None:
+        mask = np.asarray(occlusion_mask)
+        if mask.ndim == 3:
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        if mask.shape != gray.shape:
+            raise ValueError("Occlusion mask non compatibile con l'immagine")
+        reliability[mask > 0] = 0.0
+
+    return np.rint(reliability * 255.0).astype(np.uint8)
+
+
 def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
     """Conservative multi-signal candidate mask for stickers/scribbles/obscuration.
 
@@ -82,17 +123,11 @@ def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
     extreme = ((gray < 18) | (gray > 242)).astype(np.uint8) * 255
     flat = ((variance < 10) & (saturation < 24)).astype(np.uint8) * 255
 
-    # Coloured stickers/paint tend to be strong local chroma outliers. Work in LAB
-    # and compare only chroma, so a normal illumination gradient is not mistaken
-    # for an occlusion.
     lab_f = lab.astype(np.float32)
     local_lab = cv2.GaussianBlur(lab_f, (0, 0), 5.0)
     chroma_delta = np.linalg.norm(lab_f[:, :, 1:3] - local_lab[:, :, 1:3], axis=2)
     chroma_outlier = ((chroma_delta > 22.0) & (saturation > 48)).astype(np.uint8) * 255
 
-    # Thin pen/marker strokes are often local luminance outliers with a dense edge
-    # response. Requiring both properties avoids treating ordinary facial contours
-    # as a sticker proposal in isolation.
     local_luma_delta = cv2.absdiff(gray, local_mean)
     edges = cv2.Canny(gray, 70, 150)
     edge_band = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
@@ -102,9 +137,6 @@ def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
     mask = cv2.bitwise_or(mask, chroma_outlier)
     mask = cv2.bitwise_or(mask, scribble)
 
-    # Join fragmented marker strokes while keeping the proposal local. Very small
-    # isolated noise is removed; subsequent reference consensus remains the final
-    # gate before any pixel can be replaced.
     close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     open_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, close_kernel)
