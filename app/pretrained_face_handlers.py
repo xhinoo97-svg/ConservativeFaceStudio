@@ -4,6 +4,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 
 from app.alignment import align_from_points, align_to_reference
@@ -126,6 +127,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
     def partial_aware_align_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
         aligned: list[np.ndarray] = []
         support_masks: list[np.ndarray] = []
+        reliability_maps: list[np.ndarray] = []
         diagnostics: list[dict[str, Any]] = []
         runtime_source_indices: list[int] = []
         original_source_indices: list[int] = []
@@ -140,6 +142,8 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
         runtime_order = executor.workspace.metadata.get("runtime_source_order")
         if not isinstance(runtime_order, list) or len(runtime_order) != len(executor.workspace.references) + 1:
             runtime_order = list(range(len(executor.workspace.references) + 1))
+        preflight_reliability = executor.workspace.metadata.get("preflight_detail_reliability_maps")
+        reliability_threshold = int(np.clip(executor.workspace.metadata.get("detail_reliability_threshold", 40), 0, 255))
         rejected_identity = 0
         rejected_geometry = 0
 
@@ -186,16 +190,39 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 })
                 continue
 
-            support = warped_support_mask(reference.shape[:2], result.matrix, executor.workspace.primary.shape[:2])
+            target_h, target_w = executor.workspace.primary.shape[:2]
+            support = warped_support_mask(reference.shape[:2], result.matrix, (target_h, target_w))
+            source_reliability = None
+            if isinstance(preflight_reliability, list) and index + 1 < len(preflight_reliability):
+                candidate = np.asarray(preflight_reliability[index + 1])
+                if candidate.shape == reference.shape[:2]:
+                    source_reliability = candidate.astype(np.uint8, copy=False)
+            if source_reliability is None:
+                # Fail closed for evidence quality: unknown pre-deblur reliability may
+                # still support geometry, but cannot donate identity-critical texture.
+                aligned_reliability = np.zeros((target_h, target_w), dtype=np.uint8)
+            else:
+                aligned_reliability = cv2.warpAffine(
+                    source_reliability,
+                    result.matrix,
+                    (target_w, target_h),
+                    flags=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_CONSTANT,
+                    borderValue=0,
+                ).astype(np.uint8)
+                aligned_reliability[support == 0] = 0
+
             original_index = int(runtime_order[index + 1])
             aligned.append(result.image)
             support_masks.append(support)
+            reliability_maps.append(aligned_reliability)
             runtime_source_indices.append(index)
             original_source_indices.append(original_index)
             aligned_scores.append(None if score is None else float(score))
             full_identity_verified = score is not None and float(score) >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
             aligned_verified.append(bool(full_identity_verified))
             partial_geometry_verified.append(bool(score is None and geometry_verified))
+            reliable_fraction = float(np.mean((support > 0) & (aligned_reliability >= reliability_threshold)))
             diagnostics.append({
                 "source_index": index,
                 "original_source_index": original_index,
@@ -204,6 +231,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 "inlier_ratio": result.inlier_ratio,
                 "reprojection_error": result.reprojection_error,
                 "support_fraction": float(np.mean(support > 0)),
+                "reliable_support_fraction": reliable_fraction,
                 "identity_score": None if score is None else float(score),
                 "identity_status": "sface_verified" if full_identity_verified else "partial_geometry_verified",
             })
@@ -212,6 +240,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
         executor.workspace.metadata["aligned_reference_source_indices"] = runtime_source_indices
         executor.workspace.metadata["aligned_reference_original_source_indices"] = original_source_indices
         executor.workspace.metadata["aligned_reference_support_masks"] = support_masks
+        executor.workspace.metadata["aligned_reference_detail_reliability_maps"] = reliability_maps
         executor.workspace.metadata["aligned_reference_identity_scores"] = aligned_scores
         executor.workspace.metadata["aligned_reference_identity_verified"] = aligned_verified
         executor.workspace.metadata["aligned_reference_partial_geometry_verified"] = partial_geometry_verified
@@ -219,8 +248,15 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
         bank_summary: dict[str, list[dict[str, Any]]] = {}
         bbox = executor.workspace.metadata.get("primary_bbox")
         if support_masks and primary_points is not None and bbox is not None:
+            evidence_support_masks = [
+                cv2.bitwise_and(
+                    support,
+                    np.where(reliability >= reliability_threshold, 255, 0).astype(np.uint8),
+                )
+                for support, reliability in zip(support_masks, reliability_maps)
+            ]
             bank = build_component_bank(
-                support_masks,
+                evidence_support_masks,
                 np.asarray(primary_points, dtype=np.float32),
                 tuple(int(v) for v in bbox),
                 source_indices=original_source_indices,
@@ -241,6 +277,8 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 "runtime_source_indices": runtime_source_indices,
                 "original_source_indices": original_source_indices,
                 "support_masks_created": len(support_masks),
+                "pre_deblur_reliability_maps_propagated": len(reliability_maps),
+                "detail_reliability_threshold": reliability_threshold,
                 "component_bank_regions": {name: len(items) for name, items in bank_summary.items()},
                 "diagnostics": diagnostics,
             },
