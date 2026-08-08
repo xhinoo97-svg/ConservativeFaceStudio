@@ -93,3 +93,42 @@ def test_untrusted_reference_is_rejected() -> None:
     assert details["applied"] is False
     assert np.array_equal(result, damaged)
     assert not np.any(provenance)
+
+
+def test_preflight_accepted_identity_remains_trusted_after_runtime_reorder() -> None:
+    clean, damaged, target = _scene()
+    workspace = _workspace(damaged, [clean], target)
+    workspace.metadata.pop("aligned_reference_original_source_indices", None)
+    workspace.metadata["aligned_reference_identity_verified"] = []
+    workspace.metadata["aligned_reference_partial_geometry_verified"] = []
+    workspace.metadata["aligned_reference_source_indices"] = [0]
+    workspace.metadata["runtime_source_order"] = [0, 2]
+    workspace.metadata["preflight_candidates"] = [
+        {"source_index": 0, "accepted_identity": True},
+        {"source_index": 1, "accepted_identity": False},
+        {"source_index": 2, "accepted_identity": True},
+    ]
+    result, provenance, details = repair_observed_target(workspace, damaged, maximum_face_fraction=1.0)
+    assert details["applied"] is True
+    assert details["original_source_indices"] == [2]
+    assert np.array_equal(result[target > 0], clean[target > 0])
+    assert np.all(provenance[target > 0] == 2)
+
+
+def test_same_canvas_primary_anchor_trusts_original_reference_without_legacy_flag() -> None:
+    clean, damaged, target = _scene()
+    workspace = _workspace(damaged, [clean], target)
+    workspace.metadata.pop("aligned_reference_original_source_indices", None)
+    workspace.metadata["aligned_reference_identity_verified"] = []
+    workspace.metadata["aligned_reference_partial_geometry_verified"] = []
+    workspace.metadata["aligned_reference_source_indices"] = [0]
+    workspace.metadata["runtime_source_order"] = [0, 3]
+    workspace.metadata["same_canvas_primary_anchor"] = {
+        "applied": True,
+        "matched_original_reference_indices": [3],
+    }
+    result, provenance, details = repair_observed_target(workspace, damaged, maximum_face_fraction=1.0)
+    assert details["applied"] is True
+    assert details["original_source_indices"] == [3]
+    assert np.array_equal(result[target > 0], clean[target > 0])
+    assert np.all(provenance[target > 0] == 3)
