@@ -11,6 +11,7 @@ from app.case_aware_runtime import install_case_aware_runtime
 from app.conservative_observed_runtime import install_conservative_observed_runtime
 from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.observed_restoration_policy import apply_observed_restoration_policy
+from app.observed_target_repair_runtime import install_observed_target_repair_runtime
 from app.partial_reference_runtime import install_partial_reference_runtime
 from app.pipeline import BlockKind
 from app.preflight import preprocess_and_select_front_base
@@ -90,6 +91,7 @@ class AutomaticPipelineRunner:
         install_case_aware_runtime(self.executor, model_paths)
         install_conservative_observed_runtime(self.executor)
         install_same_canvas_repair_runtime(self.executor)
+        install_observed_target_repair_runtime(self.executor)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
