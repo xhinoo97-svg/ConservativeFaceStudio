@@ -75,21 +75,26 @@ def verify_same_canvas_observed_source(
         except (TypeError, ValueError):
             return None
 
-    # Sobel support extends beyond an occlusion by a few pixels. Exclude a narrow
-    # verification-only ring so a real sticker edge does not look like a geometric
-    # misalignment. The original support mask is returned unchanged for later repair.
+    # Sobel support extends beyond an occlusion and beyond the artificial black border
+    # of a sparse component sheet. Exclude both narrow rings only while verifying the
+    # identity transform. The original observed support is returned unchanged for repair.
     boundary_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     primary_blocked = cv2.dilate(primary_occ, boundary_kernel) > 0
     reference_blocked = cv2.dilate(reference_occ, boundary_kernel) > 0
+    observed_interior = cv2.erode(
+        observed.astype(np.uint8) * 255,
+        boundary_kernel,
+        iterations=1,
+    ) > 0
 
     comparable = (
-        observed
+        observed_interior
         & face
         & ~primary_blocked
         & ~reference_blocked
         & (np.max(primary, axis=2) > 2)
     )
-    observed_face_pixels = int(np.count_nonzero(observed & face & ~reference_blocked))
+    observed_face_pixels = int(np.count_nonzero(observed_interior & face & ~reference_blocked))
     comparable_pixels = int(np.count_nonzero(comparable))
     minimum_comparable = max(96, int(round(observed_face_pixels * 0.10)))
     if observed_face_pixels <= 0 or comparable_pixels < minimum_comparable:
