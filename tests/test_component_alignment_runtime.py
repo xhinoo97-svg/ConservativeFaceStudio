@@ -53,3 +53,30 @@ def test_component_micro_refinement_abstains_on_large_shift() -> None:
         minimum_response=0.02,
     )
     assert not result.accepted
+
+
+def test_component_micro_refinement_abstains_on_blur_induced_subpixel_jitter() -> None:
+    """Same anatomy at the same coordinates must not be resampled just because it is blurred."""
+    sharp = np.full((128, 128, 3), 28, dtype=np.uint8)
+    cv2.ellipse(sharp, (64, 64), (34, 44), 0, 0, 360, (142, 168, 194), -1)
+    cv2.circle(sharp, (50, 55), 5, (24, 28, 34), -1)
+    cv2.circle(sharp, (78, 55), 5, (24, 28, 34), -1)
+    cv2.line(sharp, (64, 58), (62, 77), (80, 95, 112), 3)
+    blurred = cv2.GaussianBlur(sharp, (9, 9), 2.2)
+    support = np.full((128, 128), 255, dtype=np.uint8)
+    component = np.zeros((128, 128), dtype=np.uint8)
+    cv2.ellipse(component, (64, 64), (34, 44), 0, 0, 360, 255, -1)
+
+    result = refine_component_translation(
+        sharp,
+        blurred,
+        support,
+        component,
+        maximum_shift=5.0,
+        minimum_response=0.02,
+    )
+
+    assert not result.accepted
+    assert result.dx == 0.0
+    assert result.dy == 0.0
+    assert np.array_equal(result.image, sharp)
