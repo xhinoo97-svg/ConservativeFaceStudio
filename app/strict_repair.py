@@ -71,6 +71,17 @@ def _local_sharpness(image: np.ndarray) -> np.ndarray:
     return cv2.GaussianBlur(laplacian, (0, 0), 1.5)
 
 
+def _finite_mean_last_axis(values: np.ndarray) -> np.ndarray:
+    """Mean over the last axis without RuntimeWarning on all-NaN pixels."""
+    array = np.asarray(values, dtype=np.float32)
+    finite = np.isfinite(array)
+    count = np.sum(finite, axis=-1)
+    total = np.sum(np.where(finite, array, 0.0), axis=-1, dtype=np.float32)
+    result = np.full(count.shape, np.nan, dtype=np.float32)
+    np.divide(total, count, out=result, where=count > 0)
+    return result
+
+
 def reference_consensus_occlusion_mask(
     primary: np.ndarray,
     references: list[np.ndarray],
@@ -128,8 +139,8 @@ def reference_consensus_occlusion_mask(
         median = np.nanmedian(values, axis=0)
         mad = np.nanmedian(np.abs(values - median[None, ...]), axis=0)
     valid_count = np.sum(valid, axis=0)
-    primary_difference = np.nanmean(np.abs(base_lab - median), axis=2)
-    agreement = np.nanmean(mad, axis=2)
+    primary_difference = _finite_mean_last_axis(np.abs(base_lab - median))
+    agreement = _finite_mean_last_axis(mad)
 
     if len(references) == 1:
         candidate = hint & (primary_difference >= difference_threshold) & (valid_count >= 1)
