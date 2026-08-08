@@ -17,7 +17,7 @@ concurrency:
 jobs:
   test-and-build:
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 70
     env:
       PYTHONPATH: ${{ github.workspace }}
       QT_QPA_PLATFORM: offscreen
@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q app tests scripts
-          python -c "import app; import cv2; import numpy; import onnxruntime; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; import app.opencv_lama; import app.reference_inpainting; import app.pretrained_inpaint_handler; from app.model_catalog import all_model_manifests; from app.pretrained_values import validate_defaults; from app.model_registry import validate_manifest; [validate_manifest(m) for m in all_model_manifests()]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
+          python -c "import app; import cv2; import numpy; import onnxruntime; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.practical_benchmark; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; import app.opencv_lama; import app.reference_inpainting; import app.pretrained_inpaint_handler; from app.model_catalog import all_model_manifests; from app.pretrained_values import validate_defaults; from app.model_registry import validate_manifest; [validate_manifest(m) for m in all_model_manifests()]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
 
       - name: Run tests
         run: python -m pytest -q
@@ -55,6 +55,10 @@ jobs:
         shell: pwsh
         run: python -m app.benchmark --width 768 --height 512 --output benchmark-windows-ci.json
 
+      - name: Practical public-portrait benchmark
+        shell: pwsh
+        run: python -m app.practical_benchmark --output practical-benchmark --cache .benchmark-cache/public-portraits --limit 10 --size 320 --profile quick --fail-on-errors
+
       - name: Export model registry
         shell: pwsh
         run: python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-registry.json', all_model_manifests())"
@@ -64,6 +68,7 @@ jobs:
         run: |
           python -m pip cache purge
           if (Test-Path '.pytest_cache') { Remove-Item '.pytest_cache' -Recurse -Force }
+          if (Test-Path '.benchmark-cache') { Remove-Item '.benchmark-cache' -Recurse -Force }
           Get-PSDrive -PSProvider FileSystem | Format-Table Name,Used,Free -AutoSize
 
       - name: Build Windows executable
@@ -158,4 +163,7 @@ jobs:
           path: |
             benchmark-windows-ci.json
             validation-report.json
+            practical-benchmark/practical-benchmark.json
+            practical-benchmark/practical-benchmark.csv
+            practical-benchmark/*/*/diff-heatmap.png
           retention-days: 14
