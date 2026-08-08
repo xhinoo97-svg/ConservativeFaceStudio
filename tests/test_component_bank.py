@@ -61,6 +61,32 @@ def test_component_bank_allows_different_sources_for_different_parts() -> None:
     assert bank["mouth"][0].source_index == 22
 
 
+def test_lower_face_crop_can_supply_mouth_chin_without_claiming_eyes() -> None:
+    shape, landmarks, bbox = _geometry()
+    masks = canonical_component_masks(shape, landmarks, bbox)
+    support = cv2.bitwise_or(masks["mouth"], masks["chin"])
+    support = cv2.bitwise_or(support, masks["philtrum"])
+    bank = build_component_bank(
+        [support],
+        landmarks,
+        bbox,
+        source_indices=[31],
+        minimum_coverage=0.50,
+    )
+    assert bank["mouth"] and bank["mouth"][0].source_index == 31
+    assert bank["chin"] and bank["chin"][0].source_index == 31
+    assert bank["philtrum"] and bank["philtrum"][0].source_index == 31
+    assert bank["left_eye"] == []
+    assert bank["right_eye"] == []
+
+
+def test_chin_is_not_double_counted_as_broad_jaw_evidence() -> None:
+    shape, landmarks, bbox = _geometry()
+    masks = canonical_component_masks(shape, landmarks, bbox)
+    overlap = (masks["chin"] > 0) & (masks["jaw"] > 0)
+    assert np.count_nonzero(overlap) == 0
+
+
 def test_component_bank_does_not_claim_unobserved_regions() -> None:
     shape, landmarks, bbox = _geometry()
     empty = np.zeros(shape, dtype=np.uint8)
