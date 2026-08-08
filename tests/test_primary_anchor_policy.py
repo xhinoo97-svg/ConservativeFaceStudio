@@ -40,6 +40,7 @@ def test_restores_imported_primary_when_preflight_selected_clean_same_canvas_ref
     assert workspace.metadata["selected_primary_original_source_index"] == 0
     assert np.array_equal(workspace.primary, damaged)
     assert np.array_equal(workspace.references[0], clean)
+    assert workspace.metadata["same_canvas_primary_anchor"]["matched_original_reference_indices"] == [1]
 
 
 def test_does_not_reanchor_unrelated_same_size_reference() -> None:
@@ -60,7 +61,7 @@ def test_does_not_reanchor_unrelated_same_size_reference() -> None:
     assert np.array_equal(workspace.primary, unrelated)
 
 
-def test_keeps_imported_primary_when_it_is_already_runtime_primary() -> None:
+def test_keeps_imported_primary_and_records_same_canvas_when_already_runtime_primary() -> None:
     clean = _face()
     damaged = clean.copy()
     cv2.rectangle(damaged, (48, 50), (80, 76), (10, 10, 10), -1)
@@ -71,4 +72,9 @@ def test_keeps_imported_primary_when_it_is_already_runtime_primary() -> None:
     decision = restore_imported_primary_for_same_canvas(workspace, [damaged, clean])
 
     assert decision.applied is False
+    assert decision.matched_reference_count == 1
+    assert decision.reason == "already_primary_same_canvas_verified"
     assert np.array_equal(workspace.primary, damaged)
+    evidence = workspace.metadata["same_canvas_primary_anchor"]
+    assert evidence["applied"] is False
+    assert evidence["matched_original_reference_indices"] == [1]
