@@ -60,6 +60,39 @@ def test_specific_memory_uses_observed_pixels_and_keeps_provenance_exact() -> No
     assert np.count_nonzero(result.confidence_map) == np.count_nonzero(used)
 
 
+def test_specific_memory_fuses_non_overlapping_complementary_support() -> None:
+    clean, landmarks, bbox = _face()
+    primary = cv2.GaussianBlur(clean, (11, 11), 2.8)
+    ref_a = clean.copy()
+    ref_b = clean.copy()
+    masks = [_zeros(clean.shape[:2]) for _ in range(3)]
+
+    support_a = _zeros(clean.shape[:2])
+    support_b = _zeros(clean.shape[:2])
+    support_a[52:82, 45:76] = 255
+    support_b[94:120, 64:98] = 255
+    assert not np.any((support_a > 0) & (support_b > 0))
+
+    result = specific_reference_memory_fusion(
+        [primary, ref_a, ref_b],
+        masks,
+        landmarks,
+        bbox,
+        reference_support_masks=[support_a, support_b],
+        minimum_region_confidence=0.45,
+        minimum_quality_gain=0.001,
+        maximum_replace_fraction=0.50,
+    )
+
+    used = result.provenance_map > 0
+    allowed = (support_a > 0) | (support_b > 0)
+    assert np.any(result.provenance_map == 1)
+    assert np.any(result.provenance_map == 2)
+    assert not np.any(used & ~allowed)
+    assert np.all((result.provenance_map == 1) <= (support_a > 0))
+    assert np.all((result.provenance_map == 2) <= (support_b > 0))
+
+
 def test_specific_memory_abstains_when_references_disagree() -> None:
     clean, landmarks, bbox = _face()
     primary = clean.copy()
