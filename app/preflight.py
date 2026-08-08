@@ -178,6 +178,10 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
     target = str(hardware_policy.get("dnn_target", "cpu")).lower()
     target = "opencl" if target == "opencl" else "cpu"
     face = OpenCVZooFaceEngine(yunet_raw, sface_raw, dnn_target=target)
+    # Keep the already verified YuNet/SFace engine available to identity guardrails
+    # and benchmark metrics. Previously preflight used SFace internally and discarded
+    # the engine, so later reporting silently fell back to the LAB histogram proxy.
+    workspace.metadata["_identity_backend"] = face
     observations = []
     for image in processed:
         try:
