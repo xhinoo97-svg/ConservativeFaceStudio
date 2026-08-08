@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import cv2
 import numpy as np
@@ -20,7 +19,6 @@ class PrimaryAnchorDecision:
 def _same_canvas_match(primary: np.ndarray, reference: np.ndarray) -> bool:
     if primary.shape != reference.shape or primary.ndim != 3 or primary.shape[2] != 3:
         return False
-    shape = primary.shape[:2]
     primary_occ = detect_occlusion_candidates(primary)
     reference_occ = detect_occlusion_candidates(reference)
     observed = (
@@ -61,14 +59,21 @@ def _same_canvas_match(primary: np.ndarray, reference: np.ndarray) -> bool:
     return True
 
 
-def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarray]) -> PrimaryAnchorDecision:
-    """Undo preflight base switching when references are verified same-canvas donors.
+def _record_same_canvas_evidence(workspace, matches: list[int], selected: int, *, applied: bool) -> None:
+    workspace.metadata["same_canvas_primary_anchor"] = {
+        "applied": bool(applied),
+        "matched_original_reference_indices": [int(value) for value in matches],
+        "preflight_selected_source_index": int(selected),
+        "restored_source_index": 0,
+    }
 
-    Preflight may correctly prefer a cleaner reference for general multi-photo portrait
-    reconstruction. For exact same-canvas restoration, however, switching the imported
-    damaged primary reverses donor/target semantics and invalidates damage/provenance
-    bookkeeping. This policy restores source 0 only when raw observed pixels prove that
-    at least one reference shares the same coordinate system.
+
+def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarray]) -> PrimaryAnchorDecision:
+    """Keep imported target semantics and persist verified same-canvas donor evidence.
+
+    Same-canvas verification is useful even when preflight already kept source 0 as the
+    runtime primary. Persisting the matched original reference indices lets later strict
+    repair expand an observed damage seed without re-running or weakening geometry.
     """
     if len(originals) < 2:
         return PrimaryAnchorDecision(False, "no_references", 0, int(workspace.metadata.get("selected_primary_original_source_index", 0)))
@@ -79,17 +84,23 @@ def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarr
 
     matches = [index for index, reference in enumerate(originals[1:], start=1) if _same_canvas_match(originals[0], reference)]
     selected = int(workspace.metadata.get("selected_primary_original_source_index", 0))
-    if not matches or selected == 0:
-        return PrimaryAnchorDecision(False, "already_primary_or_no_same_canvas_match", len(matches), selected)
+    if not matches:
+        return PrimaryAnchorDecision(False, "already_primary_or_no_same_canvas_match", 0, selected)
+
+    if selected == 0:
+        _record_same_canvas_evidence(workspace, matches, selected, applied=False)
+        return PrimaryAnchorDecision(False, "already_primary_same_canvas_verified", len(matches), selected)
 
     runtime = [workspace.primary, *workspace.references]
     order_raw = workspace.metadata.get("runtime_source_order")
     if not isinstance(order_raw, list) or len(order_raw) != len(runtime):
+        _record_same_canvas_evidence(workspace, matches, selected, applied=False)
         return PrimaryAnchorDecision(False, "missing_runtime_source_order", len(matches), selected)
     order = [int(value) for value in order_raw]
     try:
         primary_slot = order.index(0)
     except ValueError:
+        _record_same_canvas_evidence(workspace, matches, selected, applied=False)
         return PrimaryAnchorDecision(False, "imported_primary_missing_from_runtime", len(matches), selected)
 
     reordered_slots = [primary_slot, *[slot for slot in range(len(runtime)) if slot != primary_slot]]
@@ -105,10 +116,5 @@ def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarr
         if isinstance(values, list) and len(values) == len(runtime):
             workspace.metadata[key] = [values[slot] for slot in reordered_slots]
 
-    workspace.metadata["same_canvas_primary_anchor"] = {
-        "applied": True,
-        "matched_original_reference_indices": matches,
-        "preflight_selected_source_index": selected,
-        "restored_source_index": 0,
-    }
+    _record_same_canvas_evidence(workspace, matches, selected, applied=True)
     return PrimaryAnchorDecision(True, "verified_same_canvas_donor_semantics", len(matches), selected)
