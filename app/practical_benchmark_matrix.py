@@ -25,9 +25,6 @@ from app.practical_benchmark import (
 )
 
 
-# Real same-identity references with a different session/pose. Both are NASA works
-# documented as public domain on Wikimedia Commons. They are downloaded at benchmark
-# time and are never redistributed with the application.
 REAL_POSE_REFERENCES: dict[str, PortraitSource] = {
     "mae_jemison": PortraitSource(
         "mae_jemison_pose",
@@ -141,13 +138,20 @@ def make_extended_scenarios(clean: np.ndarray) -> tuple[Scenario, ...]:
     central_damage = _rect_mask((h, w), 0.28, 0.30, 0.72, 0.78)
     central_opaque = _opaque_damage(clean, central_damage)
 
+    # Every case labelled recoverable is now evidence-complete. A single component
+    # reference is evaluated on damage inside that component, rather than asking it to
+    # reconstruct unrelated central-face pixels it never observed.
+    eye_damage = cv2.bitwise_and(central_damage, eye_band)
+    nose_damage = cv2.bitwise_and(central_damage, nose)
+    mouth_damage = cv2.bitwise_and(central_damage, mouth_chin)
+
     return (
         Scenario("defocus_mild_single", _disk_blur(clean, 3), (), full, True),
         Scenario("defocus_heavy_single", _disk_blur(clean, 7), (), full, True),
         Scenario("half_face_opaque_single", half_damaged, (), left_half, False, True),
-        Scenario("eye_only_reference", central_opaque, (_partial_reference(clean, eye_band),), central_damage, True),
-        Scenario("nose_only_reference", central_opaque, (_partial_reference(clean, nose),), central_damage, True),
-        Scenario("mouth_chin_only_reference", central_opaque, (_partial_reference(clean, mouth_chin),), central_damage, True),
+        Scenario("eye_only_reference", _opaque_damage(clean, eye_damage), (_partial_reference(clean, eye_band),), eye_damage, True),
+        Scenario("nose_only_reference", _opaque_damage(clean, nose_damage), (_partial_reference(clean, nose),), nose_damage, True),
+        Scenario("mouth_chin_only_reference", _opaque_damage(clean, mouth_damage), (_partial_reference(clean, mouth_chin),), mouth_damage, True),
         Scenario("two_partial_crops", central_opaque, (_partial_reference(clean, upper_crop), _partial_reference(clean, lower_crop)), central_damage, True),
         Scenario("multi_reference_complementary", central_opaque, (_partial_reference(clean, upper_crop), _partial_reference(clean, lower_crop), _partial_reference(clean, center_crop)), central_damage, True),
     )
@@ -157,7 +161,10 @@ def _real_pose_scenario(clean: np.ndarray, reference: np.ndarray) -> Scenario:
     h, w = clean.shape[:2]
     central_damage = _rect_mask((h, w), 0.28, 0.30, 0.72, 0.78)
     central_opaque = _opaque_damage(clean, central_damage)
-    return Scenario("real_same_identity_pose_reference", central_opaque, (reference,), central_damage, True)
+    # A separately photographed pose is valid identity evidence but is not pixel-exact
+    # ground truth for this photograph, so an exact >=95 reconstruction claim would be
+    # invalid. It remains in the matrix as a realistic alignment/identity stress case.
+    return Scenario("real_same_identity_pose_reference", central_opaque, (reference,), central_damage, False)
 
 
 def run_matrix(output: Path, *, cache: Path, limit: int = 10, size: int = 320) -> dict[str, Any]:
@@ -176,11 +183,11 @@ def run_matrix(output: Path, *, cache: Path, limit: int = 10, size: int = 320) -
 
     report: dict[str, Any] = {
         "format": "ConservativeFaceStudio extended practical scenario matrix",
-        "version": 2,
+        "version": 3,
         "portrait_count": len(sources),
         "base_scenario_count_per_portrait": 8,
         "real_pose_scenario_identity_count": len(pose_sources),
-        "note": "Scores remain decomposed metrics; no universal 95% claim. Opaque single-image half-face cases are explicitly non-recoverable ground-truth cases. Real-pose scenarios use separately photographed public-domain images of the same identity, never synthetic crops of the ground truth.",
+        "note": "Recoverable=true is reserved for cases whose benchmark damage is fully supported by supplied source evidence. Opaque single-image half-face cases are non-recoverable. Different-session real-pose references remain realistic identity/alignment stress cases but are not pixel-exact target95 cases.",
         "sources": sources,
         "real_pose_sources": pose_sources,
         "real_pose_download_errors": pose_download_errors,
@@ -189,7 +196,7 @@ def run_matrix(output: Path, *, cache: Path, limit: int = 10, size: int = 320) -
         "cases": [],
     }
 
-    for portrait_index, item in enumerate(sources):
+    for item in sources:
         image = cv2.imread(item["local_path"], cv2.IMREAD_COLOR)
         if image is None:
             report["cases"].append({"portrait": item["key"], "error": "decode failed"})
@@ -219,6 +226,7 @@ def run_matrix(output: Path, *, cache: Path, limit: int = 10, size: int = 320) -
 
     valid = [item for item in report["cases"] if "conservative_recovery_score" in item]
     errors = [item for item in report["cases"] if "error" in item]
+    applicable = [item for item in valid if item.get("target95_applicable")]
     by_scenario: dict[str, dict[str, float | int | None]] = {}
     names = sorted({str(item.get("scenario")) for item in valid if item.get("scenario")})
     for name in names:
@@ -233,6 +241,9 @@ def run_matrix(output: Path, *, cache: Path, limit: int = 10, size: int = 320) -
     report["summary"] = {
         "completed_cases": len(valid),
         "error_cases": len(errors),
+        "target95_applicable_count": len(applicable),
+        "target95_pass_count": int(sum(item.get("target95_passed") is True for item in applicable)),
+        "target95_pass_rate": float(sum(item.get("target95_passed") is True for item in applicable) / len(applicable)) if applicable else None,
         "by_scenario": by_scenario,
     }
 
@@ -241,7 +252,8 @@ def run_matrix(output: Path, *, cache: Path, limit: int = 10, size: int = 320) -
         "portrait", "scenario", "recoverable", "reference_count", "conservative_recovery_score",
         "psnr_before", "psnr_after", "ssim_after", "damage_mae_before", "damage_mae_after",
         "identity_similarity", "landmark_nme", "occlusion_iou", "occlusion_precision", "occlusion_recall",
-        "reference_fraction", "symmetry_fraction", "generated_fraction", "abstention_correct", "error",
+        "reference_fraction", "symmetry_fraction", "generated_fraction", "target95_applicable", "target95_passed",
+        "abstention_correct", "error",
     ]
     with (output / "practical-matrix.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
