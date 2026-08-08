@@ -43,12 +43,12 @@ def canonical_component_masks(
     landmarks5: np.ndarray,
     bbox: tuple[int, int, int, int],
 ) -> dict[str, np.ndarray]:
-    """Build conservative facial-component ROIs from observed five-point geometry.
+    """Build tight component ROIs for full and partial reference photographs.
 
-    Component masks intentionally overlap only slightly.  A crop containing one
-    component must not become evidence for a neighbouring component merely because
-    broad anatomical ROIs intersect.  The regions are therefore tighter than the
-    display/face-parsing regions used elsewhere in the application.
+    Regions are deliberately small. A crop showing lips, nose or one eye may donate
+    only that observed component instead of becoming evidence for a broad face area.
+    The lower face is split into philtrum, mouth, chin and jaw because real restoration
+    sets frequently contain close crops that show only these structures.
     """
     height, width = (int(v) for v in image_shape)
     points = np.asarray(landmarks5, dtype=np.float32)
@@ -87,8 +87,9 @@ def canonical_component_masks(
     )
     masks["nose"] = nose_mask
 
+    mouth_center_array = (left_mouth + right_mouth) * 0.5
+    mouth_center = tuple(np.round(mouth_center_array).astype(int))
     mouth_mask = blank()
-    mouth_center = tuple(np.round((left_mouth + right_mouth) * 0.5).astype(int))
     cv2.ellipse(
         mouth_mask,
         mouth_center,
@@ -101,8 +102,44 @@ def canonical_component_masks(
     )
     masks["mouth"] = mouth_mask
 
+    # The philtrum is useful when the nose and lips are visible in a lower-face crop
+    # even though neither eye is present. Keep it narrow so it cannot donate cheek skin.
+    philtrum = blank()
+    philtrum_top = int(round(nose[1] + 0.10 * h))
+    philtrum_bottom = int(round(mouth_center_array[1] - 0.07 * h))
+    philtrum_half_width = max(3, int(round(0.16 * mouth_distance)))
+    if philtrum_bottom > philtrum_top:
+        cv2.rectangle(
+            philtrum,
+            (max(0, int(round(nose[0])) - philtrum_half_width), max(0, philtrum_top)),
+            (min(width - 1, int(round(nose[0])) + philtrum_half_width), min(height - 1, philtrum_bottom)),
+            255,
+            -1,
+        )
+    masks["philtrum"] = philtrum
+
+    # A dedicated chin ROI makes mouth/chin-only references useful without treating
+    # their complete lower crop as evidence for the jaw line.
+    chin = blank()
+    chin_top = int(round(mouth_center_array[1] + 0.10 * h))
+    chin_bottom = min(height - 1, y + int(round(0.93 * h)))
+    chin_half_width = max(6, int(round(0.42 * w)))
+    center_x = int(round(mouth_center_array[0]))
+    if chin_bottom > chin_top:
+        cv2.ellipse(
+            chin,
+            (center_x, int(round((chin_top + chin_bottom) * 0.5))),
+            (chin_half_width, max(4, int(round((chin_bottom - chin_top) * 0.52)))),
+            0,
+            0,
+            360,
+            255,
+            -1,
+        )
+    masks["chin"] = chin
+
     eye_mid_y = float((left_eye[1] + right_eye[1]) * 0.5)
-    mouth_mid_y = float((left_mouth[1] + right_mouth[1]) * 0.5)
+    mouth_mid_y = float(mouth_center_array[1])
     face_mid_x = float((left_eye[0] + right_eye[0]) * 0.5)
 
     for name, x1, x2 in (
@@ -134,6 +171,8 @@ def canonical_component_masks(
         255,
         -1,
     )
+    # Do not double-count the central chin as broad jaw evidence.
+    jaw[chin > 0] = 0
     masks["jaw"] = jaw
     return masks
 
