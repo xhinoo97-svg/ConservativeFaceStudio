@@ -99,13 +99,13 @@ def reference_consensus_occlusion_mask(
 ) -> np.ndarray:
     """Trova coperture solo quando foto reali allineate supportano la correzione.
 
-    Con un solo riferimento richiede anche la maschera euristica. Con almeno due
-    riferimenti accetta differenze forti soltanto quando i riferimenti concordano.
-    Rileva inoltre blur locale della primaria quando almeno due riferimenti concordano
-    su struttura nitida nella stessa zona. Questo evita di trattare un semplice volto
-    morbido come occlusione: il deficit deve essere relativo a fotografie della stessa
-    persona, localmente allineate e non mascherate. Se l'area candidata e troppo grande,
-    il metodo si astiene anziche modificare una porzione estesa del volto.
+    Un pixel osservato da un solo riferimento parziale puo confermare una proposta
+    euristica della primaria, ma non puo creare da solo una nuova regione. Dove due o
+    piu riferimenti sono osservati, resta obbligatorio il loro accordo. Il blur locale
+    continua a richiedere almeno due riferimenti concordanti e nitidi. In questo modo
+    reference complementari possono cooperare senza trasformare una singola crop in
+    evidenza sufficiente per sostituzioni non richieste. Se l'area candidata e troppo
+    grande, il metodo si astiene anziche modificare una porzione estesa del volto.
     """
     base = _validate_bgr(primary)
     if not references:
@@ -146,10 +146,16 @@ def reference_consensus_occlusion_mask(
         candidate = hint & (primary_difference >= difference_threshold) & (valid_count >= 1)
     else:
         reference_agreement = (agreement <= agreement_threshold) & (valid_count >= 2)
-        candidate = reference_agreement & (
+        single_observer_hint = (
+            hint
+            & (valid_count == 1)
+            & (primary_difference >= difference_threshold)
+        )
+        consensus_candidate = reference_agreement & (
             (hint & (primary_difference >= difference_threshold))
             | (primary_difference >= strong_difference_threshold)
         )
+        candidate = single_observer_hint | consensus_candidate
 
         base_sharpness = _local_sharpness(base)
         sharp_stack = np.stack([_local_sharpness(item) for item in references], axis=0)
