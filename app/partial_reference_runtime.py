@@ -49,7 +49,19 @@ def _merge_frozen_primary_hint(workspace) -> int:
     return added
 
 
-def _effective_masks(workspace) -> tuple[list[np.ndarray] | None, int, int]:
+def _effective_masks(
+    workspace,
+    *,
+    gate_low_detail: bool = True,
+) -> tuple[list[np.ndarray] | None, int, int]:
+    """Build masks that never expose pixels outside a reference's observed footprint.
+
+    Low local detail is useful as a texture-quality gate for region-memory fusion, but
+    it is not evidence that a photographed pixel is invalid. In direct occlusion
+    repair, a smooth cheek pixel is still an observed donor and must remain eligible.
+    Therefore callers can disable only the low-detail gate while retaining support and
+    actual occlusion masks.
+    """
     references = list(workspace.aligned_references)
     if not references:
         return None, 0, 0
@@ -68,10 +80,6 @@ def _effective_masks(workspace) -> tuple[list[np.ndarray] | None, int, int]:
 
     reliability_threshold = int(np.clip(workspace.metadata.get("detail_reliability_threshold", 40), 0, 255))
 
-    # Prefer the maps frozen on the original photographs and geometrically propagated
-    # during alignment. Recomputing after NAFNet would incorrectly turn network-created
-    # sharpness into observed evidence. The fallback exists only for old projects that
-    # predate the preflight evidence maps.
     stored_reliability = workspace.metadata.get("aligned_reference_detail_reliability_maps")
     if isinstance(stored_reliability, list) and len(stored_reliability) == len(references):
         reliability_maps = []
@@ -104,8 +112,11 @@ def _effective_masks(workspace) -> tuple[list[np.ndarray] | None, int, int]:
         unsupported = cv2.bitwise_not(observed)
         low_detail = np.where((observed > 0) & (reliability < reliability_threshold), 255, 0).astype(np.uint8)
         support_gated_pixels += int(np.count_nonzero((unsupported > 0) & (existing == 0)))
-        low_detail_gated_pixels += int(np.count_nonzero((low_detail > 0) & (existing == 0)))
-        blocked = cv2.bitwise_or(unsupported, low_detail)
+        if gate_low_detail:
+            low_detail_gated_pixels += int(np.count_nonzero((low_detail > 0) & (existing == 0)))
+            blocked = cv2.bitwise_or(unsupported, low_detail)
+        else:
+            blocked = unsupported
         effective.append(cv2.bitwise_or(existing, blocked))
     return effective, support_gated_pixels, low_detail_gated_pixels
 
@@ -142,8 +153,16 @@ def _expand_verified_full_reference_hint(workspace) -> dict[str, Any]:
 
 
 @contextmanager
-def _temporary_partial_gate(workspace, *, disable_second_identity_gate: bool) -> Iterator[tuple[bool, int, int]]:
-    effective, gated_pixels, low_detail_pixels = _effective_masks(workspace)
+def _temporary_partial_gate(
+    workspace,
+    *,
+    disable_second_identity_gate: bool,
+    gate_low_detail: bool,
+) -> Iterator[tuple[bool, int, int]]:
+    effective, gated_pixels, low_detail_pixels = _effective_masks(
+        workspace,
+        gate_low_detail=gate_low_detail,
+    )
     old_masks = workspace.occlusion_masks
     old_identity = workspace.metadata.get("reference_identity_verification_available")
     applied = effective is not None
@@ -162,7 +181,7 @@ def _temporary_partial_gate(workspace, *, disable_second_identity_gate: bool) ->
 
 
 def install_partial_reference_runtime(executor) -> None:
-    """Make blocks 7/8 respect observed footprint and original-detail reliability."""
+    """Make blocks 7/8 respect observed footprint and stage-appropriate quality gates."""
     for kind in (BlockKind.REGION_SELECT, BlockKind.INPAINT):
         original = executor._handlers.get(kind)
         if original is None:
@@ -181,9 +200,11 @@ def install_partial_reference_runtime(executor) -> None:
                     if block_kind is BlockKind.INPAINT
                     else {"eligible": False, "reason": "not_inpaint", "added_pixels": 0}
                 )
+                direct_observed_repair = block_kind is BlockKind.INPAINT
                 with _temporary_partial_gate(
                     executor.workspace,
-                    disable_second_identity_gate=block_kind is BlockKind.INPAINT,
+                    disable_second_identity_gate=direct_observed_repair,
+                    gate_low_detail=not direct_observed_repair,
                 ) as (applied, gated_pixels, low_detail_pixels):
                     result = wrapped(block, parameters)
                 details = dict(result.details)
@@ -192,9 +213,10 @@ def install_partial_reference_runtime(executor) -> None:
                         "partial_reference_support_gate": bool(applied),
                         "unsupported_reference_pixels_blocked": int(gated_pixels),
                         "low_detail_reference_pixels_blocked": int(low_detail_pixels),
+                        "low_detail_gate_applied": not direct_observed_repair,
                         "detail_reliability_threshold": int(executor.workspace.metadata.get("detail_reliability_threshold", 40)),
                         "detail_reliability_source": str(executor.workspace.metadata.get("detail_reliability_source", "unknown")),
-                        "partial_identity_gate_stage": "alignment" if block_kind is BlockKind.INPAINT else None,
+                        "partial_identity_gate_stage": "alignment" if direct_observed_repair else None,
                         "frozen_primary_hint_added_pixels": int(frozen_hint_pixels),
                         "verified_single_reference_hint": hint_diagnostics,
                     }
