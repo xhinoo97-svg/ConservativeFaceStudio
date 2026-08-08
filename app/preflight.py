@@ -12,6 +12,7 @@ from app.opencv_nafnet import NafNetDeblurEngine
 from app.opencv_semantic_models import HeadPoseEngine
 from app.opencv_zoo_face import OpenCVZooFaceEngine
 from app.pretrained_values import FACE_MODEL_DEFAULTS, RESTORATION_SAFETY_DEFAULTS
+from app.restoration import detect_occlusion_candidates
 
 
 @dataclass(frozen=True)
@@ -45,16 +46,50 @@ def _face_crop(image: np.ndarray, bbox: tuple[int, int, int, int]) -> np.ndarray
 
 
 def _quality_score(image: np.ndarray, bbox: tuple[int, int, int, int], detector_score: float) -> float:
+    """Score only genuinely useful face pixels, not sharp sticker/marker edges.
+
+    Large stars and black scribbles can have extremely high Laplacian energy.  A plain
+    sharpness metric would therefore select the *most obstructed* photograph as the
+    best base.  The occlusion proposal is used to exclude those pixels plus a small
+    safety ring before measuring sharpness/exposure.  The remaining visible fraction
+    is itself part of the score, while the detector/face-size terms remain modest.
+    """
     crop = _face_crop(image, bbox)
     if crop.size == 0:
         return 0.0
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    sharp = float(cv2.Laplacian(gray, cv2.CV_32F).var())
-    sharp_score = float(np.clip(np.log1p(sharp) / np.log(501.0), 0.0, 1.0))
-    mean = float(np.mean(gray))
+    proposal = detect_occlusion_candidates(crop)
+    visible = (proposal == 0).astype(np.uint8) * 255
+    # Stay away from hard sticker/scribble boundaries whose edge energy would leak
+    # into an otherwise visible skin pixel.
+    visible = cv2.erode(visible, np.ones((5, 5), np.uint8), iterations=1)
+    active = visible > 0
+    active_fraction = float(np.mean(active))
+
+    lap = cv2.Laplacian(gray, cv2.CV_32F)
+    if int(np.count_nonzero(active)) >= max(64, int(gray.size * 0.08)):
+        values = lap[active]
+        sharp = float(np.var(values))
+        mean = float(np.mean(gray[active]))
+    else:
+        # A nearly fully covered face must not receive a high score just because the
+        # sticker border is sharp. Keep only a very weak whole-crop fallback.
+        sharp = 0.15 * float(lap.var())
+        mean = float(np.mean(gray))
+        active_fraction *= 0.25
+
+    sharp_score = float(np.clip(np.log1p(max(0.0, sharp)) / np.log(501.0), 0.0, 1.0))
     exposure = float(np.clip(1.0 - abs(mean - 128.0) / 128.0, 0.0, 1.0))
-    face_fraction = float(np.clip((bbox[2] * bbox[3]) / max(1.0, image.shape[0] * image.shape[1]) * 8.0, 0.0, 1.0))
-    return float(0.45 * sharp_score + 0.25 * exposure + 0.20 * float(detector_score) + 0.10 * face_fraction)
+    face_fraction = float(
+        np.clip((bbox[2] * bbox[3]) / max(1.0, image.shape[0] * image.shape[1]) * 8.0, 0.0, 1.0)
+    )
+    return float(
+        0.32 * sharp_score
+        + 0.18 * exposure
+        + 0.18 * float(detector_score)
+        + 0.08 * face_fraction
+        + 0.24 * active_fraction
+    )
 
 
 def _components(similarity: np.ndarray, threshold: float) -> list[list[int]]:
@@ -121,12 +156,7 @@ def _deblur_all(images: list[np.ndarray], model_path: Path | None, hardware_poli
 
 
 def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Path]) -> PreflightResult:
-    """Deblur every photograph once, then choose a real same-identity frontal base.
-
-    The original source numbering is preserved in workspace metadata. No inpainting or
-    texture synthesis happens here; occlusions are intentionally repaired only after
-    references have been aligned, where real observed evidence can be used.
-    """
+    """Deblur every photograph once, then choose a real same-identity frontal base."""
     originals = [workspace.primary, *workspace.references]
     hardware = workspace.metadata.get("hardware_policy")
     hardware_policy = hardware if isinstance(hardware, dict) else {}
@@ -182,16 +212,19 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
             obs = observations[source_index]
             if obs is None:
                 continue
-            pose = None
-            frontal = 1e6
+            frontal = 20.0
             if pose_engine is not None:
                 try:
                     pose = pose_engine.estimate(_face_crop(processed[source_index], obs.bbox))
                     frontal = pose_frontalness(*pose)
                 except Exception:
-                    pose = None
+                    pass
             quality = _quality_score(processed[source_index], obs.bbox, obs.score)
-            ranked.append((frontal, -quality, source_index))
+            pose_cost = float(np.clip(frontal / 20.0, 0.0, 1.0))
+            # Frontal geometry remains the majority criterion, but a tiny pose advantage
+            # can no longer beat a severely covered/blurred face.
+            base_cost = 0.62 * pose_cost + 0.38 * (1.0 - quality)
+            ranked.append((base_cost, -quality, source_index))
         if ranked:
             ranked.sort()
             selected = int(ranked[0][2])
@@ -237,5 +270,5 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
         tuple(candidates),
         deblurred_count,
         cluster_size,
-        "selezionata fotografia reale piu frontale nel maggiore cluster same-identity",
+        "selezionata base reale same-identity bilanciando frontalita, visibilita e qualita",
     )
