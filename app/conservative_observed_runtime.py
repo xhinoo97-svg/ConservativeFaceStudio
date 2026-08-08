@@ -75,14 +75,21 @@ def verify_same_canvas_observed_source(
         except (TypeError, ValueError):
             return None
 
+    # Sobel support extends beyond an occlusion by a few pixels. Exclude a narrow
+    # verification-only ring so a real sticker edge does not look like a geometric
+    # misalignment. The original support mask is returned unchanged for later repair.
+    boundary_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    primary_blocked = cv2.dilate(primary_occ, boundary_kernel) > 0
+    reference_blocked = cv2.dilate(reference_occ, boundary_kernel) > 0
+
     comparable = (
         observed
         & face
-        & (primary_occ == 0)
-        & (reference_occ == 0)
+        & ~primary_blocked
+        & ~reference_blocked
         & (np.max(primary, axis=2) > 2)
     )
-    observed_face_pixels = int(np.count_nonzero(observed & face & (reference_occ == 0)))
+    observed_face_pixels = int(np.count_nonzero(observed & face & ~reference_blocked))
     comparable_pixels = int(np.count_nonzero(comparable))
     minimum_comparable = max(96, int(round(observed_face_pixels * 0.10)))
     if observed_face_pixels <= 0 or comparable_pixels < minimum_comparable:
@@ -256,9 +263,6 @@ def install_conservative_observed_runtime(executor) -> None:
             except ValueError:
                 return result
 
-            # The current specific-memory selector is intentionally retained for its
-            # component ranking/audit output, but automatic strict mode must never
-            # replace a pixel that the primary evidence says is visible.
             output = before.copy()
             output[damaged] = result.image[damaged]
             suppressed = int(np.count_nonzero(np.any(result.image != before, axis=2) & ~damaged))
