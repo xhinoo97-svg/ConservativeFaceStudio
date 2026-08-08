@@ -55,6 +55,16 @@ def test_occlusion_candidates_detect_colour_sticker() -> None:
     assert float(np.mean(sticker > 0)) >= 0.20
 
 
+def test_occlusion_candidates_detect_near_black_opaque_patch() -> None:
+    image = np.full((128, 128, 3), (145, 170, 195), dtype=np.uint8)
+    cv2.circle(image, (64, 64), 46, (130, 165, 200), -1)
+    cv2.rectangle(image, (46, 48), (82, 78), (18, 18, 18), -1)
+    mask = detect_occlusion_candidates(image)
+    sticker = mask[50:77, 48:81]
+    assert float(np.mean(sticker > 0)) >= 0.90
+    assert float(np.mean(mask > 0)) < 0.20
+
+
 def test_occlusion_candidates_detect_dark_scribble_without_flagging_everything() -> None:
     image = np.full((128, 128, 3), (145, 170, 195), dtype=np.uint8)
     cv2.circle(image, (64, 64), 46, (130, 165, 200), -1)
