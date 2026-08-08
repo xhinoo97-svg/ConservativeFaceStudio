@@ -66,6 +66,58 @@ def _verified_donor_slots(workspace, runtime_indices: list[int], originals: list
     return verified_runtime, verified_original
 
 
+def _damage_seed(workspace, shape: tuple[int, int]) -> np.ndarray:
+    seed = np.zeros(shape, dtype=np.uint8)
+    frozen = workspace.metadata.get("preflight_original_occlusion_masks")
+    if isinstance(frozen, list) and frozen:
+        try:
+            seed = cv2.bitwise_or(seed, _binary(np.asarray(frozen[0]), shape))
+        except (TypeError, ValueError):
+            pass
+    masks = workspace.occlusion_masks
+    if isinstance(masks, list) and masks:
+        try:
+            seed = cv2.bitwise_or(seed, _binary(np.asarray(masks[0]), shape))
+        except (TypeError, ValueError):
+            pass
+    target = workspace.metadata.get("inpaint_target_mask")
+    if isinstance(target, np.ndarray) and target.shape == shape:
+        seed = cv2.bitwise_or(seed, _binary(target, shape))
+    return seed
+
+
+def _frozen_primary(workspace) -> np.ndarray:
+    frozen = workspace.metadata.get("same_canvas_imported_primary")
+    if isinstance(frozen, np.ndarray) and frozen.shape == workspace.primary.shape:
+        return frozen
+    return workspace.primary
+
+
+def _limit_expansion(
+    seed_selected: np.ndarray,
+    expansion: np.ndarray,
+    strength: np.ndarray,
+    maximum_pixels: int,
+) -> np.ndarray:
+    """Never discard verified seed pixels; cap only evidence expansion around them."""
+    selected = seed_selected.copy()
+    seed_count = int(np.count_nonzero(selected))
+    if maximum_pixels <= seed_count:
+        return selected
+    extra = expansion & ~selected
+    extra_count = int(np.count_nonzero(extra))
+    remaining = maximum_pixels - seed_count
+    if extra_count <= remaining:
+        selected |= extra
+        return selected
+    coords = np.flatnonzero(extra)
+    values = strength.ravel()[coords]
+    keep = coords[np.argpartition(values, -remaining)[-remaining:]] if remaining > 0 else np.asarray([], dtype=np.int64)
+    if keep.size:
+        selected.ravel()[keep] = True
+    return selected
+
+
 def exact_same_canvas_observed_repair(
     workspace,
     image: np.ndarray,
@@ -73,11 +125,11 @@ def exact_same_canvas_observed_repair(
     difference_threshold: float = 0.075,
     maximum_face_fraction: float = 0.25,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-    """Replace damage from donors whose same-canvas geometry was already verified.
+    """Repair only from donor pixels whose same-canvas geometry is already verified.
 
-    Detector pixels are transferred directly. LAB-difference components can expand the
-    seed only when they touch it and remain inside verified observed donor support. No
-    synthesis, mirroring or interpolation is used by this pass.
+    The immutable imported primary is used for donor-difference expansion. Verified seed
+    pixels are always preserved; the face-fraction cap applies only to expansion beyond
+    the damage seed. No synthesis, mirroring, interpolation or geometry invention occurs.
     """
     shape = workspace.primary.shape[:2]
     aligned = list(workspace.aligned_references)
@@ -106,20 +158,7 @@ def exact_same_canvas_observed_repair(
             "verified_original_indices": sorted(verified_original),
         }
 
-    frozen = workspace.metadata.get("preflight_original_occlusion_masks")
-    if isinstance(frozen, list) and frozen:
-        try:
-            seed = _binary(np.asarray(frozen[0]), shape)
-        except (TypeError, ValueError):
-            seed = np.zeros(shape, dtype=np.uint8)
-    else:
-        seed = np.zeros(shape, dtype=np.uint8)
-    masks = workspace.occlusion_masks
-    if isinstance(masks, list) and masks:
-        try:
-            seed = cv2.bitwise_or(seed, _binary(np.asarray(masks[0]), shape))
-        except (TypeError, ValueError):
-            pass
+    seed = _damage_seed(workspace, shape)
     if not np.any(seed):
         return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "no_observed_damage_seed", "repaired_pixels": 0}
 
@@ -127,48 +166,54 @@ def exact_same_canvas_observed_repair(
     bbox = tuple(int(v) for v in bbox_raw) if bbox_raw is not None else None
     face = face_support_mask(shape, bbox) > 0
     face_pixels = max(1, int(np.count_nonzero(face)))
-    seed_bool = seed > 0
+    maximum_pixels = max(0, int(round(face_pixels * float(maximum_face_fraction))))
+    seed_bool = (seed > 0) & face
     seed_reach = cv2.dilate(seed, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)), iterations=1)
-    base_lab = cv2.cvtColor(workspace.primary, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
+
+    frozen_primary = _frozen_primary(workspace)
+    base_lab = cv2.cvtColor(frozen_primary, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
 
     result = image.copy()
     provenance = np.zeros(shape, dtype=np.uint16)
     repaired_union = np.zeros(shape, dtype=bool)
     source_counts: dict[int, int] = {}
+    seed_pixel_count = 0
+    expanded_pixel_count = 0
 
     for slot, (reference, support_raw, original_index) in enumerate(zip(aligned, supports_raw, originals)):
         if not verified_slots[slot] or reference.shape != workspace.primary.shape:
             continue
         support = _binary(np.asarray(support_raw), shape) > 0
-        if not np.any(support):
-            continue
         reference_valid = np.max(reference, axis=2) > 2
         observed = support & reference_valid & face
+        if not np.any(observed):
+            continue
+
         ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
         difference = np.mean(np.abs(base_lab - ref_lab), axis=2)
         strong = observed & (difference >= float(difference_threshold))
-        strong_mask = strong.astype(np.uint8) * 255
         if np.any(strong):
-            strong_mask = cv2.morphologyEx(
-                strong_mask,
+            strong_u8 = cv2.morphologyEx(
+                strong.astype(np.uint8) * 255,
                 cv2.MORPH_CLOSE,
                 cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
             )
-            strong = (strong_mask > 0) & observed
+            strong = (strong_u8 > 0) & observed
 
-        seeded_observed = seed_bool & observed
-        selected = seeded_observed | _seeded_components(strong, seed_reach)
+        seeded_observed = seed_bool & observed & ~repaired_union
+        expansion = _seeded_components(strong, seed_reach) & observed & ~repaired_union
+        selected = _limit_expansion(seeded_observed, expansion, difference, maximum_pixels - int(np.count_nonzero(repaired_union)))
         selected &= ~repaired_union
         if not np.any(selected):
             continue
-        proposed_total = int(np.count_nonzero(repaired_union | selected))
-        if proposed_total > int(round(face_pixels * float(maximum_face_fraction))):
-            continue
+
         result[selected] = reference[selected]
         code = np.uint16(max(1, int(original_index)))
         provenance[selected] = code
         repaired_union |= selected
         source_counts[int(code)] = source_counts.get(int(code), 0) + int(np.count_nonzero(selected))
+        seed_pixel_count += int(np.count_nonzero(selected & seeded_observed))
+        expanded_pixel_count += int(np.count_nonzero(selected & ~seeded_observed))
 
     repaired_pixels = int(np.count_nonzero(repaired_union))
     return result, provenance, {
@@ -178,11 +223,13 @@ def exact_same_canvas_observed_repair(
         "verified_runtime_indices": sorted(verified_runtime),
         "verified_original_indices": sorted(verified_original),
         "repaired_pixels": repaired_pixels,
+        "seed_repaired_pixels": int(seed_pixel_count),
+        "expanded_repaired_pixels": int(expanded_pixel_count),
         "source_pixel_counts": source_counts,
         "difference_threshold": float(difference_threshold),
         "maximum_face_fraction": float(maximum_face_fraction),
-        "seeded_pixels_require_difference_threshold": False,
-        "strong_difference_expands_seed": True,
+        "difference_anchor": "frozen_imported_primary" if isinstance(workspace.metadata.get("same_canvas_imported_primary"), np.ndarray) else "runtime_primary_fallback",
+        "seed_pixels_are_never_discarded_by_expansion_cap": True,
         "interpolation": "none",
         "generated_pixels": 0,
     }
@@ -233,8 +280,5 @@ def _wrap_exact_repair(executor, kind: BlockKind, detail_key: str) -> None:
 
 
 def install_same_canvas_repair_runtime(executor) -> None:
-    # FUSION may overwrite pixels repaired at INPAINT. Apply the exact observed donor
-    # transfer again after FUSION so the identity guardrail evaluates the preserved
-    # evidence rather than a later blend that erased it.
     _wrap_exact_repair(executor, BlockKind.INPAINT, "same_canvas_exact_repair")
     _wrap_exact_repair(executor, BlockKind.FUSION, "post_fusion_same_canvas_exact_repair")
