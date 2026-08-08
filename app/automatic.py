@@ -8,6 +8,7 @@ from typing import Any, Callable
 import numpy as np
 
 from app.execution import BlockExecutionError, ExecutionResult, Workspace
+from app.partial_reference_runtime import install_partial_reference_runtime
 from app.pipeline import BlockKind
 from app.preflight import preprocess_and_select_front_base
 from app.pretrained_face_handlers import install_pretrained_face_handlers
@@ -46,9 +47,6 @@ class AutomaticPipelineRunner:
         core_paths = workspace.metadata.get("core_model_paths")
         model_paths = core_paths if isinstance(core_paths, dict) else {}
 
-        # The preflight is deliberately performed before Block 1.  It processes every
-        # imported photograph once, then promotes the best real frontal/structural base
-        # while retaining every other image as a possible full or partial reference.
         if model_paths and not bool(workspace.metadata.get("preflight_completed", False)):
             try:
                 preflight = preprocess_and_select_front_base(workspace, model_paths)
@@ -58,9 +56,6 @@ class AutomaticPipelineRunner:
                 workspace.metadata["preflight_reason"] = str(preflight.reason)
                 workspace.metadata["preflight_candidate_count"] = len(preflight.candidates)
             except Exception as exc:
-                # Preflight is an optimization/safety stage, not a reason to make the
-                # application unusable.  The imported primary is retained and all
-                # regular strict blocks can still run.
                 workspace.metadata["preflight_completed"] = False
                 workspace.metadata["preflight_error"] = str(exc)
 
@@ -70,6 +65,9 @@ class AutomaticPipelineRunner:
             install_pretrained_restoration_handlers(self.executor, model_paths)
             install_pretrained_semantic_handlers(self.executor, model_paths)
         install_verified_inpainting_handler(self.executor, model_paths)
+        # This wrapper is intentionally installed last. It constrains Region Select
+        # and Inpaint using the exact warped footprint of each partial photograph.
+        install_partial_reference_runtime(self.executor)
         self.on_progress: Callable[[int, str], None] | None = None
         self._original_anchor = workspace.copy_primary()
 
