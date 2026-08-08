@@ -65,8 +65,13 @@ jobs:
           python -m app.practical_benchmark --output practical-benchmark --cache .benchmark-cache/public-portraits --limit 10 --size 320 --profile quick
           $report = Get-Content practical-benchmark/practical-benchmark.json -Raw | ConvertFrom-Json
           $errors = @($report.cases | Where-Object { $_.error })
+          $failed95 = @($report.cases | Where-Object { $_.target95_applicable -eq $true -and $_.target95_passed -ne $true })
           Write-Host "Practical benchmark errors: $($errors.Count)"
+          Write-Host "Recoverable cases below target 95: $($failed95.Count)"
           $errors | ForEach-Object { Write-Host "ERROR portrait=$($_.portrait) scenario=$($_.scenario) message=$($_.error)" }
+          $failed95 | ForEach-Object { Write-Host "QUALITY_FAIL portrait=$($_.portrait) scenario=$($_.scenario) score=$($_.conservative_recovery_score)" }
+          if ($errors.Count -gt 0) { throw "Practical benchmark contains runtime errors" }
+          if ($failed95.Count -gt 0) { throw "Practical benchmark has $($failed95.Count) recoverable case(s) below target 95" }
 
       - name: Extended practical degradation matrix
         shell: pwsh
@@ -76,6 +81,7 @@ jobs:
           $errors = @($report.cases | Where-Object { $_.error })
           Write-Host "Extended matrix errors: $($errors.Count)"
           $errors | ForEach-Object { Write-Host "ERROR portrait=$($_.portrait) scenario=$($_.scenario) message=$($_.error)" }
+          if ($errors.Count -gt 0) { throw "Extended practical matrix contains runtime errors" }
 
       - name: Export model registry
         shell: pwsh
