@@ -40,6 +40,44 @@ def _target_mask(workspace, shape: tuple[int, int]) -> np.ndarray:
     return target
 
 
+def _aligned_original_indices(workspace, count: int) -> list[int]:
+    """Resolve each aligned donor back to the imported source index.
+
+    ALIGN stores indices relative to the current runtime reference list, while preflight
+    may have reordered the primary/reference slots. Provenance and trust decisions must
+    therefore resolve through runtime_source_order rather than assume slot+1.
+    """
+    explicit = workspace.metadata.get("aligned_reference_original_source_indices")
+    if isinstance(explicit, list) and len(explicit) == count:
+        try:
+            return [max(1, int(value)) for value in explicit]
+        except (TypeError, ValueError):
+            pass
+
+    runtime_indices_raw = workspace.metadata.get("aligned_reference_source_indices")
+    runtime_indices = (
+        [int(value) for value in runtime_indices_raw]
+        if isinstance(runtime_indices_raw, list) and len(runtime_indices_raw) == count
+        else list(range(count))
+    )
+    runtime_order_raw = workspace.metadata.get("runtime_source_order")
+    runtime_order = (
+        [int(value) for value in runtime_order_raw]
+        if isinstance(runtime_order_raw, list) and len(runtime_order_raw) >= 2
+        else None
+    )
+
+    resolved: list[int] = []
+    for runtime_reference_index in runtime_indices:
+        original = runtime_reference_index + 1
+        if runtime_order is not None:
+            runtime_slot = runtime_reference_index + 1
+            if 0 <= runtime_slot < len(runtime_order):
+                original = int(runtime_order[runtime_slot])
+        resolved.append(max(1, int(original)))
+    return resolved
+
+
 def _trusted_slots(workspace, count: int) -> list[bool]:
     identity = workspace.metadata.get("aligned_reference_identity_verified")
     partial = workspace.metadata.get("aligned_reference_partial_geometry_verified")
@@ -56,6 +94,9 @@ def _trusted_slots(workspace, count: int) -> list[bool]:
         if isinstance(runtime_indices_raw, list) and len(runtime_indices_raw) == count
         else list(range(count))
     )
+    original_indices = _aligned_original_indices(workspace, count)
+
+    # Legacy exact-alignment verification, indexed by runtime reference slot.
     same_canvas = workspace.metadata.get("verified_same_canvas_alignment")
     same_canvas_runtime = {
         int(item.get("runtime_reference_index"))
@@ -65,12 +106,37 @@ def _trusted_slots(workspace, count: int) -> list[bool]:
         and item.get("runtime_reference_index") is not None
     } if isinstance(same_canvas, list) else set()
 
-    return [
-        identity_flags[index]
-        or partial_flags[index]
-        or runtime_indices[index] in same_canvas_runtime
-        for index in range(count)
-    ]
+    # Primary-anchor preflight records same-canvas evidence in ORIGINAL source indices.
+    anchor = workspace.metadata.get("same_canvas_primary_anchor")
+    anchor_original = {
+        int(value)
+        for value in anchor.get("matched_original_reference_indices", [])
+    } if isinstance(anchor, dict) and isinstance(anchor.get("matched_original_reference_indices"), list) else set()
+
+    # SFace preflight is a first-stage identity gate. When later ALIGN could not expose
+    # the legacy reference_identity_verification_available flag, retain this already
+    # verified identity evidence instead of silently downgrading every donor to untrusted.
+    candidates = workspace.metadata.get("preflight_candidates")
+    accepted_original: set[int] = set()
+    if isinstance(candidates, list):
+        for item in candidates:
+            if not isinstance(item, dict) or not bool(item.get("accepted_identity", False)):
+                continue
+            try:
+                accepted_original.add(int(item.get("source_index")))
+            except (TypeError, ValueError):
+                continue
+
+    trusted: list[bool] = []
+    for index in range(count):
+        trusted.append(
+            identity_flags[index]
+            or partial_flags[index]
+            or runtime_indices[index] in same_canvas_runtime
+            or original_indices[index] in anchor_original
+            or original_indices[index] in accepted_original
+        )
+    return trusted
 
 
 def repair_observed_target(
@@ -108,7 +174,6 @@ def repair_observed_target(
 
     supports_raw = workspace.metadata.get("aligned_reference_support_masks")
     reliabilities_raw = workspace.metadata.get("aligned_reference_detail_reliability_maps")
-    originals_raw = workspace.metadata.get("aligned_reference_original_source_indices")
     supports = (
         [np.asarray(value) for value in supports_raw]
         if isinstance(supports_raw, list) and len(supports_raw) == len(aligned)
@@ -119,11 +184,7 @@ def repair_observed_target(
         if isinstance(reliabilities_raw, list) and len(reliabilities_raw) == len(aligned)
         else [np.full(shape, 255, dtype=np.uint8) for _ in aligned]
     )
-    originals = (
-        [max(1, int(value)) for value in originals_raw]
-        if isinstance(originals_raw, list) and len(originals_raw) == len(aligned)
-        else [index + 1 for index in range(len(aligned))]
-    )
+    originals = _aligned_original_indices(workspace, len(aligned))
 
     bbox_raw = workspace.metadata.get("primary_bbox")
     bbox = tuple(int(v) for v in bbox_raw) if bbox_raw is not None else None
@@ -209,6 +270,8 @@ def repair_observed_target(
         "applied": repaired_pixels > 0,
         "reason": "trusted_observed_target_transfer",
         "trusted_reference_count": len(used_images),
+        "trusted_slots": [bool(value) for value in trusted],
+        "original_source_indices": [int(value) for value in originals],
         "repaired_pixels": repaired_pixels,
         "target_pixels": int(np.count_nonzero(target)),
         "minimum_reliability": int(minimum_reliability),
