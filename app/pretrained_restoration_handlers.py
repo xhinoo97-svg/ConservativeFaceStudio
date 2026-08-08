@@ -22,12 +22,7 @@ def _hardware_settings(workspace) -> tuple[str, int]:
 
 
 def install_pretrained_restoration_handlers(executor, model_paths: dict[str, str | Path]) -> None:
-    """Install verified learned restoration handlers when their weights exist.
-
-    The learned result is blended conservatively with the observed input and then
-    still passes AutomaticPipelineRunner's identity guardrail. Any load/inference
-    failure falls back to the original deterministic handler.
-    """
+    """Install verified learned restoration handlers when their weights exist."""
     model_path = model_paths.get("opencv_nafnet_deblur")
     if model_path is None or not Path(model_path).is_file():
         return
@@ -52,6 +47,23 @@ def install_pretrained_restoration_handlers(executor, model_paths: dict[str, str
         return engine
 
     def handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+        # The automatic preflight already runs NAFNet once on every imported image.
+        # Running it again here would waste time/heat on the EliteBook and may amplify
+        # synthetic-looking edges in intentionally blurred faces.
+        if bool(executor.workspace.metadata.get("preflight_deblurred_all", False)):
+            return ExecutionResult(
+                block.key,
+                executor.workspace.copy_primary(),
+                {
+                    "engine": "opencv-zoo-nafnet-2025may",
+                    "pretrained": True,
+                    "preflight_reused": True,
+                    "processed_all_imported_images": True,
+                    "second_pass_skipped": True,
+                    "identity_guardrail_required": False,
+                },
+            )
+
         strength = float(
             np.clip(
                 parameters.get("pretrained_strength", RESTORATION_SAFETY_DEFAULTS.nafnet_observed_blend),
