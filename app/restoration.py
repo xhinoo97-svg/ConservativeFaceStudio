@@ -116,7 +116,10 @@ def detect_occlusion_candidates(image: np.ndarray) -> np.ndarray:
 
     local_mean = cv2.GaussianBlur(gray, (0, 0), 7)
 
-    extreme = ((gray < 18) | (gray > 242)).astype(np.uint8) * 255
+    # Near-black opaque stickers commonly sit above a literal value of 17 because of
+    # camera/JPEG quantisation. Treat <=24 as a proposal, not a final occlusion: the
+    # downstream face/reference consensus still decides whether replacement is safe.
+    extreme = ((gray <= 24) | (gray >= 242)).astype(np.uint8) * 255
 
     lab_f = lab.astype(np.float32)
     local_lab = cv2.GaussianBlur(lab_f, (0, 0), 5.0)
