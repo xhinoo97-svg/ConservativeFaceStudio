@@ -20,20 +20,6 @@ def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
     return np.where(item > 0, 255, 0).astype(np.uint8)
 
 
-def _seeded_components(candidate: np.ndarray, seed: np.ndarray) -> np.ndarray:
-    binary = np.where(candidate, 255, 0).astype(np.uint8)
-    if not np.any(binary) or not np.any(seed):
-        return np.zeros(binary.shape, dtype=bool)
-    count, labels = cv2.connectedComponents(binary, connectivity=8)
-    keep = np.zeros(binary.shape, dtype=bool)
-    seed_bool = seed > 0
-    for label in range(1, count):
-        component = labels == label
-        if np.any(component & seed_bool):
-            keep |= component
-    return keep
-
-
 def _original_source_indices(workspace, runtime_indices: list[int], count: int) -> list[int]:
     explicit = workspace.metadata.get("aligned_reference_original_source_indices")
     if isinstance(explicit, list) and len(explicit) == count:
@@ -49,14 +35,17 @@ def _original_source_indices(workspace, runtime_indices: list[int], count: int) 
 
 
 def _verified_donor_slots(workspace, runtime_indices: list[int], originals: list[int]) -> tuple[set[int], set[int]]:
-    diagnostics = workspace.metadata.get("verified_same_canvas_alignment")
-    verified_runtime = {
-        int(item.get("runtime_reference_index"))
-        for item in diagnostics
-        if isinstance(item, dict)
-        and item.get("method") == "verified-same-canvas-observed"
-        and item.get("runtime_reference_index") is not None
-    } if isinstance(diagnostics, list) else set()
+    verified_runtime: set[int] = set()
+    for key in ("verified_same_canvas_alignment", "same_canvas_partial_alignment_diagnostics"):
+        diagnostics = workspace.metadata.get(key)
+        if not isinstance(diagnostics, list):
+            continue
+        for item in diagnostics:
+            if not isinstance(item, dict) or item.get("runtime_reference_index") is None:
+                continue
+            method = str(item.get("method", ""))
+            if method in {"verified-same-canvas-observed", "verified-same-canvas-partial"}:
+                verified_runtime.add(int(item["runtime_reference_index"]))
 
     anchor = workspace.metadata.get("same_canvas_primary_anchor")
     verified_original = {
@@ -93,6 +82,58 @@ def _frozen_primary(workspace) -> np.ndarray:
     return workspace.primary
 
 
+def _adaptive_difference_threshold(
+    difference: np.ndarray,
+    observed: np.ndarray,
+    seed_bool: np.ndarray,
+    maximum_threshold: float,
+) -> tuple[float, dict[str, float]]:
+    baseline = difference[observed & ~seed_bool]
+    ceiling = float(max(0.02, maximum_threshold))
+    if baseline.size < 64:
+        return ceiling, {"baseline_median": 0.0, "baseline_p95": 0.0, "baseline_mad": 0.0}
+    median = float(np.median(baseline))
+    p95 = float(np.percentile(baseline, 95.0))
+    mad = float(np.median(np.abs(baseline - median)))
+    robust = max(0.025, p95 + 0.012, median + 6.0 * 1.4826 * mad)
+    threshold = float(np.clip(min(ceiling, robust), 0.025, max(0.025, ceiling)))
+    return threshold, {"baseline_median": median, "baseline_p95": p95, "baseline_mad": mad}
+
+
+def _strong_components(
+    strong: np.ndarray,
+    seed_reach: np.ndarray,
+    difference: np.ndarray,
+    threshold: float,
+) -> tuple[np.ndarray, int]:
+    binary = np.where(strong, 255, 0).astype(np.uint8)
+    if not np.any(binary):
+        return np.zeros(binary.shape, dtype=bool), 0
+    binary = cv2.morphologyEx(
+        binary,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+    )
+    count, labels = cv2.connectedComponents(binary, connectivity=8)
+    keep = np.zeros(binary.shape, dtype=bool)
+    unseeded_pixels = 0
+    seed_bool = seed_reach > 0
+    very_strong_cutoff = max(float(threshold) * 1.6, float(threshold) + 0.035)
+    for label in range(1, count):
+        component = labels == label
+        area = int(np.count_nonzero(component))
+        if area <= 0:
+            continue
+        if np.any(component & seed_bool):
+            keep |= component
+            continue
+        component_strength = float(np.median(difference[component]))
+        if area >= 6 and component_strength >= very_strong_cutoff:
+            keep |= component
+            unseeded_pixels += area
+    return keep, unseeded_pixels
+
+
 def _limit_expansion(
     seed_selected: np.ndarray,
     expansion: np.ndarray,
@@ -127,9 +168,11 @@ def exact_same_canvas_observed_repair(
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
     """Repair only from donor pixels whose same-canvas geometry is already verified.
 
-    The immutable imported primary is used for donor-difference expansion. Verified seed
-    pixels are always preserved; the face-fraction cap applies only to expansion beyond
-    the damage seed. No synthesis, mirroring, interpolation or geometry invention occurs.
+    The immutable imported primary is used for donor-difference expansion. The detector
+    mask remains a seed, not a hard ceiling: verified same-canvas residual components may
+    extend the target when the detector has low recall. Partial same-canvas references are
+    accepted only inside their actually observed support. No synthesis or interpolation is
+    used and visible pixels outside verified residual evidence remain unchanged.
     """
     shape = workspace.primary.shape[:2]
     aligned = list(workspace.aligned_references)
@@ -168,7 +211,7 @@ def exact_same_canvas_observed_repair(
     face_pixels = max(1, int(np.count_nonzero(face)))
     maximum_pixels = max(0, int(round(face_pixels * float(maximum_face_fraction))))
     seed_bool = (seed > 0) & face
-    seed_reach = cv2.dilate(seed, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)), iterations=1)
+    seed_reach = cv2.dilate(seed, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)), iterations=1)
 
     frozen_primary = _frozen_primary(workspace)
     base_lab = cv2.cvtColor(frozen_primary, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
@@ -179,6 +222,8 @@ def exact_same_canvas_observed_repair(
     source_counts: dict[int, int] = {}
     seed_pixel_count = 0
     expanded_pixel_count = 0
+    unseeded_strong_pixel_count = 0
+    threshold_diagnostics: list[dict[str, Any]] = []
 
     for slot, (reference, support_raw, original_index) in enumerate(zip(aligned, supports_raw, originals)):
         if not verified_slots[slot] or reference.shape != workspace.primary.shape:
@@ -191,18 +236,31 @@ def exact_same_canvas_observed_repair(
 
         ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
         difference = np.mean(np.abs(base_lab - ref_lab), axis=2)
-        strong = observed & (difference >= float(difference_threshold))
-        if np.any(strong):
-            strong_u8 = cv2.morphologyEx(
-                strong.astype(np.uint8) * 255,
-                cv2.MORPH_CLOSE,
-                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
-            )
-            strong = (strong_u8 > 0) & observed
+        adaptive_threshold, baseline_stats = _adaptive_difference_threshold(
+            difference,
+            observed,
+            seed_bool,
+            float(difference_threshold),
+        )
+        strong = observed & (difference >= adaptive_threshold)
+        expansion, unseeded_pixels = _strong_components(strong, seed_reach, difference, adaptive_threshold)
+        expansion &= observed & ~repaired_union
+        unseeded_strong_pixel_count += int(unseeded_pixels)
+        threshold_diagnostics.append({
+            "slot": int(slot),
+            "runtime_reference_index": int(runtime_indices[slot]),
+            "original_source_index": int(original_index),
+            "adaptive_difference_threshold": float(adaptive_threshold),
+            **baseline_stats,
+        })
 
         seeded_observed = seed_bool & observed & ~repaired_union
-        expansion = _seeded_components(strong, seed_reach) & observed & ~repaired_union
-        selected = _limit_expansion(seeded_observed, expansion, difference, maximum_pixels - int(np.count_nonzero(repaired_union)))
+        selected = _limit_expansion(
+            seeded_observed,
+            expansion,
+            difference,
+            maximum_pixels - int(np.count_nonzero(repaired_union)),
+        )
         selected &= ~repaired_union
         if not np.any(selected):
             continue
@@ -225,11 +283,14 @@ def exact_same_canvas_observed_repair(
         "repaired_pixels": repaired_pixels,
         "seed_repaired_pixels": int(seed_pixel_count),
         "expanded_repaired_pixels": int(expanded_pixel_count),
+        "unseeded_strong_component_pixels": int(unseeded_strong_pixel_count),
         "source_pixel_counts": source_counts,
-        "difference_threshold": float(difference_threshold),
+        "difference_threshold_ceiling": float(difference_threshold),
+        "threshold_diagnostics": threshold_diagnostics,
         "maximum_face_fraction": float(maximum_face_fraction),
         "difference_anchor": "frozen_imported_primary" if isinstance(workspace.metadata.get("same_canvas_imported_primary"), np.ndarray) else "runtime_primary_fallback",
         "seed_pixels_are_never_discarded_by_expansion_cap": True,
+        "partial_same_canvas_supported": True,
         "interpolation": "none",
         "generated_pixels": 0,
     }
