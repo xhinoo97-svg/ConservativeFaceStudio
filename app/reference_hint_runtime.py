@@ -20,6 +20,31 @@ def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
     return np.where(item > 0, 255, 0).astype(np.uint8)
 
 
+def _local_observed_quality(image: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255.0
+    sharpness = cv2.GaussianBlur(np.abs(cv2.Laplacian(gray, cv2.CV_32F)), (0, 0), 2.0)
+    exposure = 1.0 - np.clip(np.abs(gray - 0.5) / 0.5, 0.0, 1.0)
+    return sharpness + 0.02 * exposure
+
+
+def _connected_to_seed(candidate: np.ndarray, seed: np.ndarray) -> np.ndarray:
+    binary = np.where(candidate, 255, 0).astype(np.uint8)
+    if not np.any(binary) or not np.any(seed):
+        return np.zeros(candidate.shape, dtype=bool)
+    expanded_seed = cv2.dilate(
+        np.where(seed, 255, 0).astype(np.uint8),
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)),
+        iterations=1,
+    ) > 0
+    count, labels = cv2.connectedComponents(binary, connectivity=8)
+    keep = np.zeros(candidate.shape, dtype=bool)
+    for label in range(1, count):
+        component = labels == label
+        if np.any(component & expanded_seed):
+            keep |= component
+    return keep
+
+
 def expand_verified_single_reference_hint(
     primary: np.ndarray,
     reference: np.ndarray,
@@ -30,21 +55,22 @@ def expand_verified_single_reference_hint(
     minimum_face_coverage: float = 0.70,
     strong_difference_threshold: float = 0.10,
     maximum_face_fraction: float = 0.25,
+    minimum_donor_quality_advantage: float = 0.001,
 ) -> tuple[np.ndarray, dict[str, Any]]:
-    """Expand an occlusion hint only from a verified, nearly complete real reference.
+    """Expand a primary damage seed using a verified nearly-complete real reference.
 
-    A single same-identity reference is useful evidence for an opaque cover even when
-    the heuristic detector sees only the darkest core. We add only pixels that are
-    actually observed in that reference, lie inside the face support and differ
-    strongly in LAB. If the proposed area is too large we abstain instead of risking
-    pose/expression replacement.
+    The expansion is directional. A large primary/reference difference is not enough:
+    the primary must already contain a damage seed in that connected region and the
+    observed donor must have at least slightly better local quality. This prevents a
+    damaged reference from being copied back into a cleaner frontal base selected by
+    preflight, while still growing a small detected core across an opaque sticker.
     """
     if primary.shape != reference.shape or primary.ndim != 3 or primary.shape[2] != 3:
         raise ValueError("Primary/reference non compatibili")
     shape = primary.shape[:2]
     blocked = _binary(reference_mask, shape) > 0
     face = _binary(face_mask, shape) > 0
-    hint = _binary(existing_hint, shape)
+    raw_hint = _binary(existing_hint, shape) > 0
     observed = (~blocked) & (np.max(reference, axis=2) > 2) & face
     face_pixels = max(1, int(np.count_nonzero(face)))
     coverage = float(np.count_nonzero(observed) / face_pixels)
@@ -55,20 +81,35 @@ def expand_verified_single_reference_hint(
         "reason": "insufficient_reference_coverage",
     }
     if coverage < float(minimum_face_coverage):
-        return hint, details
+        return raw_hint.astype(np.uint8) * 255, details
 
     base_lab = cv2.cvtColor(primary, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
     ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
     difference = np.mean(np.abs(base_lab - ref_lab), axis=2)
-    strong = observed & (difference >= float(strong_difference_threshold))
-    strong_mask = strong.astype(np.uint8) * 255
-    if np.any(strong):
-        strong_mask = cv2.morphologyEx(strong_mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
-        strong_mask = cv2.morphologyEx(strong_mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-        strong = (strong_mask > 0) & observed
+    base_quality = _local_observed_quality(primary)
+    ref_quality = _local_observed_quality(reference)
+    donor_advantage = ref_quality >= (base_quality + float(minimum_donor_quality_advantage))
+    changed = observed & (difference >= float(strong_difference_threshold))
+    directional = changed & donor_advantage
 
-    proposed = (hint > 0) | strong
-    proposed &= face
+    # The seed itself is also directional: a heuristic false positive on an otherwise
+    # clean primary must not authorize copying a worse/damaged reference into it.
+    seed = raw_hint & directional
+    if not np.any(seed):
+        details.update({
+            "eligible": True,
+            "reason": "no_directional_primary_damage_seed",
+            "directional_seed_pixels": 0,
+            "strong_difference_pixels": int(np.count_nonzero(changed)),
+        })
+        return np.zeros(shape, dtype=np.uint8), details
+
+    strong_mask = directional.astype(np.uint8) * 255
+    strong_mask = cv2.morphologyEx(strong_mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    strong_mask = cv2.morphologyEx(strong_mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    connected = _connected_to_seed((strong_mask > 0) & observed, seed)
+    proposed = (seed | connected) & face & observed
+
     proposed_pixels = int(np.count_nonzero(proposed))
     maximum_pixels = max(1, int(round(face_pixels * float(maximum_face_fraction))))
     if proposed_pixels > maximum_pixels:
@@ -77,17 +118,20 @@ def expand_verified_single_reference_hint(
             "reason": "proposal_too_large",
             "proposed_pixels": proposed_pixels,
             "maximum_pixels": maximum_pixels,
+            "directional_seed_pixels": int(np.count_nonzero(seed)),
         })
-        return hint, details
+        return seed.astype(np.uint8) * 255, details
 
     expanded = proposed.astype(np.uint8) * 255
-    added = int(np.count_nonzero((expanded > 0) & (hint == 0)))
+    added = int(np.count_nonzero(connected & ~seed))
     details.update({
         "eligible": True,
-        "reason": "expanded" if added else "no_additional_strong_difference",
+        "reason": "expanded" if added else "no_additional_directional_difference",
         "added_pixels": added,
         "proposed_pixels": proposed_pixels,
         "maximum_pixels": maximum_pixels,
+        "directional_seed_pixels": int(np.count_nonzero(seed)),
+        "strong_difference_pixels": int(np.count_nonzero(changed)),
     })
     return expanded, details
 
@@ -126,6 +170,7 @@ def install_reference_hint_runtime(executor) -> None:
                 minimum_face_coverage=float(parameters.get("full_reference_minimum_face_coverage", 0.70)),
                 strong_difference_threshold=float(parameters.get("full_reference_strong_difference_threshold", 0.10)),
                 maximum_face_fraction=float(parameters.get("maximum_occlusion_fraction", 0.25)),
+                minimum_donor_quality_advantage=float(parameters.get("minimum_donor_quality_advantage", 0.001)),
             )
             workspace.metadata["reference_consensus_occlusion"] = expanded
 
