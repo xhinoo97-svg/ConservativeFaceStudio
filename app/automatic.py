@@ -9,6 +9,7 @@ import numpy as np
 
 from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.pipeline import BlockKind
+from app.preflight import preprocess_and_select_front_base
 from app.pretrained_face_handlers import install_pretrained_face_handlers
 from app.pretrained_inpaint_handler import install_verified_inpainting_handler
 from app.pretrained_restoration_handlers import install_pretrained_restoration_handlers
@@ -37,12 +38,33 @@ class AutomaticPipelineRunner:
         "inpaint_generated_mask",
         "inpaint_unresolved_mask",
         "primary_landmarks5",
+        "aligned_reference_support_masks",
+        "component_reference_bank",
     )
 
     def __init__(self, workspace: Workspace) -> None:
-        self.executor = StrictBlockExecutor(workspace)
         core_paths = workspace.metadata.get("core_model_paths")
         model_paths = core_paths if isinstance(core_paths, dict) else {}
+
+        # The preflight is deliberately performed before Block 1.  It processes every
+        # imported photograph once, then promotes the best real frontal/structural base
+        # while retaining every other image as a possible full or partial reference.
+        if model_paths and not bool(workspace.metadata.get("preflight_completed", False)):
+            try:
+                preflight = preprocess_and_select_front_base(workspace, model_paths)
+                workspace.metadata["preflight_completed"] = True
+                workspace.metadata["preflight_selected_source_index"] = int(preflight.selected_source_index)
+                workspace.metadata["preflight_identity_cluster_size"] = int(preflight.identity_cluster_size)
+                workspace.metadata["preflight_reason"] = str(preflight.reason)
+                workspace.metadata["preflight_candidate_count"] = len(preflight.candidates)
+            except Exception as exc:
+                # Preflight is an optimization/safety stage, not a reason to make the
+                # application unusable.  The imported primary is retained and all
+                # regular strict blocks can still run.
+                workspace.metadata["preflight_completed"] = False
+                workspace.metadata["preflight_error"] = str(exc)
+
+        self.executor = StrictBlockExecutor(workspace)
         if model_paths:
             install_pretrained_face_handlers(self.executor, model_paths)
             install_pretrained_restoration_handlers(self.executor, model_paths)
