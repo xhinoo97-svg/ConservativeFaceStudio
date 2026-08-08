@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from app.alignment import align_from_points, align_to_reference
+from app.component_bank import build_component_bank, warped_support_mask
 from app.execution import BlockExecutionError, ExecutionResult
 from app.face_analysis import cosine_similarity
 from app.opencv_zoo_face import OpenCVZooFaceEngine
@@ -14,13 +16,7 @@ from app.pretrained_values import FACE_MODEL_DEFAULTS
 
 
 def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path]) -> None:
-    """Install verified YuNet/SFace handlers with safe CPU/OpenCL fallback.
-
-    Full-face references use SFace identity verification. A partial crop that cannot
-    produce an embedding is not automatically treated as a mismatch: it may still be
-    retained if strict local feature alignment succeeds. A real low SFace score is a
-    hard rejection.
-    """
+    """Install verified YuNet/SFace handlers with partial-reference support."""
     yunet = model_paths.get("opencv_yunet")
     sface = model_paths.get("opencv_sface")
     if yunet is None:
@@ -129,8 +125,10 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
 
     def partial_aware_align_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
         aligned: list[np.ndarray] = []
+        support_masks: list[np.ndarray] = []
         diagnostics: list[dict[str, Any]] = []
-        source_indices: list[int] = []
+        runtime_source_indices: list[int] = []
+        original_source_indices: list[int] = []
         aligned_scores: list[float | None] = []
         aligned_verified: list[bool] = []
         partial_geometry_verified: list[bool] = []
@@ -139,17 +137,19 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
         ref_points = executor.workspace.metadata.get("reference_landmarks5", [])
         identity_scores = executor.workspace.metadata.get("reference_identity_scores", [])
         identity_available = bool(executor.workspace.metadata.get("reference_identity_verification_available", False))
+        runtime_order = executor.workspace.metadata.get("runtime_source_order")
+        if not isinstance(runtime_order, list) or len(runtime_order) != len(executor.workspace.references) + 1:
+            runtime_order = list(range(len(executor.workspace.references) + 1))
         rejected_identity = 0
         rejected_geometry = 0
 
         for index, reference in enumerate(executor.workspace.references):
             score = identity_scores[index] if isinstance(identity_scores, list) and index < len(identity_scores) else None
-            # A real SFace score below threshold is a mismatch. None means the crop was
-            # too partial for a full-face embedding and is allowed to try geometry.
             if identity_available and score is not None and float(score) < FACE_MODEL_DEFAULTS.sface_same_identity_cosine:
                 rejected_identity += 1
                 diagnostics.append({
                     "source_index": index,
+                    "original_source_index": int(runtime_order[index + 1]),
                     "rejected": True,
                     "reason": "sface_identity_mismatch",
                     "identity_score": float(score),
@@ -178,6 +178,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 rejected_geometry += 1
                 diagnostics.append({
                     "source_index": index,
+                    "original_source_index": int(runtime_order[index + 1]),
                     "rejected": True,
                     "reason": "partial_geometry_rejected" if score is None else "alignment_failed",
                     "error": str(exc),
@@ -185,27 +186,49 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 })
                 continue
 
+            support = warped_support_mask(reference.shape[:2], result.matrix, executor.workspace.primary.shape[:2])
+            original_index = int(runtime_order[index + 1])
             aligned.append(result.image)
-            source_indices.append(index)
+            support_masks.append(support)
+            runtime_source_indices.append(index)
+            original_source_indices.append(original_index)
             aligned_scores.append(None if score is None else float(score))
             full_identity_verified = score is not None and float(score) >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
             aligned_verified.append(bool(full_identity_verified))
             partial_geometry_verified.append(bool(score is None and geometry_verified))
             diagnostics.append({
                 "source_index": index,
+                "original_source_index": original_index,
                 "method": method,
                 "matches": result.matches,
                 "inlier_ratio": result.inlier_ratio,
                 "reprojection_error": result.reprojection_error,
+                "support_fraction": float(np.mean(support > 0)),
                 "identity_score": None if score is None else float(score),
                 "identity_status": "sface_verified" if full_identity_verified else "partial_geometry_verified",
             })
 
         executor.workspace.aligned_references = aligned
-        executor.workspace.metadata["aligned_reference_source_indices"] = source_indices
+        executor.workspace.metadata["aligned_reference_source_indices"] = runtime_source_indices
+        executor.workspace.metadata["aligned_reference_original_source_indices"] = original_source_indices
+        executor.workspace.metadata["aligned_reference_support_masks"] = support_masks
         executor.workspace.metadata["aligned_reference_identity_scores"] = aligned_scores
         executor.workspace.metadata["aligned_reference_identity_verified"] = aligned_verified
         executor.workspace.metadata["aligned_reference_partial_geometry_verified"] = partial_geometry_verified
+
+        bank_summary: dict[str, list[dict[str, Any]]] = {}
+        bbox = executor.workspace.metadata.get("primary_bbox")
+        if support_masks and primary_points is not None and bbox is not None:
+            bank = build_component_bank(
+                support_masks,
+                np.asarray(primary_points, dtype=np.float32),
+                tuple(int(v) for v in bbox),
+                source_indices=original_source_indices,
+                minimum_coverage=float(parameters.get("component_minimum_coverage", 0.18)),
+            )
+            bank_summary = {name: [asdict(item) for item in items] for name, items in bank.items()}
+            executor.workspace.metadata["component_reference_bank"] = bank_summary
+
         return ExecutionResult(
             block.key,
             executor.workspace.copy_primary(),
@@ -215,7 +238,10 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 "rejected_geometry": rejected_geometry,
                 "partial_geometry_verified": int(sum(partial_geometry_verified)),
                 "identity_filter_applied": identity_available,
-                "source_indices": source_indices,
+                "runtime_source_indices": runtime_source_indices,
+                "original_source_indices": original_source_indices,
+                "support_masks_created": len(support_masks),
+                "component_bank_regions": {name: len(items) for name, items in bank_summary.items()},
                 "diagnostics": diagnostics,
             },
         )
@@ -245,8 +271,6 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 try:
                     reference = identity_engine.analyze(image)
                 except ValueError:
-                    # Partial references are not evidence against the reconstructed
-                    # identity; they were already gated by strict local geometry.
                     continue
                 if reference.embedding is not None:
                     scores.append(cosine_similarity(primary.embedding, reference.embedding))
