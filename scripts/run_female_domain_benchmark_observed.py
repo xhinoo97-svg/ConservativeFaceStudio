@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import json
 import urllib.request
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -53,6 +56,8 @@ CURATED_FEMALE_DOMAIN = (
 
 
 _BASE_MAKE_SCENARIOS = benchmark.make_scenarios
+_BASE_RUN_DOMAIN_BENCHMARK = benchmark.run_domain_benchmark
+_IDENTITY_GUARDRAIL_PREFIX = "Controllo identità SFace sotto soglia:"
 try:
     _LANDMARK_BACKEND = choose_backend(prefer_embeddings=False)
 except Exception:
@@ -105,11 +110,58 @@ def _observed_make_scenarios(clean: np.ndarray, *, seed: int = 20260808, profile
     return tuple(scenarios)
 
 
+def _is_identity_guardrail_abstention(row: dict) -> bool:
+    return str(row.get("error", "")).startswith(_IDENTITY_GUARDRAIL_PREFIX)
+
+
+def _postprocess_guardrail_abstentions(report: dict, output: Path) -> dict:
+    abstentions = 0
+    for row in report.get("cases", []):
+        if not _is_identity_guardrail_abstention(row):
+            continue
+        message = str(row.pop("error"))
+        row["abstained"] = True
+        row["abstention_reason"] = "identity_guardrail"
+        row["abstention_detail"] = message
+        row["target95_applicable"] = False
+        row["target95_passed"] = None
+        abstentions += 1
+
+    summary = report.setdefault("summary", {})
+    summary["abstention_count"] = abstentions
+    summary["identity_guardrail_abstention_count"] = abstentions
+    summary["error_cases"] = sum(bool(row.get("error")) for row in report.get("cases", []))
+
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "female-domain-benchmark.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    fields = [
+        "portrait", "person", "scenario", "recoverable", "reference_count",
+        "conservative_recovery_score", "identity_similarity", "ssim_after",
+        "damage_mae_after", "landmark_nme", "damage_reference_coverage",
+        "uncovered_damage_fraction", "outside_damage_change_fraction",
+        "generated_fraction", "target95_applicable", "target95_passed",
+        "abstained", "abstention_reason", "abstention_detail", "error",
+    ]
+    with (output / "female-domain-benchmark.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(report.get("cases", []))
+    return report
+
+
+def _observed_run_domain_benchmark(output: Path, *, cache: Path, limit: int = 30, size: int = 320, profile: str = "quick") -> dict:
+    report = _BASE_RUN_DOMAIN_BENCHMARK(output, cache=cache, limit=limit, size=size, profile=profile)
+    return _postprocess_guardrail_abstentions(report, output)
+
+
 def main() -> int:
     urllib.request.urlopen = _resilient_urlopen
     benchmark.urllib.request.urlopen = _resilient_urlopen
     benchmark.CURATED_FEMALE_DOMAIN = CURATED_FEMALE_DOMAIN
     benchmark.make_scenarios = _observed_make_scenarios
+    benchmark.run_domain_benchmark = _observed_run_domain_benchmark
     return benchmark.main()
 
 
