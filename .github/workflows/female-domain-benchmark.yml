@@ -71,6 +71,8 @@ jobs:
             female-domain-benchmark/*/*/final.png
             female-domain-benchmark/*/*/damage-mask.png
             female-domain-benchmark/*/*/diff-heatmap.png
+            female-domain-benchmark/*/*/final.png.blocks.zip
+            female-domain-benchmark/*/*/final.png.provenance.png
             .benchmark-cache/female-domain/female-domain-manifest.json
           if-no-files-found: warn
           retention-days: 14
