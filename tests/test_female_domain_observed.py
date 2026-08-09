@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -44,3 +45,30 @@ def test_component_damage_is_exact_union_of_observed_partial_references(monkeypa
     assert np.array_equal(support, damage)
     assert np.all(scenario.primary[damage] == 18)
     assert np.array_equal(scenario.primary[~damage], clean[~damage])
+
+
+def test_identity_guardrail_is_recorded_as_abstention_not_runtime_error(tmp_path: Path):
+    report = {
+        "cases": [
+            {
+                "portrait": "example",
+                "scenario": "component_only_references",
+                "error": "Controllo identità SFace sotto soglia: 0.290 < 0.363",
+            },
+            {
+                "portrait": "broken",
+                "scenario": "opaque_sticker_full_reference",
+                "error": "unexpected runtime failure",
+            },
+        ],
+        "summary": {"error_cases": 2},
+    }
+    observed._postprocess_guardrail_abstentions(report, tmp_path)
+    guardrail = report["cases"][0]
+    assert guardrail["abstained"] is True
+    assert guardrail["abstention_reason"] == "identity_guardrail"
+    assert guardrail["target95_applicable"] is False
+    assert "error" not in guardrail
+    assert report["summary"]["identity_guardrail_abstention_count"] == 1
+    assert report["summary"]["error_cases"] == 1
+    assert report["cases"][1]["error"] == "unexpected runtime failure"
