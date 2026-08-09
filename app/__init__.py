@@ -10,3 +10,10 @@ import os
 # engine as the conservative default; advanced users can still override this before
 # importing ``app`` by setting OPENCV_FORCE_DNN_ENGINE explicitly.
 os.environ.setdefault("OPENCV_FORCE_DNN_ENGINE", "1")
+
+# Install the reference-driven same-canvas policy before executors capture handlers.
+# Explicit observed support, not RGB intensity or an approximate face template, is
+# authoritative for verified damaged seed pixels.
+from app.same_canvas_seed_support_policy import install_same_canvas_seed_support_policy
+
+install_same_canvas_seed_support_policy()
