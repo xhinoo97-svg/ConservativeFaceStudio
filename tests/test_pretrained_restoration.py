@@ -13,7 +13,7 @@ from app.strict_execution import StrictBlockExecutor
 
 def test_opencv_nafnet_manifest_is_pinned() -> None:
     assert OPENCV_NAFNET.source_url is not None
-    assert OPENCV_NAFNET.source_url.startswith("https://media.githubusercontent.com/")
+    assert OPENCV_NAFNET.source_url.startswith("https://huggingface.co/opencv/deblurring_nafnet/")
     assert OPENCV_NAFNET.expected_sha256 == "07263f416febecce10193dd648e950b22e397cf521eedab1a114ef77b2bc9587"
     assert OPENCV_NAFNET.max_bytes >= 91_736_251
 
@@ -60,7 +60,7 @@ def test_pretrained_handler_falls_back_when_inference_fails(monkeypatch, tmp_pat
         def infer(self, source):
             raise RuntimeError("synthetic inference failure")
 
-    monkeypatch.setattr("app.pretrained_restoration_handlers.NafNetDeblurEngine", BrokenEngine)
+    monkeypatch.setattr("app.pretrained_restoration_handlers.NafNetDeblurEngine", FakeEngine if False else BrokenEngine)
     install_pretrained_restoration_handlers(executor, {"opencv_nafnet_deblur": model})
     block = next(item for item in executor.pipeline.blocks if item.kind is BlockKind.DEBLUR)
     result = executor.execute(block)
