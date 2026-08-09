@@ -129,9 +129,15 @@ def repair_observed_target(
     *,
     minimum_reliability: int = 0,
     agreement_colour_threshold: float = 24.0,
-    maximum_face_fraction: float = 0.40,
+    maximum_face_fraction: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-    """Fill damaged pixels from trusted, actually observed aligned donors only."""
+    """Fill damaged pixels from trusted, actually observed aligned donors only.
+
+    The replacement limit applies only as a safety ceiling over the face.  The default
+    is intentionally 1.0: a verified damage target may legitimately cover most of the
+    face, and reference coverage must not be truncated merely because the occlusion is
+    large.  Pixels outside the frozen damage target are never eligible here.
+    """
     shape = workspace.primary.shape[:2]
     aligned = list(workspace.aligned_references)
     if not aligned:
@@ -155,8 +161,9 @@ def repair_observed_target(
     bbox = tuple(int(v) for v in bbox_raw) if bbox_raw is not None else None
     face = face_support_mask(shape, bbox) > 0
     target &= face
+    target_pixels = int(np.count_nonzero(target))
     face_pixels = max(1, int(np.count_nonzero(face)))
-    maximum_pixels = int(round(face_pixels * float(maximum_face_fraction)))
+    maximum_pixels = min(target_pixels, int(round(face_pixels * float(np.clip(maximum_face_fraction, 0.0, 1.0)))))
 
     valid_masks: list[np.ndarray] = []
     reliable_maps: list[np.ndarray] = []
@@ -184,7 +191,7 @@ def repair_observed_target(
         used_codes.append(code)
 
     if not used_images:
-        return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "trusted_references_do_not_cover_target", "repaired_pixels": 0}
+        return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "trusted_references_do_not_cover_target", "repaired_pixels": 0, "target_pixels": target_pixels, "damage_reference_coverage": 0.0}
 
     valid_stack = np.stack(valid_masks, axis=0)
     reliability_stack = np.stack(reliable_maps, axis=0)
@@ -199,7 +206,12 @@ def repair_observed_target(
                 if not np.any(overlap):
                     continue
                 gap = np.mean(np.abs(labs[first] - labs[second]), axis=2)
-                accepted[overlap] &= gap[overlap] <= float(agreement_colour_threshold)
+                conflict = overlap & (gap > float(agreement_colour_threshold))
+                if not np.any(conflict):
+                    continue
+                reliability_gap = np.abs(reliability_stack[first] - reliability_stack[second])
+                ambiguous_conflict = conflict & (reliability_gap < 12.0)
+                accepted[ambiguous_conflict] = False
 
     if maximum_pixels >= 0 and np.count_nonzero(accepted) > maximum_pixels:
         best_reliability = np.max(reliability_stack, axis=0)
@@ -213,7 +225,7 @@ def repair_observed_target(
         accepted = limited
 
     if not np.any(accepted):
-        return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "agreement_or_fraction_gate_rejected_target", "repaired_pixels": 0}
+        return image.copy(), np.zeros(shape, dtype=np.uint16), {"applied": False, "reason": "agreement_or_fraction_gate_rejected_target", "repaired_pixels": 0, "target_pixels": target_pixels, "damage_reference_coverage": 0.0}
 
     best_slot = np.argmax(reliability_stack, axis=0)
     rows, cols = np.indices(shape)
@@ -226,6 +238,7 @@ def repair_observed_target(
     provenance = np.zeros(shape, dtype=np.uint16)
     provenance[accepted] = code_array[best_slot[accepted]]
     repaired_pixels = int(np.count_nonzero(accepted))
+    coverage = float(repaired_pixels / max(1, target_pixels))
     return result, provenance, {
         "applied": repaired_pixels > 0,
         "reason": "trusted_observed_target_transfer",
@@ -233,7 +246,9 @@ def repair_observed_target(
         "trusted_slots": [bool(value) for value in trusted],
         "original_source_indices": [int(value) for value in originals],
         "repaired_pixels": repaired_pixels,
-        "target_pixels": int(np.count_nonzero(target)),
+        "target_pixels": target_pixels,
+        "damage_reference_coverage": coverage,
+        "uncovered_damage_fraction": float(1.0 - coverage),
         "minimum_reliability": int(minimum_reliability),
         "reliability_role": "donor_ranking_with_optional_manual_floor",
         "agreement_colour_threshold": float(agreement_colour_threshold),
@@ -315,7 +330,7 @@ def _wrap_target_repair(executor, kind: BlockKind, detail_key: str, preservation
             base_result.image,
             minimum_reliability=int(parameters.get("observed_target_minimum_reliability", 0)),
             agreement_colour_threshold=float(parameters.get("observed_target_agreement_colour_threshold", 24.0)),
-            maximum_face_fraction=float(parameters.get("observed_target_maximum_face_fraction", 0.40)),
+            maximum_face_fraction=float(parameters.get("observed_target_maximum_face_fraction", 1.0)),
         )
         if diagnostics.get("applied"):
             _merge_runtime_state(executor, local_provenance)
