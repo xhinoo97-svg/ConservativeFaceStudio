@@ -186,7 +186,12 @@ def repair_observed_target(
         reliability = np.asarray(reliability_raw)
         if reliability.shape != shape:
             reliability = np.full(shape, 255, dtype=np.uint8)
-        reliability = reliability.astype(np.float32)
+        reliability = np.nan_to_num(
+            reliability.astype(np.float32),
+            nan=-np.inf,
+            posinf=255.0,
+            neginf=-np.inf,
+        )
         observed = support
         valid = target & observed & (reliability >= threshold)
         if not np.any(valid):
@@ -215,7 +220,14 @@ def repair_observed_target(
                 conflict = overlap & (gap > float(agreement_colour_threshold))
                 if not np.any(conflict):
                     continue
-                reliability_gap = np.abs(reliability_stack[first] - reliability_stack[second])
+                reliability_gap = np.zeros(shape, dtype=np.float32)
+                np.subtract(
+                    reliability_stack[first],
+                    reliability_stack[second],
+                    out=reliability_gap,
+                    where=overlap,
+                )
+                np.abs(reliability_gap, out=reliability_gap)
                 ambiguous_conflict = conflict & (reliability_gap < 12.0)
                 accepted[ambiguous_conflict] = False
 
