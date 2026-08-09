@@ -142,7 +142,7 @@ def specific_reference_memory_fusion(
     bbox: tuple[int, int, int, int],
     *,
     reference_support_masks: list[np.ndarray] | None = None,
-    top_k: int = 2,
+    top_k: int | None = None,
     minimum_region_confidence: float = 0.64,
     minimum_quality_gain: float = 0.03,
     maximum_replace_fraction: float = 0.35,
@@ -153,10 +153,13 @@ def specific_reference_memory_fusion(
     """Fuse one primary with up to nine observed references.
 
     References are processed in CPU-friendly batches of at most five, while every
-    valid donor remains eligible globally. Per-pixel results are merged by confidence
-    and provenance is remapped to the original source index 1..9. Intact primary
-    pixels receive a final all-reference conflict veto; damaged pixels keep the
-    evidence-first repair policy of the baseline implementation.
+    valid donor remains eligible globally. With ``top_k=None`` the selector is
+    dynamic: every credible donor in a batch can compete, so complementary evidence
+    is not discarded merely because it ranked outside an arbitrary fixed K. Explicit
+    integer ``top_k`` remains available for compatibility. Per-pixel results are
+    merged by confidence and provenance is remapped to the original source index
+    1..9. Intact primary pixels receive a final all-reference conflict veto; damaged
+    pixels keep the evidence-first repair policy of the baseline implementation.
     """
     if len(images) < 2:
         raise ValueError("Serve almeno una fotografia di riferimento")
@@ -166,8 +169,8 @@ def specific_reference_memory_fusion(
         raise ValueError("Numero di riferimenti oltre il limite supportato")
     if len(occlusion_masks) != len(images):
         raise ValueError("Numero immagini/maschere non compatibile")
-    if top_k < 1:
-        raise ValueError("top_k deve essere almeno 1")
+    if top_k is not None and top_k < 1:
+        raise ValueError("top_k deve essere almeno 1 oppure None per selezione dinamica")
 
     base = _validate_image(images[0])
     shape = base.shape
@@ -198,13 +201,14 @@ def specific_reference_memory_fusion(
         batch_refs = refs[start:stop]
         batch_masks = ref_masks[start:stop]
         batch_support = support_masks[start:stop]
+        effective_top_k = len(batch_refs) if top_k is None else min(max(1, int(top_k)), len(batch_refs))
         batch = _legacy.specific_reference_memory_fusion(
             [base, *batch_refs],
             [primary_mask, *batch_masks],
             landmarks5,
             bbox,
             reference_support_masks=batch_support,
-            top_k=min(max(1, int(top_k)), len(batch_refs)),
+            top_k=effective_top_k,
             minimum_region_confidence=minimum_region_confidence,
             minimum_quality_gain=minimum_quality_gain,
             maximum_replace_fraction=maximum_replace_fraction,
