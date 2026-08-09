@@ -90,17 +90,16 @@ def _normalized_correlation(a: np.ndarray, b: np.ndarray, active: np.ndarray) ->
 def _multiscale_similarity(a: np.ndarray, b: np.ndarray, mask: np.ndarray) -> float:
     bounds = _bounds(mask)
     if bounds is None:
-        return 0.0
+        return 0.5
     x, y, w, h = bounds
     if w < 3 or h < 3:
-        return 0.0
-    gray_a = cv2.cvtColor(a[y : y + h, x : x + w], cv2.COLOR_BGR2GRAY)
-    gray_b = cv2.cvtColor(b[y : y + h, x : x + w], cv2.COLOR_BGR2GRAY)
-    crop_mask = mask[y : y + h, x : x + w]
-    scales = ((1.0, 0.20), (0.5, 0.30), (0.25, 0.50))
+        return 0.5
+    gray_a = cv2.cvtColor(a[y:y+h, x:x+w], cv2.COLOR_BGR2GRAY)
+    gray_b = cv2.cvtColor(b[y:y+h, x:x+w], cv2.COLOR_BGR2GRAY)
+    crop_mask = mask[y:y+h, x:x+w]
     total = 0.0
     weight_sum = 0.0
-    for scale, weight in scales:
+    for scale, weight in ((1.0, 0.20), (0.5, 0.30), (0.25, 0.50)):
         if scale != 1.0:
             sw = max(3, int(round(w * scale)))
             sh = max(3, int(round(h * scale)))
@@ -117,15 +116,10 @@ def _multiscale_similarity(a: np.ndarray, b: np.ndarray, mask: np.ndarray) -> fl
     return float(total / weight_sum) if weight_sum else 0.5
 
 
-def _reference_agreement(
-    reference: np.ndarray,
-    median_reference: np.ndarray,
-    region_mask: np.ndarray,
-    valid_mask: np.ndarray,
-) -> float:
+def _reference_agreement(reference: np.ndarray, median_reference: np.ndarray, region_mask: np.ndarray, valid_mask: np.ndarray) -> float:
     active = (region_mask > 0) & valid_mask
     if np.count_nonzero(active) < 24:
-        return 0.0
+        return 0.5
     structure = _multiscale_similarity(reference, median_reference, active.astype(np.uint8) * 255)
     ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32)
     med_lab = cv2.cvtColor(median_reference, cv2.COLOR_BGR2LAB).astype(np.float32)
@@ -134,42 +128,22 @@ def _reference_agreement(
     return float(0.75 * structure + 0.25 * colour)
 
 
-def _candidate_score(
-    quality: float,
-    primary_quality: float,
-    similarity: float,
-    agreement: float,
-    visibility: float,
-) -> float:
+def _candidate_score(quality: float, primary_quality: float, similarity: float, agreement: float, visibility: float, *, damaged_visibility: float = 0.0) -> float:
     gain = (quality - primary_quality) / max(0.02, abs(primary_quality))
     quality_advantage = float(np.clip(0.5 + 0.5 * np.tanh(gain), 0.0, 1.0))
-    return float(
-        0.30 * similarity
-        + 0.30 * agreement
-        + 0.20 * visibility
-        + 0.20 * quality_advantage
-    )
+    if damaged_visibility > 0.0:
+        return float(0.18 * similarity + 0.27 * agreement + 0.18 * visibility + 0.27 * damaged_visibility + 0.10 * quality_advantage)
+    return float(0.30 * similarity + 0.30 * agreement + 0.20 * visibility + 0.20 * quality_advantage)
 
 
-def _median_reference_with_support(
-    refs: list[np.ndarray],
-    support_masks: list[np.ndarray],
-) -> np.ndarray:
-    """Median of observed reference pixels only; unsupported crop padding is ignored.
-
-    The previous implementation iterated every observed pixel in Python. Sorting the
-    very small reference axis gives the exact same supported median while keeping the
-    hot path vectorised for CPU-only machines.
-    """
+def _median_reference_with_support(refs: list[np.ndarray], support_masks: list[np.ndarray]) -> np.ndarray:
     stack = np.stack(refs, axis=0).astype(np.float32)
     support = np.stack([mask > 0 for mask in support_masks], axis=0)
     counts = np.sum(support, axis=0).astype(np.intp)
     observed_any = counts > 0
-
     result = np.zeros(stack.shape[1:], dtype=np.float32)
     if not np.any(observed_any):
         return result.astype(np.uint8)
-
     lower_index = np.maximum((counts - 1) // 2, 0)
     upper_index = np.maximum(counts // 2, 0)
     for channel in range(3):
@@ -182,35 +156,16 @@ def _median_reference_with_support(
     return np.clip(result, 0, 255).astype(np.uint8)
 
 
-def _shift_mask(mask: np.ndarray, dx: float, dy: float) -> np.ndarray:
+def _shift_mask(mask: np.ndarray, dx: float, dy: float, *, border_value: int) -> np.ndarray:
     h, w = mask.shape
     matrix = np.asarray([[1.0, 0.0, dx], [0.0, 1.0, dy]], dtype=np.float32)
-    return cv2.warpAffine(
-        mask,
-        matrix,
-        (w, h),
-        flags=cv2.INTER_NEAREST,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=255,
-    )
+    return cv2.warpAffine(mask, matrix, (w, h), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=border_value)
 
 
-def _agreement_mask(
-    source_images: list[np.ndarray],
-    valid_stack: np.ndarray,
-    threshold: float,
-) -> np.ndarray:
-    """Accept singleton support; require colour agreement only where donors overlap.
-
-    Complementary crops are useful precisely because they may observe different facial
-    regions. Requiring all selected donors at every destination pixel discards that
-    evidence. On overlap we remain strict and abstain when any donor pair disagrees.
-    """
-    support_count = np.sum(valid_stack, axis=0)
-    accepted = support_count > 0
+def _agreement_mask(source_images: list[np.ndarray], valid_stack: np.ndarray, threshold: float) -> np.ndarray:
+    accepted = np.sum(valid_stack, axis=0) > 0
     if len(source_images) < 2:
         return accepted
-
     labs = [cv2.cvtColor(image, cv2.COLOR_BGR2LAB).astype(np.float32) for image in source_images]
     for first in range(len(source_images) - 1):
         for second in range(first + 1, len(source_images)):
@@ -220,6 +175,20 @@ def _agreement_mask(
             gap = np.mean(np.abs(labs[first] - labs[second]), axis=2)
             accepted[overlap] &= gap[overlap] <= threshold
     return accepted
+
+
+def _limit_by_gain(mask: np.ndarray, gain: np.ndarray, cap: int) -> np.ndarray:
+    count = int(np.count_nonzero(mask))
+    if count == 0 or cap <= 0:
+        return np.zeros_like(mask)
+    if count <= cap:
+        return mask
+    coords = np.flatnonzero(mask)
+    gains = gain.ravel()[coords]
+    keep = coords[np.argpartition(gains, -cap)[-cap:]]
+    limited = np.zeros_like(mask)
+    limited.ravel()[keep] = True
+    return limited
 
 
 def specific_reference_memory_fusion(
@@ -237,7 +206,7 @@ def specific_reference_memory_fusion(
     local_refinement_max_shift: float = 4.0,
     local_refinement_min_response: float = 0.10,
 ) -> SpecificReferenceMemoryResult:
-    """DMD-inspired specific memory using only actually observed reference pixels."""
+    """Fuse observed reference evidence while protecting intact primary pixels."""
     if len(images) < 2:
         raise ValueError("Serve almeno una fotografia di riferimento")
     base = _validate_image(images[0])
@@ -273,6 +242,8 @@ def specific_reference_memory_fusion(
         if area == 0:
             decisions.append(MemoryRegionDecision(name, 0.0, 0.0, (), 0, 0, ()))
             continue
+
+        repair_target = active & (primary_mask > 0)
         primary_visible = active & (primary_mask == 0)
         primary_quality = float(np.mean(primary_quality_map[primary_visible])) if np.any(primary_visible) else 0.0
 
@@ -280,22 +251,17 @@ def specific_reference_memory_fusion(
         regional_masks: list[np.ndarray] = []
         regional_support: list[np.ndarray] = []
         regional_quality: list[np.ndarray] = []
+
         for reference, ref_mask, support_mask in zip(refs, ref_masks, support_masks):
-            coverage = float(np.count_nonzero(active & (support_mask > 0)) / max(1, area))
+            visible_support = np.where((support_mask > 0) & (primary_mask == 0), 255, 0).astype(np.uint8)
+            visible_coverage = float(np.count_nonzero(active & (visible_support > 0)) / max(1, area))
             refined = None
-            if coverage >= 0.18:
-                refined = refine_component_translation(
-                    reference,
-                    base,
-                    support_mask,
-                    region_mask,
-                    maximum_shift=float(local_refinement_max_shift),
-                    minimum_response=float(local_refinement_min_response),
-                )
+            if visible_coverage >= 0.18:
+                refined = refine_component_translation(reference, base, visible_support, region_mask, maximum_shift=float(local_refinement_max_shift), minimum_response=float(local_refinement_min_response))
             if refined is not None and refined.accepted:
                 regional_refs.append(refined.image)
-                regional_support.append(refined.support_mask)
-                regional_masks.append(_shift_mask(ref_mask, refined.dx, refined.dy))
+                regional_support.append(_shift_mask(support_mask, refined.dx, refined.dy, border_value=0))
+                regional_masks.append(_shift_mask(ref_mask, refined.dx, refined.dy, border_value=255))
                 regional_quality.append(_pixel_quality(refined.image))
             else:
                 regional_refs.append(reference)
@@ -305,22 +271,24 @@ def specific_reference_memory_fusion(
 
         median_reference = _median_reference_with_support(regional_refs, regional_support)
         candidates: list[MemoryCandidate] = []
-        for ref_index, (reference, ref_mask, ref_quality_map, support_mask) in enumerate(
-            zip(regional_refs, regional_masks, regional_quality, regional_support), start=1
-        ):
+        repair_area = int(np.count_nonzero(repair_target))
+        for ref_index, (reference, ref_mask, ref_quality_map, support_mask) in enumerate(zip(regional_refs, regional_masks, regional_quality, regional_support), start=1):
             valid = active & (ref_mask == 0) & (support_mask > 0)
-            visibility = float(np.count_nonzero(valid) / max(1, area))
-            if np.count_nonzero(valid) < 24:
+            valid_count = int(np.count_nonzero(valid))
+            if valid_count < 24:
                 continue
+            visibility = float(valid_count / max(1, area))
+            damaged_visibility = float(np.count_nonzero(valid & repair_target) / max(1, repair_area)) if repair_area else 0.0
             quality = float(np.mean(ref_quality_map[valid]))
             compare_mask = valid & primary_visible
             similarity = _multiscale_similarity(base, reference, compare_mask.astype(np.uint8) * 255) if np.count_nonzero(compare_mask) >= 24 else 0.5
             agreement = _reference_agreement(reference, median_reference, region_mask, valid) if len(regional_refs) > 1 else similarity
-            score = _candidate_score(quality, primary_quality, similarity, agreement, visibility)
+            score = _candidate_score(quality, primary_quality, similarity, agreement, visibility, damaged_visibility=damaged_visibility)
             candidates.append(MemoryCandidate(ref_index, quality, similarity, agreement, visibility, score))
 
         candidates.sort(key=lambda item: item.score, reverse=True)
-        selected = [item for item in candidates if item.score >= minimum_region_confidence][:top_k]
+        donor_limit = min(len(candidates), max(top_k, 5 if repair_area else top_k))
+        selected = [item for item in candidates if item.score >= minimum_region_confidence][:donor_limit]
         confidence = float(np.mean([item.score for item in selected])) if selected else 0.0
         transferred = 0
 
@@ -330,39 +298,29 @@ def specific_reference_memory_fusion(
             source_masks = [regional_masks[index - 1] for index in selected_indices]
             source_qualities = [regional_quality[index - 1] for index in selected_indices]
             source_support = [regional_support[index - 1] for index in selected_indices]
-            eligible = active & (primary_mask == 0)
             valid_stack = np.stack([(mask == 0) & (support > 0) for mask, support in zip(source_masks, source_support)], axis=0)
             quality_stack = np.stack(source_qualities, axis=0).copy()
             quality_stack[~valid_stack] = -np.inf
             best_local_slot = np.argmax(quality_stack, axis=0)
             best_local_quality = np.max(quality_stack, axis=0)
             local_gain = best_local_quality - primary_quality_map
-            eligible &= np.isfinite(best_local_quality) & (local_gain >= minimum_quality_gain)
+            finite = np.isfinite(best_local_quality)
+            agreement_ok = _agreement_mask(source_images, valid_stack, agreement_colour_threshold)
 
-            if len(source_images) >= 2:
-                eligible &= _agreement_mask(source_images, valid_stack, agreement_colour_threshold)
-            else:
-                only = selected[0]
-                if only.similarity < 0.82 or only.agreement < 0.82:
-                    eligible[:] = False
+            repair_eligible = repair_target & finite & agreement_ok
+            if len(source_images) == 1 and selected[0].score < max(minimum_region_confidence, 0.68):
+                repair_eligible[:] = False
 
-            region_cap = maximum_replace_fraction
+            enhancement_eligible = primary_visible & finite & agreement_ok & (local_gain >= minimum_quality_gain)
+            visible_ok = [item for item in selected[:max(1, top_k)] if item.similarity >= 0.86 and item.agreement >= 0.82]
+            if not visible_ok or confidence < max(minimum_region_confidence, 0.78):
+                enhancement_eligible[:] = False
+            visible_cap_fraction = min(maximum_replace_fraction, 0.06)
             if name == "face":
-                region_cap = min(region_cap, 0.08)
-                if confidence < max(minimum_region_confidence, 0.76):
-                    eligible[:] = False
-            eligible_count = int(np.count_nonzero(eligible))
-            cap = max(0, int(round(area * region_cap)))
-            if eligible_count > cap > 0:
-                coords = np.flatnonzero(eligible)
-                gains = local_gain.ravel()[coords]
-                keep = coords[np.argpartition(gains, -cap)[-cap:]]
-                limited = np.zeros_like(eligible)
-                limited.ravel()[keep] = True
-                eligible = limited
-            elif cap == 0:
-                eligible[:] = False
+                visible_cap_fraction = min(visible_cap_fraction, 0.02)
+            enhancement_eligible = _limit_by_gain(enhancement_eligible, local_gain, max(0, int(round(area * visible_cap_fraction))))
 
+            eligible = repair_eligible | enhancement_eligible
             if np.any(eligible):
                 rows, cols = np.indices(shape[:2])
                 stack = np.stack(source_images, axis=0)
@@ -375,10 +333,4 @@ def specific_reference_memory_fusion(
 
         decisions.append(MemoryRegionDecision(name, confidence, primary_quality, tuple(item.source_index for item in selected), transferred, len(candidates), tuple(candidates)))
 
-    return SpecificReferenceMemoryResult(
-        image=output,
-        provenance_map=provenance,
-        confidence_map=confidence_map,
-        decisions=tuple(decisions),
-        transferred_pixels=int(np.count_nonzero(provenance)),
-    )
+    return SpecificReferenceMemoryResult(image=output, provenance_map=provenance, confidence_map=confidence_map, decisions=tuple(decisions), transferred_pixels=int(np.count_nonzero(provenance)))
