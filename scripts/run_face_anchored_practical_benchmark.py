@@ -8,10 +8,15 @@ neck, clothing, or background. This wrapper keeps the existing report/CLI contra
 replaces only scenario construction, so the quality gate measures face restoration.
 """
 
+import shutil
+
 import cv2
 import numpy as np
 
 import app.practical_benchmark as pb
+
+
+_ORIGINAL_EVALUATE_SCENARIO = pb.evaluate_scenario
 
 
 def _largest_face_bbox(image: np.ndarray) -> tuple[int, int, int, int]:
@@ -150,8 +155,42 @@ def make_face_anchored_scenarios(clean: np.ndarray, *, seed: int = 20260808, pro
     return all_cases
 
 
+def _export_canonical_visual_evidence(clean: np.ndarray, scenario: pb.Scenario, output_dir) -> None:
+    """Persist the exact visual inputs needed to audit one benchmark case.
+
+    This is intentionally independent from the runner export: even when the pipeline
+    aborts, CI retains the clean target, damaged primary, every supplied donor and the
+    benchmark damage mask. At most nine references are emitted by the product contract.
+    """
+    case_dir = output_dir / scenario.name
+    case_dir.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(case_dir / "00_ground_truth_original.png"), clean)
+    cv2.imwrite(str(case_dir / "01_primary_degraded.png"), scenario.primary)
+    for index, reference in enumerate(scenario.references[:9], start=1):
+        cv2.imwrite(str(case_dir / f"02_reference_{index:02d}.png"), reference)
+    cv2.imwrite(str(case_dir / "05_damage_mask.png"), scenario.damage_mask)
+
+
+def _evaluate_scenario_with_visual_evidence(clean: np.ndarray, scenario: pb.Scenario, output_dir, *, core_paths=None):
+    _export_canonical_visual_evidence(clean, scenario, output_dir)
+    record = _ORIGINAL_EVALUATE_SCENARIO(clean, scenario, output_dir, core_paths=core_paths)
+    case_dir = output_dir / scenario.name
+    aliases = (
+        ("final.png", "03_final_output.png"),
+        ("diff-heatmap.png", "04_diff_heatmap.png"),
+        ("final.source-map.png", "06_provenance_map.png"),
+        ("final.reference-confidence.png", "07_confidence_map.png"),
+    )
+    for source_name, alias_name in aliases:
+        source = case_dir / source_name
+        if source.is_file():
+            shutil.copy2(source, case_dir / alias_name)
+    return record
+
+
 def main() -> int:
     pb.make_scenarios = make_face_anchored_scenarios
+    pb.evaluate_scenario = _evaluate_scenario_with_visual_evidence
     return int(pb.main())
 
 
