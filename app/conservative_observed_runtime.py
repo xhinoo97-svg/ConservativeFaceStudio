@@ -27,11 +27,44 @@ def _gradient_magnitude(image: np.ndarray) -> np.ndarray:
     return cv2.magnitude(gx, gy)
 
 
+def _geometric_observed_support(
+    reference: np.ndarray,
+    support_hint: np.ndarray | None = None,
+) -> tuple[np.ndarray, str]:
+    """Return observed pixels without treating dark appearance as missing evidence.
+
+    An existing aligned support mask is authoritative because it represents the known
+    geometric footprint of the source after warping/cropping.  When no such mask is
+    available, the only inferred missing area is exact-zero padding connected to the
+    image border. Interior black pixels remain observed. This avoids brightness or
+    morphology priors while retaining a conservative fallback for sparse component
+    sheets encoded on a zero canvas.
+    """
+    shape = reference.shape[:2]
+    if isinstance(support_hint, np.ndarray) and support_hint.shape == shape:
+        return _binary(support_hint, shape) > 0, "aligned_reference_support_mask"
+
+    exact_zero = np.all(reference == 0, axis=2).astype(np.uint8)
+    if not np.any(exact_zero):
+        return np.ones(shape, dtype=bool), "full_canvas_no_zero_padding"
+
+    _, labels = cv2.connectedComponents(exact_zero, connectivity=8)
+    border_labels = np.unique(
+        np.concatenate((labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]))
+    )
+    padding_labels = border_labels[border_labels != 0]
+    if padding_labels.size == 0:
+        return np.ones(shape, dtype=bool), "full_canvas_interior_zero_only"
+    padding = np.isin(labels, padding_labels)
+    return ~padding, "border_connected_zero_padding"
+
+
 def verify_same_canvas_observed_source(
     workspace,
     reference: np.ndarray,
     runtime_reference_index: int,
     *,
+    support_hint: np.ndarray | None = None,
     minimum_observed_fraction: float = 0.02,
     maximum_median_lab_delta: float = 0.035,
     maximum_p90_lab_delta: float = 0.12,
@@ -49,7 +82,7 @@ def verify_same_canvas_observed_source(
     if reference.shape != primary.shape or reference.ndim != 3 or reference.shape[2] != 3:
         return None
     shape = primary.shape[:2]
-    observed = np.max(reference, axis=2) > 2
+    observed, support_source = _geometric_observed_support(reference, support_hint)
     observed_fraction = float(np.mean(observed))
     if observed_fraction < float(minimum_observed_fraction):
         return None
@@ -75,9 +108,9 @@ def verify_same_canvas_observed_source(
         except (TypeError, ValueError):
             return None
 
-    # Sobel support extends beyond an occlusion and beyond the artificial black border
-    # of a sparse component sheet. Exclude both narrow rings only while verifying the
-    # identity transform. The original observed support is returned unchanged for repair.
+    # Sobel support extends beyond an occlusion and beyond artificial crop padding.
+    # Exclude both narrow rings only while verifying the identity transform. The
+    # original geometric observed support is returned unchanged for exact repair.
     boundary_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     primary_blocked = cv2.dilate(primary_occ, boundary_kernel) > 0
     reference_blocked = cv2.dilate(reference_occ, boundary_kernel) > 0
@@ -92,7 +125,6 @@ def verify_same_canvas_observed_source(
         & face
         & ~primary_blocked
         & ~reference_blocked
-        & (np.max(primary, axis=2) > 2)
     )
     observed_face_pixels = int(np.count_nonzero(observed_interior & face & ~reference_blocked))
     comparable_pixels = int(np.count_nonzero(comparable))
@@ -125,6 +157,7 @@ def verify_same_canvas_observed_source(
     return support, {
         "runtime_reference_index": int(runtime_reference_index),
         "method": "verified-same-canvas-observed",
+        "observed_support_source": support_source,
         "observed_fraction": observed_fraction,
         "observed_face_pixels": observed_face_pixels,
         "comparable_pixels": comparable_pixels,
@@ -149,9 +182,10 @@ def _restore_exact_same_canvas_references(workspace) -> list[dict[str, Any]]:
         else list(range(len(aligned)))
     )
     supports_raw = workspace.metadata.get("aligned_reference_support_masks")
+    supports_authoritative = isinstance(supports_raw, list) and len(supports_raw) == len(aligned)
     supports = (
         [np.asarray(value).copy() for value in supports_raw]
-        if isinstance(supports_raw, list) and len(supports_raw) == len(aligned)
+        if supports_authoritative
         else [np.full(workspace.primary.shape[:2], 255, dtype=np.uint8) for _ in aligned]
     )
     reliability_raw = workspace.metadata.get("aligned_reference_detail_reliability_maps")
@@ -195,7 +229,14 @@ def _restore_exact_same_canvas_references(workspace) -> list[dict[str, Any]]:
     slot_by_runtime = {runtime_index: slot for slot, runtime_index in enumerate(runtime_indices)}
     diagnostics: list[dict[str, Any]] = []
     for runtime_index, reference in enumerate(references):
-        verified = verify_same_canvas_observed_source(workspace, reference, runtime_index)
+        existing_slot = slot_by_runtime.get(runtime_index)
+        support_hint = supports[existing_slot] if supports_authoritative and existing_slot is not None else None
+        verified = verify_same_canvas_observed_source(
+            workspace,
+            reference,
+            runtime_index,
+            support_hint=support_hint,
+        )
         if verified is None:
             continue
         support, details = verified
@@ -206,7 +247,7 @@ def _restore_exact_same_canvas_references(workspace) -> list[dict[str, Any]]:
                 source_reliability = candidate.astype(np.uint8, copy=True)
         source_reliability[support == 0] = 0
 
-        slot = slot_by_runtime.get(runtime_index)
+        slot = existing_slot
         if slot is None:
             slot = len(aligned)
             slot_by_runtime[runtime_index] = slot
