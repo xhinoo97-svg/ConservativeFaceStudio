@@ -217,6 +217,15 @@ class AutomaticPipelineRunner:
                 parameters["maximum_generated_face_fraction"] = 0.015
                 parameters["maximum_generated_target_fraction"] = 0.25
                 parameters["maximum_symmetry_face_fraction"] = 0.08
+                # A verified observed donor may legitimately cover the whole damage target.
+                # The damage mask, donor support, alignment trust and identity gate are the
+                # safety boundaries; a fixed 25% face cap discarded real evidence on large
+                # stickers/partial-face benchmark cases.
+                parameters["maximum_occlusion_fraction"] = 1.0
+            elif block.kind is BlockKind.FUSION:
+                # Re-apply the same evidence ceiling after fusion because the exact
+                # same-canvas repair runtime also wraps this block.
+                parameters["maximum_occlusion_fraction"] = 1.0
             elif block.kind is BlockKind.UPSCALE:
                 parameters["scale"] = upscale
             elif block.kind is BlockKind.IDENTITY_CHECK:
