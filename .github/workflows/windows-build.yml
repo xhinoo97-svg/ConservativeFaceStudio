@@ -179,7 +179,7 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - name: Upload validation reports
+      - name: Upload validation reports and practical visual evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -187,12 +187,8 @@ jobs:
           path: |
             benchmark-windows-ci.json
             validation-report.json
-            practical-benchmark/practical-benchmark.json
-            practical-benchmark/practical-benchmark.csv
-            practical-benchmark/*/*/diff-heatmap.png
-            practical-matrix/practical-matrix.json
-            practical-matrix/practical-matrix.csv
-            practical-matrix/*/*/diff-heatmap.png
+            practical-benchmark/**/*
+            practical-matrix/**/*
           if-no-files-found: warn
           retention-days: 14
 
