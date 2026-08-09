@@ -133,10 +133,16 @@ def repair_observed_target(
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
     """Fill damaged pixels from trusted, actually observed aligned donors only.
 
-    The replacement limit applies only as a safety ceiling over the face.  The default
+    The replacement limit applies only as a safety ceiling over the face. The default
     is intentionally 1.0: a verified damage target may legitimately cover most of the
     face, and reference coverage must not be truncated merely because the occlusion is
-    large.  Pixels outside the frozen damage target are never eligible here.
+    large. Pixels outside the frozen damage target are never eligible here.
+
+    ``aligned_reference_support_masks`` is the authoritative observed footprint. Pixel
+    intensity is deliberately not used as a support test: genuine photographed pixels
+    can be exactly or nearly black (hair, pupils, eyeliner, deep shadow). Warp borders
+    and crop padding must instead be excluded by the geometric support mask so exact
+    provenance is preserved without introducing appearance-dependent priors.
     """
     shape = workspace.primary.shape[:2]
     aligned = list(workspace.aligned_references)
@@ -181,7 +187,7 @@ def repair_observed_target(
         if reliability.shape != shape:
             reliability = np.full(shape, 255, dtype=np.uint8)
         reliability = reliability.astype(np.float32)
-        observed = support & (np.max(reference, axis=2) > 2)
+        observed = support
         valid = target & observed & (reliability >= threshold)
         if not np.any(valid):
             continue
@@ -251,6 +257,7 @@ def repair_observed_target(
         "uncovered_damage_fraction": float(1.0 - coverage),
         "minimum_reliability": int(minimum_reliability),
         "reliability_role": "donor_ranking_with_optional_manual_floor",
+        "observed_support_source": "aligned_reference_support_masks",
         "agreement_colour_threshold": float(agreement_colour_threshold),
         "maximum_face_fraction": float(maximum_face_fraction),
         "generated_pixels": 0,
