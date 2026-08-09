@@ -246,7 +246,15 @@ class AutomaticPipelineRunner:
         raise RuntimeError("Pipeline terminata senza blocco export")
 
     def _skip_reason(self, kind: BlockKind) -> str | None:
-        has_references = bool(self.executor.workspace.references)
+        workspace = self.executor.workspace
+        has_references = bool(workspace.references)
         if kind in {BlockKind.ALIGN, BlockKind.REGION_SELECT, BlockKind.FUSION} and not has_references:
             return "Nessuna fotografia di riferimento disponibile"
+        if kind is BlockKind.FRONTALIZE:
+            target = workspace.metadata.get("inpaint_target_mask")
+            has_target = isinstance(target, np.ndarray) and bool(np.any(target > 0))
+            if not has_target and isinstance(workspace.occlusion_masks, list):
+                has_target = any(isinstance(mask, np.ndarray) and bool(np.any(mask > 0)) for mask in workspace.occlusion_masks)
+            if has_target:
+                return "Restauro conservativo: preservata la geometria originale della fotografia primaria"
         return None
