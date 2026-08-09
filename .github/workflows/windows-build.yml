@@ -62,7 +62,7 @@ jobs:
       - name: Practical public-portrait benchmark
         shell: pwsh
         run: |
-          python -m app.practical_benchmark --output practical-benchmark --cache .benchmark-cache/public-portraits --limit 10 --size 320 --profile quick
+          python scripts/run_face_anchored_practical_benchmark.py --output practical-benchmark --cache .benchmark-cache/public-portraits --limit 10 --size 320 --profile quick
           $report = Get-Content practical-benchmark/practical-benchmark.json -Raw | ConvertFrom-Json
           $errors = @($report.cases | Where-Object { $_.error })
           $failed95 = @($report.cases | Where-Object { $_.target95_applicable -eq $true -and $_.target95_passed -ne $true })
