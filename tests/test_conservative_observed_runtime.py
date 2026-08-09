@@ -68,8 +68,52 @@ def test_exact_component_reference_is_accepted_without_texture_reliability_requi
 
     assert verified is not None
     observed, details = verified
-    assert np.count_nonzero(observed) == np.count_nonzero(np.max(partial, axis=2) > 2)
+    assert np.count_nonzero(observed) == np.count_nonzero(support)
+    assert details["observed_support_source"] == "border_connected_zero_padding"
     assert details["comparable_pixels"] >= 96
+
+
+def test_interior_exact_black_pixels_remain_observed_evidence() -> None:
+    clean = _face()
+    partial_support = np.zeros(clean.shape[:2], dtype=np.uint8)
+    cv2.rectangle(partial_support, (34, 42), (94, 78), 255, -1)
+    partial = np.zeros_like(clean)
+    partial[partial_support > 0] = clean[partial_support > 0]
+    partial[60:65, 60:65] = (0, 0, 0)
+    primary = clean.copy()
+    primary[60:65, 60:65] = (0, 0, 0)
+    workspace = _workspace(primary, partial)
+
+    verified = verify_same_canvas_observed_source(workspace, partial, 0)
+
+    assert verified is not None
+    observed, details = verified
+    assert np.all(observed[60:65, 60:65] == 255)
+    assert details["observed_support_source"] == "border_connected_zero_padding"
+
+
+def test_authoritative_geometric_support_keeps_black_pixels_touching_crop_edge() -> None:
+    clean = _face()
+    support = np.zeros(clean.shape[:2], dtype=np.uint8)
+    cv2.rectangle(support, (34, 42), (94, 78), 255, -1)
+    reference = np.zeros_like(clean)
+    reference[support > 0] = clean[support > 0]
+    reference[42:48, 34:44] = (0, 0, 0)
+    primary = clean.copy()
+    primary[42:48, 34:44] = (0, 0, 0)
+    workspace = _workspace(primary, reference)
+
+    verified = verify_same_canvas_observed_source(
+        workspace,
+        reference,
+        0,
+        support_hint=support,
+    )
+
+    assert verified is not None
+    observed, details = verified
+    assert np.all(observed[42:48, 34:44] == 255)
+    assert details["observed_support_source"] == "aligned_reference_support_mask"
 
 
 def test_same_size_shifted_reference_is_not_mistaken_for_identity_transform() -> None:
