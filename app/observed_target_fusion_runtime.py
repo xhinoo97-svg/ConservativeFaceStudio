@@ -15,6 +15,14 @@ def install_observed_target_fusion_runtime(executor) -> None:
     FUSION follows INPAINT in the pipeline and may otherwise overwrite an exact observed
     repair. Re-applying the same conservative transfer here keeps the donor evidence in
     the final face while the normal identity guardrail still evaluates this block output.
+
+    The post-fusion pass must not silently reintroduce stricter coverage or texture
+    thresholds than the direct observed-target repair. Geometrically supported donor
+    pixels are valid evidence even when smooth or dark; detail reliability is therefore
+    a ranking signal by default, not a hard eligibility floor. Likewise, a verified
+    damage target may legitimately span most of the face, so the default safety ceiling
+    follows the 100% target-aware limit used by the repair runtime. Both values remain
+    explicitly overridable through block parameters.
     """
     original = executor._handlers.get(BlockKind.FUSION)
     if original is None:
@@ -26,9 +34,9 @@ def install_observed_target_fusion_runtime(executor) -> None:
         repaired, local_provenance, diagnostics = repair_observed_target(
             executor.workspace,
             base_result.image,
-            minimum_reliability=int(parameters.get("observed_target_minimum_reliability", 96)),
+            minimum_reliability=int(parameters.get("observed_target_minimum_reliability", 0)),
             agreement_colour_threshold=float(parameters.get("observed_target_agreement_colour_threshold", 24.0)),
-            maximum_face_fraction=float(parameters.get("observed_target_maximum_face_fraction", 0.40)),
+            maximum_face_fraction=float(parameters.get("observed_target_maximum_face_fraction", 1.0)),
         )
         details = dict(base_result.details)
         details["post_fusion_observed_target_repair"] = diagnostics
