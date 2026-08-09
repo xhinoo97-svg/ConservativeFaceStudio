@@ -60,7 +60,7 @@ def test_pretrained_handler_falls_back_when_inference_fails(monkeypatch, tmp_pat
         def infer(self, source):
             raise RuntimeError("synthetic inference failure")
 
-    monkeypatch.setattr("app.pretrained_restoration_handlers.NafNetDeblurEngine", FakeEngine if False else BrokenEngine)
+    monkeypatch.setattr("app.pretrained_restoration_handlers.NafNetDeblurEngine", BrokenEngine)
     install_pretrained_restoration_handlers(executor, {"opencv_nafnet_deblur": model})
     block = next(item for item in executor.pipeline.blocks if item.kind is BlockKind.DEBLUR)
     result = executor.execute(block)
