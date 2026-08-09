@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from app.visibility_stress_benchmark import _split_support, _visible_masks, make_visibility_cases
+from app.visibility_stress_benchmark import (
+    _damage_reference_coverage,
+    _split_support,
+    _visible_masks,
+    make_visibility_cases,
+)
 
 
 def test_visible_masks_keep_about_forty_percent() -> None:
@@ -24,6 +29,21 @@ def test_complementary_supports_cover_exact_damage_union() -> None:
             union = np.maximum(union, support)
             assert not np.any((support > 0) & (damage == 0))
         assert np.array_equal(union, damage)
+
+
+def test_damage_reference_coverage_counts_only_real_reference_pixels() -> None:
+    damage = np.zeros((10, 10), dtype=np.uint8)
+    damage[:, 4:] = 255
+    expected = damage.copy()
+    provenance = np.zeros((10, 10), dtype=np.uint16)
+    provenance[:, 4:7] = 1
+    provenance[:, 7:9] = 2
+    provenance[:, 9:] = np.uint16(65535)
+
+    # Five of six damaged columns are backed by real references; generated pixels do not count.
+    coverage = _damage_reference_coverage(provenance, damage, expected)
+    assert coverage is not None
+    assert abs(coverage - (5.0 / 6.0)) < 1e-9
 
 
 def test_visibility_cases_separate_single_from_strict_multi() -> None:
