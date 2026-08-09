@@ -14,8 +14,8 @@ STANDARD_MODELS: tuple[ModelManifest, ...] = (
         filename="deblurring_nafnet_2025may.onnx",
         destination="models/nafnet/deblurring_nafnet_2025may.onnx",
         source_url=(
-            "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/"
-            "models/deblurring_nafnet/deblurring_nafnet_2025may.onnx"
+            "https://huggingface.co/opencv/deblurring_nafnet/resolve/main/"
+            "deblurring_nafnet_2025may.onnx?download=true"
         ),
         code_license="MIT",
         weights_license="MIT (OpenCV Zoo model directory)",
@@ -23,8 +23,9 @@ STANDARD_MODELS: tuple[ModelManifest, ...] = (
         expected_sha256="07263f416febecce10193dd648e950b22e397cf521eedab1a114ef77b2bc9587",
         max_bytes=110_000_000,
         notes=(
-            "Official OpenCV Zoo ONNX checkpoint. The strict path blends the learned output with "
-            "observed pixels and still applies the per-block identity rollback."
+            "Official OpenCV Zoo ONNX checkpoint mirrored by the official OpenCV Hugging Face "
+            "organization. The strict path blends the learned output with observed pixels and "
+            "still applies the per-block identity rollback."
         ),
     ),
     ModelManifest(
@@ -65,8 +66,8 @@ STANDARD_MODELS: tuple[ModelManifest, ...] = (
         filename="inpainting_lama_2025jan.onnx",
         destination="models/lama/inpainting_lama_2025jan.onnx",
         source_url=(
-            "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/"
-            "models/inpainting_lama/inpainting_lama_2025jan.onnx"
+            "https://huggingface.co/opencv/inpainting_lama/resolve/main/"
+            "inpainting_lama_2025jan.onnx?download=true"
         ),
         code_license="Apache-2.0",
         weights_license="Apache-2.0 (OpenCV Zoo model directory)",
@@ -74,9 +75,10 @@ STANDARD_MODELS: tuple[ModelManifest, ...] = (
         expected_sha256="7df918ac3921d3daf0aae1d219776cf0dc4e4935f035af81841b40adcf74fdf2",
         max_bytes=105_000_000,
         notes=(
-            "Official OpenCV Zoo LaMa ONNX checkpoint. It is a generative fallback only for residual "
-            "holes that could not be reconstructed from real same-identity references. Generated pixels "
-            "must be marked in provenance and pass the identity rollback gate."
+            "Official OpenCV Zoo LaMa ONNX checkpoint mirrored by the official OpenCV Hugging Face "
+            "organization. It is a generative fallback only for residual holes that could not be "
+            "reconstructed from real same-identity references. Generated pixels must be marked in "
+            "provenance and pass the identity rollback gate."
         ),
     ),
 )
