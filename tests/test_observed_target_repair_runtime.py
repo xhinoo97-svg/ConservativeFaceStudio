@@ -137,3 +137,27 @@ def test_low_detail_observed_pixels_remain_valid_repair_evidence_by_default() ->
     assert details["applied"] is True
     assert np.array_equal(result[target > 0], smooth[target > 0])
     assert np.all(provenance[target > 0] == 1)
+
+
+def test_near_black_observed_pixels_are_valid_when_geometric_support_confirms_them() -> None:
+    clean, damaged, target = _scene()
+    donor = clean.copy()
+    dark_region = np.zeros(target.shape, dtype=bool)
+    dark_region[26:34, 24:36] = True
+    dark_region &= target > 0
+    donor[dark_region] = (0, 1, 2)
+
+    workspace = _workspace(damaged, [donor], target)
+    support = np.zeros(target.shape, dtype=np.uint8)
+    support[dark_region] = 255
+    workspace.metadata["aligned_reference_support_masks"] = [support]
+
+    result, provenance, details = repair_observed_target(workspace, damaged, maximum_face_fraction=1.0)
+
+    assert details["applied"] is True
+    assert details["observed_support_source"] == "aligned_reference_support_masks"
+    assert details["damage_reference_coverage"] == float(np.count_nonzero(dark_region) / np.count_nonzero(target))
+    assert np.array_equal(result[dark_region], donor[dark_region])
+    assert np.array_equal(result[(target > 0) & ~dark_region], damaged[(target > 0) & ~dark_region])
+    assert np.all(provenance[dark_region] == 1)
+    assert np.all(provenance[~dark_region] == 0)
