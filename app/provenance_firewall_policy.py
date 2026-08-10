@@ -163,7 +163,55 @@ def install_provenance_firewall_policy() -> None:
         result, details = tiny_original(workspace, image)
         current = workspace.provenance_map
         aligned = list(workspace.aligned_references)
-        if not aligned or not isinstance(current, np.ndarray) or current.shape != image.shape[:2]:
+        shape = image.shape[:2]
+
+        # The native tiny-evidence path now consumes preclean evidence maps directly
+        # and writes the true photographic source code into provenance. Reinterpreting
+        # that code as a working-reference slot would reject valid cross-cleaned pixels
+        # (for example, slot 0 containing an observed pixel from REF2). When authoritative
+        # maps were used, preserve the native result and report only unresolved candidate
+        # pixels for which no trusted reference supplied photographic evidence.
+        authoritative_maps = (
+            tiny_runtime._preclean_evidence_maps(workspace, len(aligned), shape)
+            if aligned
+            else None
+        )
+        if (
+            authoritative_maps is not None
+            and bool(details.get("preclean_evidence_authoritative"))
+        ):
+            target = tiny_runtime._binary(workspace.metadata.get("inpaint_target_mask"), shape)
+            if (
+                not np.any(target)
+                and isinstance(workspace.occlusion_masks, list)
+                and workspace.occlusion_masks
+            ):
+                target = tiny_runtime._binary(np.asarray(workspace.occlusion_masks[0]), shape)
+
+            unresolved_before = target & (before_provenance == 0)
+            trusted = tiny_runtime._trusted_flags(workspace, len(aligned))
+            supports = tiny_runtime._support_masks(workspace, len(aligned), shape)
+            proposed = np.zeros(shape, dtype=bool)
+            observed = np.zeros(shape, dtype=bool)
+            for index, evidence in enumerate(authoritative_maps):
+                if not trusted[index]:
+                    continue
+                candidate = unresolved_before & supports[index]
+                proposed |= candidate
+                observed |= candidate & (evidence > 0) & (evidence < np.uint16(65534))
+
+            enriched = dict(details)
+            enriched["provenance_firewall"] = True
+            enriched["firewall_rejected_non_evidence_pixels"] = int(
+                np.count_nonzero(proposed & ~observed)
+            )
+            enriched.setdefault("firewall_reassigned_true_source_pixels", 0)
+            enriched["evidence_authority"] = (
+                "preclean_reference_evidence_maps_or_original_support"
+            )
+            return result, enriched
+
+        if not aligned or not isinstance(current, np.ndarray) or current.shape != shape:
             return result, details
 
         current = current.astype(np.uint16, copy=True)
@@ -172,7 +220,7 @@ def install_provenance_firewall_policy() -> None:
             return result, details
 
         container_codes = [int(value) for value in tiny_runtime._source_codes(workspace, len(aligned))]
-        maps = _authoritative_evidence_maps(workspace, len(aligned), image.shape[:2], container_codes)
+        maps = _authoritative_evidence_maps(workspace, len(aligned), shape, container_codes)
         output, corrected, rejected, reassigned = _apply_source_map_firewall(
             image,
             result,
@@ -184,9 +232,9 @@ def install_provenance_firewall_policy() -> None:
         workspace.provenance_map = corrected
 
         if rejected:
-            observed = workspace.metadata.get("inpaint_observed_mask")
-            if isinstance(observed, np.ndarray) and observed.shape == image.shape[:2]:
-                mask = np.asarray(observed).copy()
+            observed_mask = workspace.metadata.get("inpaint_observed_mask")
+            if isinstance(observed_mask, np.ndarray) and observed_mask.shape == shape:
+                mask = np.asarray(observed_mask).copy()
                 invalid = newly_attributed & (corrected == 0)
                 mask[invalid] = 0
                 workspace.metadata["inpaint_observed_mask"] = mask
