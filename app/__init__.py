@@ -27,6 +27,7 @@ from app.evidence_confidence_runtime import install_evidence_confidence_runtime
 from app.core_quality_gate_policy import install_core_quality_gate_policy
 from app.adaptive_restoration_autoinstall import install_adaptive_restoration_autoinstall
 from app.immutable_input_autoinstall import install_immutable_input_policy
+from app.provenance_firewall_policy import install_provenance_firewall_policy
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
@@ -52,3 +53,5 @@ install_core_quality_gate_policy()
 install_adaptive_restoration_autoinstall()
 # Capture imported MAIN/reference pixels before AutomaticPipelineRunner preflight mutates working copies.
 install_immutable_input_policy()
+# The working reference may be cleaned, but only its per-pixel evidence map may authorize ORIGINAL_REFERENCE provenance.
+install_provenance_firewall_policy()
