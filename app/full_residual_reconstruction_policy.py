@@ -15,6 +15,7 @@ import numpy as np
 
 _INSTALLED = False
 _GENERATED = np.uint16(65535)
+_SYMMETRY = np.uint16(65534)
 
 
 def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
@@ -46,6 +47,49 @@ def _damage_target(workspace) -> np.ndarray:
     if isinstance(stage_mask, np.ndarray):
         target = cv2.bitwise_and(target, _binary(stage_mask, shape))
     return target
+
+
+def _demonstrated_residual(workspace, before: np.ndarray, after: np.ndarray, target: np.ndarray) -> tuple[np.ndarray, dict[str, int]]:
+    """Return target pixels that have not actually been demonstrated as resolved.
+
+    Some inner handlers historically cleared ``inpaint_unresolved_mask`` when their
+    own narrower sub-target was complete. The adaptive outer stage can still contain a
+    much larger ROI. An empty inner mask is therefore not proof that the outer target
+    is solved. Resolution must come from observed/symmetry/generated masks or from
+    changed pixels carrying authoritative reference provenance.
+    """
+    shape = target.shape
+    active = target > 0
+    observed = _binary(workspace.metadata.get("inpaint_observed_mask"), shape) > 0 if isinstance(workspace.metadata.get("inpaint_observed_mask"), np.ndarray) else np.zeros(shape, bool)
+    symmetry = _binary(workspace.metadata.get("inpaint_symmetry_mask"), shape) > 0 if isinstance(workspace.metadata.get("inpaint_symmetry_mask"), np.ndarray) else np.zeros(shape, bool)
+    generated = _binary(workspace.metadata.get("inpaint_generated_mask"), shape) > 0 if isinstance(workspace.metadata.get("inpaint_generated_mask"), np.ndarray) else np.zeros(shape, bool)
+
+    changed = np.any(np.asarray(after) != np.asarray(before), axis=2)
+    provenance = workspace.provenance_map
+    reference_provenance = np.zeros(shape, dtype=bool)
+    if isinstance(provenance, np.ndarray) and provenance.shape == shape:
+        codes = provenance.astype(np.uint16, copy=False)
+        reference_provenance = (codes > 0) & (codes < _SYMMETRY)
+
+    resolved = active & (observed | symmetry | generated | (changed & reference_provenance))
+
+    unresolved_hint = workspace.metadata.get("inpaint_unresolved_mask")
+    hinted = _binary(unresolved_hint, shape) > 0 if isinstance(unresolved_hint, np.ndarray) else np.zeros(shape, bool)
+    # An explicit unresolved hint can only add unresolved pixels, never erase residual
+    # that the outer target has no evidence of having repaired.
+    residual_bool = active & ~resolved
+    residual_bool |= active & hinted
+    residual = np.where(residual_bool, 255, 0).astype(np.uint8)
+    diagnostics = {
+        "target_pixels": int(np.count_nonzero(active)),
+        "observed_resolved_pixels": int(np.count_nonzero(active & observed)),
+        "symmetry_resolved_pixels": int(np.count_nonzero(active & symmetry)),
+        "generated_resolved_pixels": int(np.count_nonzero(active & generated)),
+        "reference_provenance_changed_pixels": int(np.count_nonzero(active & changed & reference_provenance)),
+        "inner_unresolved_hint_pixels": int(np.count_nonzero(active & hinted)),
+        "demonstrated_residual_pixels": int(np.count_nonzero(residual_bool)),
+    }
+    return residual, diagnostics
 
 
 def install_full_residual_reconstruction_policy() -> None:
@@ -121,19 +165,27 @@ def install_full_residual_reconstruction_policy() -> None:
             if not np.any(target):
                 return original_handler(block, p)
 
+            residual_diagnostics: dict[str, Any] = {}
             if executor.workspace.aligned_references:
                 result = original_handler(block, p)
                 image = result.image.copy()
                 details = dict(result.details)
-                unresolved = executor.workspace.metadata.get("inpaint_unresolved_mask")
-                unresolved = _binary(unresolved, target.shape) if isinstance(unresolved, np.ndarray) else np.zeros(target.shape, np.uint8)
-                residual = cv2.bitwise_and(target, unresolved)
+                residual, residual_diagnostics = _demonstrated_residual(executor.workspace, base, image, target)
                 if not np.any(residual):
-                    details["residual_completion"] = {"attempted": False, "reason": "all_damage_resolved_by_observed_or_primary_fallback"}
+                    details["residual_completion"] = {
+                        "attempted": False,
+                        "reason": "all_outer_stage_target_pixels_demonstrably_resolved",
+                        **residual_diagnostics,
+                    }
                     return ExecutionResult(result.block, image, details)
             else:
                 image = base.copy()
                 residual = target.copy()
+                residual_diagnostics = {
+                    "target_pixels": int(np.count_nonzero(target)),
+                    "demonstrated_residual_pixels": int(np.count_nonzero(target)),
+                    "reference_count": 0,
+                }
                 details = {
                     "engine": "single-image-pretrained-residual",
                     "conservative_observed_first": True,
@@ -149,7 +201,11 @@ def install_full_residual_reconstruction_policy() -> None:
                 executor.workspace.metadata["inpaint_unresolved_mask"] = residual.copy()
                 details["generated_pixels"] = 0
                 details["unresolved_pixels"] = int(np.count_nonzero(residual))
-                details["residual_completion"] = {"attempted": False, "reason": "generation_forbidden_for_current_stage"}
+                details["residual_completion"] = {
+                    "attempted": False,
+                    "reason": "generation_forbidden_for_current_stage",
+                    **residual_diagnostics,
+                }
                 details["observed_evidence_exhausted_before_generation"] = True
                 return ExecutionResult(block.key, image, details)
 
@@ -174,8 +230,8 @@ def install_full_residual_reconstruction_policy() -> None:
             generated = executor.workspace.metadata.get("inpaint_generated_mask")
             generated = _binary(generated, target.shape) if isinstance(generated, np.ndarray) else np.zeros(target.shape, np.uint8)
             generated = cv2.bitwise_or(generated, generated_mask)
-            unresolved = target.copy()
-            unresolved[(observed > 0) | (generated > 0)] = 0
+            unresolved = residual.copy()
+            unresolved[generated_mask > 0] = 0
 
             executor.workspace.metadata["inpaint_target_mask"] = target.copy()
             executor.workspace.metadata["inpaint_generated_mask"] = generated
@@ -183,11 +239,12 @@ def install_full_residual_reconstruction_policy() -> None:
 
             details["generated_pixels"] = int(np.count_nonzero(generated))
             details["unresolved_pixels"] = int(np.count_nonzero(unresolved))
-            details["residual_completion"] = lama_details
+            details["residual_completion"] = {**residual_diagnostics, **lama_details}
             details["generated_provenance_code"] = int(_GENERATED)
             details["identity_guardrail_required"] = True
             details["observed_evidence_exhausted_before_generation"] = True
             details["outside_residual_preserved"] = True
+            details["outer_stage_residual_is_authoritative"] = True
             return ExecutionResult(block.key, final, details)
 
         executor._handlers[BlockKind.INPAINT] = handler
