@@ -20,6 +20,7 @@ from app.multi_reference_runtime_policy import install_multi_reference_runtime_p
 from app.automatic_quality_policy import install_automatic_quality_policy
 from app.observed_target_photometric_policy import install_observed_target_photometric_policy
 from app.automatic_integrity_policy import install_automatic_integrity_policy
+from app.pretrained_face_resilience_policy import install_pretrained_face_resilience_policy
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
@@ -27,3 +28,4 @@ install_multi_reference_runtime_policy()
 install_automatic_quality_policy()
 install_observed_target_photometric_policy()
 install_automatic_integrity_policy()
+install_pretrained_face_resilience_policy()
