@@ -14,6 +14,7 @@ from app.strict_repair import face_support_mask
 # registration failures before a broad heuristic damage seed can authorize replacement.
 _MAX_SAME_CANVAS_BASELINE_MEDIAN = 0.055
 _MAX_SAME_CANVAS_BASELINE_P95 = 0.140
+_MIN_SAME_CANVAS_BASELINE_PIXELS = 64
 _BASELINE_DAMAGE_EXCLUSION_KERNEL = 31
 
 
@@ -24,11 +25,9 @@ def _baseline_guard_stats(
 ) -> tuple[int, float, float]:
     """Measure same-canvas agreement away from the local damage neighbourhood.
 
-    Preflight damage masks can intentionally be conservative and mark only the core of
-    an occluder. A clean donor can therefore differ strongly just outside the seed while
-    still being a valid same-canvas reference. Excluding a small dilated neighbourhood
-    prevents those genuine hidden pixels from poisoning the baseline. A pose/crop or
-    wrong-registration mismatch remains visible over the much larger unaffected area.
+    Exact transfer requires measurable unaffected overlap. A partial donor whose
+    proposed damage consumes nearly all observed support cannot prove pixel-coincidence
+    and must fail closed into the more conservative observed-target repair path.
     """
     kernel_size = max(3, int(_BASELINE_DAMAGE_EXCLUSION_KERNEL) | 1)
     exclusion = cv2.dilate(
@@ -37,8 +36,8 @@ def _baseline_guard_stats(
         iterations=1,
     ) > 0
     baseline = difference[observed & ~exclusion]
-    if baseline.size < 64:
-        return int(baseline.size), 0.0, 0.0
+    if baseline.size == 0:
+        return 0, float("inf"), float("inf")
     return int(baseline.size), float(np.median(baseline)), float(np.percentile(baseline, 95.0))
 
 
@@ -56,10 +55,9 @@ def exact_same_canvas_observed_repair_seed_support(
     seeds; it never vetoes an observed damaged pixel. Pixel intensity is never used as
     a proxy for whether a donor was photographed.
 
-    A second conservative guard verifies that the donor really behaves like same-canvas
-    evidence outside the local damage neighbourhood. A donor with a large baseline
-    residual is treated as a pose/alignment mismatch and is skipped instead of copying
-    a large false-positive mask into the primary.
+    Exact same-canvas transfer additionally requires enough unaffected observed overlap
+    to verify pixel coincidence. Insufficient baseline evidence is an explicit abstain,
+    never implicit acceptance.
     """
     from app import same_canvas_repair_runtime as base
 
@@ -100,8 +98,6 @@ def exact_same_canvas_observed_repair_seed_support(
     face_pixels = max(1, int(np.count_nonzero(face)))
     maximum_pixels = max(0, int(round(face_pixels * float(maximum_face_fraction))))
 
-    # A verified damage seed plus a verified donor support mask is stronger evidence
-    # than an approximate face-support template. This also covers jaw/hair-edge damage.
     seed_bool = seed > 0
     expansion_geometry = face | seed_bool
 
@@ -118,6 +114,7 @@ def exact_same_canvas_observed_repair_seed_support(
     flat_occluder_pixel_count = 0
     unseeded_strong_pixel_count = 0
     baseline_rejected_slots = 0
+    insufficient_baseline_slots = 0
     baseline_rejected_sources: list[int] = []
     threshold_diagnostics: list[dict[str, Any]] = []
 
@@ -125,8 +122,6 @@ def exact_same_canvas_observed_repair_seed_support(
         if not verified_slots[slot] or reference.shape != workspace.primary.shape:
             continue
         support = base._binary(np.asarray(support_raw), shape) > 0
-        # The support mask is the authoritative evidence of photographed pixels.
-        # Never infer validity from RGB intensity: true hair/pupil pixels can be black.
         observed = support & expansion_geometry
         if not np.any(observed):
             continue
@@ -140,24 +135,28 @@ def exact_same_canvas_observed_repair_seed_support(
             float(difference_threshold),
         )
 
-        # Guard agreement is measured away from a dilated seed neighbourhood. This
-        # preserves valid donors when the seed covers only the core of a larger sticker
-        # or scribble, while still rejecting global pose/crop/registration mismatches.
         guard_count, guard_median, guard_p95 = _baseline_guard_stats(difference, observed, seed_bool)
-        baseline_mismatch = guard_count >= 64 and (
+        insufficient_baseline = guard_count < _MIN_SAME_CANVAS_BASELINE_PIXELS
+        baseline_mismatch = (
             guard_median > _MAX_SAME_CANVAS_BASELINE_MEDIAN
             or guard_p95 > _MAX_SAME_CANVAS_BASELINE_P95
         )
-        if baseline_mismatch:
+        if insufficient_baseline or baseline_mismatch:
             baseline_rejected_slots += 1
+            insufficient_baseline_slots += int(insufficient_baseline)
             baseline_rejected_sources.append(int(original_index))
             threshold_diagnostics.append({
                 "slot": int(slot),
                 "runtime_reference_index": int(runtime_indices[slot]),
                 "original_source_index": int(original_index),
                 "adaptive_difference_threshold": float(adaptive_threshold),
-                "baseline_guard": "rejected_non_same_canvas_residual",
+                "baseline_guard": (
+                    "rejected_insufficient_same_canvas_baseline"
+                    if insufficient_baseline
+                    else "rejected_non_same_canvas_residual"
+                ),
                 "baseline_sample_pixels": guard_count,
+                "baseline_minimum_pixels": int(_MIN_SAME_CANVAS_BASELINE_PIXELS),
                 "baseline_median_limit": float(_MAX_SAME_CANVAS_BASELINE_MEDIAN),
                 "baseline_p95_limit": float(_MAX_SAME_CANVAS_BASELINE_P95),
                 "baseline_guard_median": guard_median,
@@ -166,8 +165,6 @@ def exact_same_canvas_observed_repair_seed_support(
             })
             continue
 
-        # Reach is donor-local: a rejected or unsupported seed must not enlarge another
-        # donor's repair envelope.
         seeded_observed = seed_bool & observed & ~repaired_union
         seed_reach = cv2.dilate(
             np.where(seeded_observed, 255, 0).astype(np.uint8),
@@ -209,6 +206,7 @@ def exact_same_canvas_observed_repair_seed_support(
             "flat_occluder_colour_tolerance": float(flat_tolerance),
             "baseline_guard": "accepted",
             "baseline_sample_pixels": guard_count,
+            "baseline_minimum_pixels": int(_MIN_SAME_CANVAS_BASELINE_PIXELS),
             "baseline_median_limit": float(_MAX_SAME_CANVAS_BASELINE_MEDIAN),
             "baseline_p95_limit": float(_MAX_SAME_CANVAS_BASELINE_P95),
             "baseline_guard_median": guard_median,
@@ -238,6 +236,8 @@ def exact_same_canvas_observed_repair_seed_support(
     repaired_pixels = int(np.count_nonzero(repaired_union))
     if repaired_pixels:
         reason = "exact_observed_transfer"
+    elif insufficient_baseline_slots:
+        reason = "insufficient_same_canvas_baseline_abstained"
     elif baseline_rejected_slots:
         reason = "same_canvas_baseline_mismatch_abstained"
     else:
@@ -255,16 +255,19 @@ def exact_same_canvas_observed_repair_seed_support(
         "flat_occluder_recovered_pixels": int(flat_occluder_pixel_count),
         "unseeded_strong_component_pixels": int(unseeded_strong_pixel_count),
         "same_canvas_baseline_rejected_slots": int(baseline_rejected_slots),
+        "same_canvas_insufficient_baseline_slots": int(insufficient_baseline_slots),
         "same_canvas_baseline_rejected_sources": baseline_rejected_sources,
         "source_pixel_counts": source_counts,
         "difference_threshold_ceiling": float(difference_threshold),
         "threshold_diagnostics": threshold_diagnostics,
+        "minimum_same_canvas_baseline_pixels": int(_MIN_SAME_CANVAS_BASELINE_PIXELS),
         "maximum_face_fraction": float(maximum_face_fraction),
         "difference_anchor": "frozen_imported_primary" if isinstance(workspace.metadata.get("same_canvas_imported_primary"), np.ndarray) else "runtime_primary_fallback",
         "seed_pixels_are_never_discarded_by_expansion_cap": True,
         "verified_seed_support_overrides_face_template": True,
         "support_mask_is_authoritative_for_donor_validity": True,
         "same_canvas_baseline_guard": True,
+        "same_canvas_baseline_fail_closed": True,
         "same_canvas_baseline_damage_neighbourhood_exclusion": int(_BASELINE_DAMAGE_EXCLUSION_KERNEL),
         "partial_same_canvas_supported": True,
         "interpolation": "none",
