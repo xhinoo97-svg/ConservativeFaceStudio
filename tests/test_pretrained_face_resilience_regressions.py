@@ -7,6 +7,7 @@ import numpy as np
 from app.pipeline import BlockKind, default_pipeline
 from app.pretrained_face_resilience_policy import (
     _has_full_verified_identity_reference,
+    _observed_footprint,
     _reference_derived_landmarks,
 )
 
@@ -56,3 +57,29 @@ def test_real_sface_score_above_threshold_counts_as_full_verified_reference() ->
         }
     )
     assert _has_full_verified_identity_reference(workspace) is True
+
+
+def test_border_connected_black_padding_is_removed_from_partial_reference_support() -> None:
+    image = np.zeros((80, 80, 3), dtype=np.uint8)
+    image[12:68, 20:60] = (80, 120, 160)
+    # A genuine internal black eye/pupil-like patch must remain observed.
+    image[35:39, 38:42] = 0
+    support = np.full((80, 80), 255, dtype=np.uint8)
+
+    refined, removed = _observed_footprint(image, support)
+
+    assert removed > 0
+    assert np.all(refined[:8, :] == 0)
+    assert np.all(refined[:, :12] == 0)
+    assert np.all(refined[20:60, 25:55] == 255)
+    assert np.all(refined[35:39, 38:42] == 255)
+
+
+def test_full_reference_without_extreme_border_padding_keeps_support() -> None:
+    image = np.full((64, 64, 3), (40, 70, 110), dtype=np.uint8)
+    support = np.full((64, 64), 255, dtype=np.uint8)
+
+    refined, removed = _observed_footprint(image, support)
+
+    assert removed == 0
+    assert np.array_equal(refined, support)
