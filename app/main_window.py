@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 from .automatic import AutomaticRunResult
 from .execution import Workspace
 from .imaging import fit_to_canvas
-from .reference_limits import MAX_PROJECT_IMAGES, validate_reference_count
+from .reference_limits import MAX_PROJECT_IMAGES, MAX_REFERENCE_IMAGES, validate_reference_count
 from .worker import PipelineWorker
 
 
@@ -56,7 +56,7 @@ class ImagePanel(QLabel):
 
 
 class MainWindow(QMainWindow):
-    """Interfaccia automatica: carica foto, avvia pipeline, scarica risultati."""
+    """Automatic UI with an explicit user-selected primary and up to nine references."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -66,7 +66,8 @@ class MainWindow(QMainWindow):
         self.primary: np.ndarray | None = None
         self.references: list[np.ndarray] = []
         self.reference_normalization: list[dict[str, float | int]] = []
-        self.source_paths: list[Path] = []
+        self.primary_path: Path | None = None
+        self.reference_paths: list[Path] = []
         self.run_result: AutomaticRunResult | None = None
         self.run_directory: Path | None = None
         self.worker_thread: QThread | None = None
@@ -76,7 +77,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
         self.status = QLabel(
-            f"1. Carica da 1 a {MAX_PROJECT_IMAGES} foto. La prima sarà la foto principale; le altre saranno riferimenti."
+            f"1. Carica la foto principale. 2. Aggiungi fino a {MAX_REFERENCE_IMAGES} reference."
         )
         self.status.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(self.status)
@@ -93,62 +94,108 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.progress)
 
         controls = QHBoxLayout()
-        self.load_button = QPushButton("Carica foto")
+        self.load_primary_button = QPushButton("Carica foto principale")
+        self.load_references_button = QPushButton(f"Aggiungi reference (max {MAX_REFERENCE_IMAGES})")
+        self.clear_references_button = QPushButton("Svuota reference")
         self.start_button = QPushButton("Inizia")
         self.download_button = QPushButton("Scarica risultati ZIP")
-        controls.addWidget(self.load_button)
+        controls.addWidget(self.load_primary_button)
+        controls.addWidget(self.load_references_button)
+        controls.addWidget(self.clear_references_button)
         controls.addWidget(self.start_button)
         controls.addWidget(self.download_button)
         layout.addLayout(controls)
 
-        self.load_button.clicked.connect(self.load_images)
+        self.load_primary_button.clicked.connect(self.load_primary)
+        self.load_references_button.clicked.connect(self.load_references)
+        self.clear_references_button.clicked.connect(self.clear_references)
         self.start_button.clicked.connect(self.start_pipeline)
         self.download_button.clicked.connect(self.download_results)
         self._update_controls()
 
-    def load_images(self) -> None:
-        filenames, _ = QFileDialog.getOpenFileNames(
-            self, "Seleziona foto principale e riferimenti", "", "Immagini (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)"
+    @staticmethod
+    def _read_image(filename: str) -> np.ndarray | None:
+        return cv2.imread(filename, cv2.IMREAD_COLOR)
+
+    def load_primary(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Seleziona la foto principale", "", "Immagini (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)"
         )
-        if not filenames:
+        if not filename:
             return
-        if len(filenames) > MAX_PROJECT_IMAGES:
-            QMessageBox.warning(
-                self,
-                "Troppe immagini",
-                f"Puoi caricare al massimo {MAX_PROJECT_IMAGES} immagini totali: 1 principale + fino a {MAX_PROJECT_IMAGES - 1} riferimenti.",
-            )
+        image = self._read_image(filename)
+        if image is None:
+            QMessageBox.critical(self, "Errore", f"Impossibile leggere:\n{filename}")
             return
-        validate_reference_count(len(filenames) - 1)
 
-        images: list[np.ndarray] = []
-        for filename in filenames:
-            image = cv2.imread(filename, cv2.IMREAD_COLOR)
-            if image is None:
-                QMessageBox.critical(self, "Errore", f"Impossibile leggere:\n{filename}")
-                return
-            images.append(image)
-
-        primary_shape = images[0].shape[:2]
-        normalized = [images[0]]
-        normalization: list[dict[str, float | int]] = []
-        for image in images[1:]:
-            fitted, metadata = fit_to_canvas(image, primary_shape)
-            normalized.append(fitted)
-            normalization.append(metadata)
-
-        self.primary = normalized[0]
-        self.references = normalized[1:]
-        self.reference_normalization = normalization
-        self.source_paths = [Path(item) for item in filenames]
+        self.primary = image
+        self.primary_path = Path(filename)
+        # References are stored in primary coordinates. Reloading a primary therefore
+        # invalidates previous normalization and must not silently reuse it.
+        self.references = []
+        self.reference_paths = []
+        self.reference_normalization = []
         self.run_result = None
         self.before_panel.set_cv_image(self.primary)
         self.after_panel.clear()
         self.after_panel.setText("Risultato finale")
         self.progress.setValue(0)
-        self.status.setText(
-            f"Caricate {len(normalized)} foto: 1 principale + {len(self.references)} riferimenti. Premi Inizia."
+        self.status.setText("Foto principale caricata. Aggiungi da 0 a 9 reference.")
+        self._update_controls()
+
+    def load_references(self) -> None:
+        if self.primary is None:
+            QMessageBox.information(self, "Foto principale mancante", "Carica prima la foto principale.")
+            return
+        filenames, _ = QFileDialog.getOpenFileNames(
+            self,
+            f"Seleziona fino a {MAX_REFERENCE_IMAGES} fotografie di riferimento",
+            "",
+            "Immagini (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)",
         )
+        if not filenames:
+            return
+        remaining = MAX_REFERENCE_IMAGES - len(self.references)
+        if len(filenames) > remaining:
+            QMessageBox.warning(
+                self,
+                "Troppe reference",
+                f"Puoi aggiungere ancora {remaining} reference. Il progetto supporta {MAX_PROJECT_IMAGES} immagini totali: 1 principale + {MAX_REFERENCE_IMAGES} reference.",
+            )
+            return
+
+        primary_shape = self.primary.shape[:2]
+        fitted_items: list[np.ndarray] = []
+        metadata_items: list[dict[str, float | int]] = []
+        paths: list[Path] = []
+        for filename in filenames:
+            image = self._read_image(filename)
+            if image is None:
+                QMessageBox.critical(self, "Errore", f"Impossibile leggere:\n{filename}")
+                return
+            fitted, metadata = fit_to_canvas(image, primary_shape)
+            fitted_items.append(fitted)
+            metadata_items.append(metadata)
+            paths.append(Path(filename))
+
+        self.references.extend(fitted_items)
+        self.reference_normalization.extend(metadata_items)
+        self.reference_paths.extend(paths)
+        validate_reference_count(len(self.references))
+        self.run_result = None
+        self.status.setText(
+            f"Caricate 1 foto principale + {len(self.references)} reference. Puoi iniziare o aggiungerne altre fino a {MAX_REFERENCE_IMAGES}."
+        )
+        self._update_controls()
+
+    def clear_references(self) -> None:
+        if self.worker_thread is not None:
+            return
+        self.references = []
+        self.reference_paths = []
+        self.reference_normalization = []
+        self.run_result = None
+        self.status.setText("Reference rimosse. La foto principale resta invariata.")
         self._update_controls()
 
     def start_pipeline(self) -> None:
@@ -157,12 +204,18 @@ class MainWindow(QMainWindow):
         validate_reference_count(len(self.references))
         self.run_result = None
         self.run_directory = Path(tempfile.mkdtemp(prefix="ConservativeFaceStudio-"))
-        stem = self.source_paths[0].stem if self.source_paths else "restauro"
+        stem = self.primary_path.stem if self.primary_path is not None else "restauro"
         output = self.run_directory / f"{stem}_finale.png"
         workspace = Workspace(
             primary=self.primary.copy(),
             references=[item.copy() for item in self.references],
-            metadata={"reference_normalization": list(self.reference_normalization)},
+            metadata={
+                "reference_normalization": list(self.reference_normalization),
+                "user_selected_primary": True,
+                "primary_priority_policy": "prefer-user-primary-unless-strongly-better-verified-base",
+                "primary_source_path": str(self.primary_path) if self.primary_path is not None else None,
+                "reference_source_paths": [str(item) for item in self.reference_paths],
+            },
         )
 
         thread = QThread(self)
@@ -231,6 +284,8 @@ class MainWindow(QMainWindow):
 
     def _update_controls(self) -> None:
         busy = self.worker_thread is not None
-        self.load_button.setEnabled(not busy)
+        self.load_primary_button.setEnabled(not busy)
+        self.load_references_button.setEnabled(self.primary is not None and not busy and len(self.references) < MAX_REFERENCE_IMAGES)
+        self.clear_references_button.setEnabled(bool(self.references) and not busy)
         self.start_button.setEnabled(self.primary is not None and not busy)
         self.download_button.setEnabled(self.run_result is not None and not busy)
