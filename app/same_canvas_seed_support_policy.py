@@ -8,10 +8,10 @@ import numpy as np
 from app.strict_repair import face_support_mask
 
 
-# Exact same-canvas transfer is only safe when the donor is genuinely pixel-coincident
-# with the imported primary outside the proposed damage. These bounds are deliberately
-# loose enough for minor exposure/compression differences, but they reject pose/crop or
-# registration failures before a broad heuristic damage seed can authorize replacement.
+# Exact same-canvas *expansion* is only safe when the donor is genuinely pixel-coincident
+# with the imported primary outside the proposed damage. Explicit verified seed pixels are
+# different: their validity comes from the observed-support mask + verified donor mapping,
+# not from RGB intensity or from the availability of unaffected context around the seed.
 _MAX_SAME_CANVAS_BASELINE_MEDIAN = 0.055
 _MAX_SAME_CANVAS_BASELINE_P95 = 0.140
 _MIN_SAME_CANVAS_BASELINE_PIXELS = 64
@@ -25,9 +25,8 @@ def _baseline_guard_stats(
 ) -> tuple[int, float, float]:
     """Measure same-canvas agreement away from the local damage neighbourhood.
 
-    Exact transfer requires measurable unaffected overlap. A partial donor whose
-    proposed damage consumes nearly all observed support cannot prove pixel-coincidence
-    and must fail closed into the more conservative observed-target repair path.
+    The baseline guard authorizes evidence *expansion* outside explicit verified seeds.
+    It must never invalidate a seed pixel that is explicitly observed in a verified donor.
     """
     kernel_size = max(3, int(_BASELINE_DAMAGE_EXCLUSION_KERNEL) | 1)
     exclusion = cv2.dilate(
@@ -50,14 +49,12 @@ def exact_same_canvas_observed_repair_seed_support(
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
     """Reference-driven same-canvas repair with authoritative observed support.
 
-    Verified damage seeds are allowed wherever a verified aligned reference explicitly
-    observes the pixel. Face geometry constrains only evidence expansion beyond those
-    seeds; it never vetoes an observed damaged pixel. Pixel intensity is never used as
-    a proxy for whether a donor was photographed.
-
-    Exact same-canvas transfer additionally requires enough unaffected observed overlap
-    to verify pixel coincidence. Insufficient baseline evidence is an explicit abstain,
-    never implicit acceptance.
+    Invariants:
+    * explicit verified seed support is authoritative donor evidence;
+    * RGB=(0,0,0) is a perfectly valid observed pixel;
+    * face geometry never vetoes an explicitly supported seed;
+    * the same-canvas baseline guard applies only to expansion beyond explicit seeds;
+    * no interpolation or generated pixels are introduced by this path.
     """
     from app import same_canvas_repair_runtime as base
 
@@ -135,6 +132,19 @@ def exact_same_canvas_observed_repair_seed_support(
             float(difference_threshold),
         )
 
+        # Explicit verified support is authoritative for the damage seed. Transfer those
+        # observed pixels exactly before asking whether there is enough unaffected overlap
+        # to expand the repair. This also preserves legitimate black/dark donor pixels.
+        seeded_observed = seed_bool & observed & ~repaired_union
+        if np.any(seeded_observed):
+            result[seeded_observed] = reference[seeded_observed]
+            code = np.uint16(max(1, int(original_index)))
+            provenance[seeded_observed] = code
+            repaired_union |= seeded_observed
+            seed_count = int(np.count_nonzero(seeded_observed))
+            seed_pixel_count += seed_count
+            source_counts[int(code)] = source_counts.get(int(code), 0) + seed_count
+
         guard_count, guard_median, guard_p95 = _baseline_guard_stats(difference, observed, seed_bool)
         insufficient_baseline = guard_count < _MIN_SAME_CANVAS_BASELINE_PIXELS
         baseline_mismatch = (
@@ -151,9 +161,9 @@ def exact_same_canvas_observed_repair_seed_support(
                 "original_source_index": int(original_index),
                 "adaptive_difference_threshold": float(adaptive_threshold),
                 "baseline_guard": (
-                    "rejected_insufficient_same_canvas_baseline"
+                    "seed_transferred_expansion_rejected_insufficient_baseline"
                     if insufficient_baseline
-                    else "rejected_non_same_canvas_residual"
+                    else "seed_transferred_expansion_rejected_non_same_canvas_residual"
                 ),
                 "baseline_sample_pixels": guard_count,
                 "baseline_minimum_pixels": int(_MIN_SAME_CANVAS_BASELINE_PIXELS),
@@ -165,20 +175,20 @@ def exact_same_canvas_observed_repair_seed_support(
             })
             continue
 
-        seeded_observed = seed_bool & observed & ~repaired_union
+        # Expansion is intentionally stricter than explicit seed transfer.
+        remaining_observed = observed & ~repaired_union
         seed_reach = cv2.dilate(
-            np.where(seeded_observed, 255, 0).astype(np.uint8),
+            np.where(seed_bool & observed, 255, 0).astype(np.uint8),
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)),
             iterations=1,
         )
-        strong = observed & (difference >= adaptive_threshold)
+        strong = remaining_observed & (difference >= adaptive_threshold)
         expansion, unseeded_pixels = base._strong_components(strong, seed_reach, difference, adaptive_threshold)
-        expansion &= observed & ~repaired_union
+        expansion &= remaining_observed
         unseeded_strong_pixel_count += int(unseeded_pixels)
 
-        seeded_observed = seed_bool & observed & ~repaired_union
-        verified_envelope = base._filled_component(expansion | seeded_observed)
-        verified_envelope &= observed & ~repaired_union
+        verified_envelope = base._filled_component(expansion)
+        verified_envelope &= remaining_observed
         weak_threshold = max(
             float(baseline_stats.get("baseline_p95", 0.0)) + 0.006,
             float(adaptive_threshold) * 0.35,
@@ -186,15 +196,15 @@ def exact_same_canvas_observed_repair_seed_support(
         hysteresis_envelope = base._seed_connected_hysteresis(
             verified_envelope,
             difference,
-            observed & ~repaired_union,
+            remaining_observed,
             weak_threshold=weak_threshold,
         )
         flat_envelope, flat_tolerance = base._seed_connected_flat_occluder(
             frozen_primary,
-            seeded_observed,
-            observed & ~repaired_union,
+            seed_bool & observed,
+            remaining_observed,
         )
-        combined_envelope = (hysteresis_envelope | flat_envelope) & observed & ~repaired_union
+        combined_envelope = (hysteresis_envelope | flat_envelope) & remaining_observed
         hysteresis_pixel_count += int(np.count_nonzero(hysteresis_envelope & ~verified_envelope))
         flat_occluder_pixel_count += int(np.count_nonzero(flat_envelope & ~hysteresis_envelope))
         threshold_diagnostics.append({
@@ -204,7 +214,7 @@ def exact_same_canvas_observed_repair_seed_support(
             "adaptive_difference_threshold": float(adaptive_threshold),
             "hysteresis_weak_threshold": float(weak_threshold),
             "flat_occluder_colour_tolerance": float(flat_tolerance),
-            "baseline_guard": "accepted",
+            "baseline_guard": "accepted_for_expansion",
             "baseline_sample_pixels": guard_count,
             "baseline_minimum_pixels": int(_MIN_SAME_CANVAS_BASELINE_PIXELS),
             "baseline_median_limit": float(_MAX_SAME_CANVAS_BASELINE_MEDIAN),
@@ -214,11 +224,16 @@ def exact_same_canvas_observed_repair_seed_support(
             **baseline_stats,
         })
 
+        # The cap constrains only inferred expansion. Explicit seed pixels were already
+        # transferred and are never discarded by this budget.
+        expansion_budget = max(0, maximum_pixels - int(np.count_nonzero(repaired_union)))
+        if expansion_budget <= 0:
+            continue
         selected = base._limit_expansion(
-            seeded_observed,
+            np.zeros(shape, dtype=bool),
             combined_envelope,
             difference,
-            maximum_pixels - int(np.count_nonzero(repaired_union)),
+            expansion_budget,
         )
         selected &= ~repaired_union
         if not np.any(selected):
@@ -230,8 +245,7 @@ def exact_same_canvas_observed_repair_seed_support(
         repaired_union |= selected
         count = int(np.count_nonzero(selected))
         source_counts[int(code)] = source_counts.get(int(code), 0) + count
-        seed_pixel_count += int(np.count_nonzero(selected & seeded_observed))
-        expanded_pixel_count += int(np.count_nonzero(selected & ~seeded_observed))
+        expanded_pixel_count += count
 
     repaired_pixels = int(np.count_nonzero(repaired_union))
     if repaired_pixels:
@@ -267,6 +281,8 @@ def exact_same_canvas_observed_repair_seed_support(
         "verified_seed_support_overrides_face_template": True,
         "support_mask_is_authoritative_for_donor_validity": True,
         "same_canvas_baseline_guard": True,
+        "same_canvas_baseline_guard_scope": "expansion_only",
+        "explicit_verified_seed_transfer_requires_baseline": False,
         "same_canvas_baseline_fail_closed": True,
         "same_canvas_baseline_damage_neighbourhood_exclusion": int(_BASELINE_DAMAGE_EXCLUSION_KERNEL),
         "partial_same_canvas_supported": True,
