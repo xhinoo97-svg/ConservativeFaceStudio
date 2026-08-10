@@ -39,9 +39,9 @@ PRETRAINED_BLOCK_PLAN: tuple[BlockModelChoice, ...] = (
     BlockModelChoice(
         BlockKind.LANDMARKS,
         ("opencv_yunet", "mediapipe_face_landmarker", "insightface_identity"),
-        "OpenCV Haar refined 5-point geometry",
-        "pretrained-default",
-        "YuNet is the verified lightweight pretrained production detector and supplies five facial anchors. Dense/heavier models remain optional.",
+        "verified same-identity reference RANSAC geometry or explicit abstention",
+        "pretrained-default-conservative-abstention",
+        "YuNet is the verified lightweight pretrained production detector and supplies five facial anchors. If a heavily occluded primary is not detected, strict mode may derive geometry only from a real preflight-accepted same-identity reference whose alignment passes RANSAC gates; without verified geometry it abstains instead of inventing landmarks. Dense/heavier models remain optional.",
     ),
     BlockModelChoice(
         BlockKind.ALIGN,
