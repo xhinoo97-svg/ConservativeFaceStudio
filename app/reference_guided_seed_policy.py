@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from functools import wraps
-
 import cv2
 import numpy as np
 
@@ -19,18 +17,9 @@ def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
 
 
 def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.ndarray, dict[str, object]]:
-    """Return donor-supported disagreement only when same-canvas baseline is plausible.
-
-    The generic occlusion detector is deliberately recall-oriented and may label large
-    smooth/low-detail areas.  It must therefore never become an authoritative repair
-    seed by itself.  A frozen proposal is accepted only where a real aligned reference
-    explicitly observes the pixel *and* disagrees with the imported primary, while the
-    same donor agrees away from the proposal.  This works for full references, split
-    half references and component-only same-canvas sheets without reading black padding
-    as evidence.
-    """
+    """Return donor-supported disagreement only when same-canvas baseline is plausible."""
     shape = workspace.primary.shape[:2]
-    aligned = list(workspace.aligned_references)
+    aligned = list(getattr(workspace, "aligned_references", []) or [])
     supports = workspace.metadata.get("aligned_reference_support_masks")
     if not aligned or not isinstance(supports, list) or len(supports) != len(aligned):
         return np.zeros(shape, np.uint8), {"trusted_donors": 0, "reason": "no_aligned_support"}
@@ -66,7 +55,6 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
         baseline = delta[baseline_region]
         median = float(np.median(baseline))
         p90 = float(np.percentile(baseline, 90.0))
-        # Same-canvas/compression variation remains small; pose/crop mismatch does not.
         if median > 0.055 or p90 > 0.14:
             diagnostics.append({
                 "slot": slot,
@@ -115,6 +103,7 @@ def install_reference_guided_seed_policy() -> None:
     import app.partial_reference_runtime as module
 
     original_frozen = module._frozen_primary_occlusion
+    original_merge = module._merge_frozen_primary_hint
 
     def precise_merge(workspace) -> int:
         frozen = original_frozen(workspace)
@@ -125,6 +114,19 @@ def install_reference_guided_seed_policy() -> None:
                 "reason": "no_frozen_proposal",
             }
             return 0
+
+        aligned = list(getattr(workspace, "aligned_references", []) or [])
+        supports = workspace.metadata.get("aligned_reference_support_masks")
+        if not aligned or not isinstance(supports, list) or len(supports) != len(aligned):
+            added = int(original_merge(workspace))
+            workspace.metadata["reference_guided_seed_diagnostics"] = {
+                "trusted_donors": 0,
+                "refined_pixels": 0,
+                "reason": "no_aligned_support_legacy_frozen_seed_preserved",
+                "fallback_added_pixels": added,
+            }
+            return added
+
         shape = workspace.primary.shape[:2]
         refined, diagnostics = _trusted_reference_disagreement(workspace, frozen)
         existing = workspace.metadata.get("reference_consensus_occlusion")
