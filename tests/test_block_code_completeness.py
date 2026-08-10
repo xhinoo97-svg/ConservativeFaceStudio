@@ -41,10 +41,16 @@ def test_every_block_has_explicit_dependency_contract() -> None:
         seen.add(block.key)
 
 
-def test_strict_executor_provides_real_inpaint_and_frontalize_fallbacks() -> None:
+def test_strict_executor_provides_real_specialized_fallbacks() -> None:
     executor = StrictBlockExecutor(Workspace(primary=_image()))
     assert executor._handlers[BlockKind.INPAINT].__name__ == "_reference_repair"
     assert executor._handlers[BlockKind.FRONTALIZE].__name__ == "_pose_normalize"
     assert executor._handlers[BlockKind.OCCLUSION_MASK].__name__ == "_strict_occlusion"
-    assert executor._handlers[BlockKind.REGION_SELECT].__name__ == "_specific_memory_select"
+    # REGION_SELECT is intentionally wrapped by multi_reference_runtime_policy so an
+    # unspecified top_k becomes every aligned donor up to the product limit (9).
+    # Assert the concrete runtime handler exists instead of coupling the gate to the
+    # pre-wrapper private method name.
+    region_handler = executor._handlers[BlockKind.REGION_SELECT]
+    assert callable(region_handler)
+    assert region_handler.__name__ in {"patched_select", "_specific_memory_select"}
     assert executor._handlers[BlockKind.UPSCALE].__name__ == "_strict_upscale"
