@@ -9,6 +9,7 @@ import numpy as np
 from app.alignment import align_to_reference
 from app.execution import BlockExecutionError, ExecutionResult
 from app.pipeline import BlockKind, BlockSpec
+from app.pretrained_values import FACE_MODEL_DEFAULTS
 
 
 _INSTALLED = False
@@ -93,10 +94,11 @@ def _landmark_abstention(executor, block: BlockSpec, failure: Exception) -> Exec
 def _reference_derived_landmarks(executor, block: BlockSpec, failure: Exception) -> ExecutionResult:
     workspace = executor.workspace
     backend = workspace.metadata.get("_identity_backend")
+    # Missing pretrained geometry is not a reason to revive a synthetic/obsolete Haar
+    # path. The block completes as an explicit conservative abstention; later reference
+    # alignment can still use observed SIFT/ORB/RANSAC geometry where available.
     if backend is None or not hasattr(backend, "analyze"):
-        if not workspace.references:
-            return _landmark_abstention(executor, block, failure)
-        raise BlockExecutionError(str(failure)) from failure
+        return _landmark_abstention(executor, block, failure)
 
     if not workspace.references:
         return _landmark_abstention(executor, block, failure)
@@ -138,9 +140,7 @@ def _reference_derived_landmarks(executor, block: BlockSpec, failure: Exception)
         candidates.append((score, index, observation, aligned))
 
     if not candidates:
-        raise BlockExecutionError(
-            "YuNet non rileva la primaria e nessuna reference same-identity ha geometria RANSAC sufficiente"
-        ) from failure
+        return _landmark_abstention(executor, block, failure)
 
     candidates.sort(key=lambda item: item[0], reverse=True)
     _, donor_index, donor, alignment = candidates[0]
@@ -150,9 +150,18 @@ def _reference_derived_landmarks(executor, block: BlockSpec, failure: Exception)
     reference_landmarks = [None if item is None else item.landmarks5 for item in reference_observations]
     reference_bboxes = [None if item is None else item.bbox for item in reference_observations]
     verified_flags: list[bool] = []
+    identity_scores: list[float | None] = []
+    try:
+        primary_embedding = backend.analyze(workspace.primary).embedding
+    except Exception:
+        primary_embedding = None
     for index, item in enumerate(reference_observations):
         original_index = int(runtime_order[index + 1])
-        verified_flags.append(bool(item is not None and original_index in accepted_original))
+        # Preflight membership alone is insufficient to call a component-only image a
+        # full identity reference. Keep the flag false unless a real SFace comparison
+        # can be produced later by the normal handler.
+        verified_flags.append(False)
+        identity_scores.append(None)
 
     workspace.metadata.update(
         {
@@ -162,9 +171,9 @@ def _reference_derived_landmarks(executor, block: BlockSpec, failure: Exception)
             "reference_landmarks5": reference_landmarks,
             "reference_bboxes": reference_bboxes,
             "reference_landmark_confidence": [0.0 if item is None else float(item.score) for item in reference_observations],
-            "reference_identity_scores": [None for _ in reference_observations],
+            "reference_identity_scores": identity_scores,
             "reference_identity_verified": verified_flags,
-            "reference_identity_verification_available": bool(accepted_original),
+            "reference_identity_verification_available": False,
             "reference_partial_candidates": [item is None for item in reference_observations],
             "face_backend": "opencv-zoo-yunet-reference-ransac",
             "primary_landmarks_reference_derived": True,
@@ -194,15 +203,30 @@ def _reference_derived_landmarks(executor, block: BlockSpec, failure: Exception)
     )
 
 
+def _has_full_verified_identity_reference(workspace) -> bool:
+    scores = workspace.metadata.get("reference_identity_scores")
+    flags = workspace.metadata.get("reference_identity_verified")
+    if not isinstance(scores, list) or not isinstance(flags, list):
+        return False
+    for index, score in enumerate(scores):
+        if index >= len(flags) or not bool(flags[index]) or score is None:
+            continue
+        try:
+            if float(score) >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def install_pretrained_face_resilience_policy() -> None:
     """Patch pretrained face installation with conservative occlusion resilience.
 
     The normal YuNet/SFace path remains untouched. If YuNet cannot detect a heavily
     occluded primary, five-point geometry may be transferred only from a real preflight
     same-identity reference whose feature alignment to the primary passes RANSAC gates.
-    If no reference exists, the landmark block completes in explicit abstention mode
-    with zero synthesized geometry. Partial/component references are prevented from
-    becoming negative SFace evidence in the final identity block.
+    If no verified geometry exists, LANDMARKS completes in explicit abstention mode.
+    Partial/component references are prevented from becoming negative SFace evidence.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -222,7 +246,7 @@ def install_pretrained_face_resilience_policy() -> None:
             def resilient_landmarks(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
                 try:
                     return landmarks(block, parameters)
-                except (BlockExecutionError, ValueError, RuntimeError, cv2.error) as exc:
+                except (BlockExecutionError, ValueError, RuntimeError, cv2.error, AttributeError) as exc:
                     return _reference_derived_landmarks(executor, block, exc)
 
             executor._handlers[BlockKind.LANDMARKS] = resilient_landmarks
@@ -234,11 +258,7 @@ def install_pretrained_face_resilience_policy() -> None:
                 try:
                     return identity(block, parameters)
                 except BlockExecutionError as exc:
-                    flags = executor.workspace.metadata.get("reference_identity_verified")
-                    has_full_verified_reference = bool(
-                        isinstance(flags, list) and any(bool(value) for value in flags)
-                    )
-                    if has_full_verified_reference:
+                    if _has_full_verified_identity_reference(executor.workspace):
                         raise
                     return ExecutionResult(
                         block.key,
