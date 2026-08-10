@@ -7,7 +7,13 @@ import numpy as np
 from app.partial_reference_runtime import _merge_frozen_primary_hint
 
 
-def test_frozen_preflight_occlusion_does_not_authorize_repair_without_donor_evidence() -> None:
+def test_frozen_preflight_occlusion_is_preserved_when_no_aligned_donor_exists() -> None:
+    """No-donor fallback may retain the proposal for later single-image abstain/generation.
+
+    The reference-guided restriction is required once aligned observed donors exist;
+    without one there is no donor transfer to over-authorize, so the legacy proposal can
+    remain available to downstream single-image policy and its own generation caps.
+    """
     shape = (64, 64)
     primary = np.full((64, 64, 3), 140, dtype=np.uint8)
     frozen = np.zeros(shape, dtype=np.uint8)
@@ -26,10 +32,11 @@ def test_frozen_preflight_occlusion_does_not_authorize_repair_without_donor_evid
     added = _merge_frozen_primary_hint(workspace)
     merged = workspace.metadata["reference_consensus_occlusion"]
 
-    assert added == 0
-    assert np.array_equal(merged, current)
+    assert added == np.count_nonzero((frozen > 0) & (current == 0))
+    assert np.array_equal(merged, np.bitwise_or(frozen, current))
     diagnostics = workspace.metadata["reference_guided_seed_diagnostics"]
     assert diagnostics["trusted_donors"] == 0
+    assert diagnostics["reason"] == "no_aligned_support_legacy_frozen_seed_preserved"
 
 
 def test_frozen_hint_merge_is_noop_without_preflight_evidence() -> None:
