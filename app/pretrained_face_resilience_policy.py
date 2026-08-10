@@ -53,11 +53,53 @@ def _preflight_accepted_original_indices(workspace) -> set[int]:
     return accepted
 
 
+def _landmark_abstention(executor, block: BlockSpec, failure: Exception) -> ExecutionResult:
+    workspace = executor.workspace
+    workspace.metadata.update(
+        {
+            "primary_landmarks5": None,
+            "primary_bbox": None,
+            "primary_landmark_confidence": 0.0,
+            "reference_landmarks5": [],
+            "reference_bboxes": [],
+            "reference_landmark_confidence": [],
+            "reference_identity_scores": [],
+            "reference_identity_verified": [],
+            "reference_identity_verification_available": False,
+            "reference_partial_candidates": [],
+            "face_backend": "landmark-unavailable-conservative-abstain",
+            "primary_landmarks_reference_derived": False,
+        }
+    )
+    return ExecutionResult(
+        block.key,
+        workspace.copy_primary(),
+        {
+            "backend": "landmark-unavailable-conservative-abstain",
+            "pretrained": True,
+            "primary_detector_failed": True,
+            "pretrained_fallback_reason": str(failure),
+            "landmark_count": 0,
+            "landmark_confidence": 0.0,
+            "reference_faces": 0,
+            "verified_reference_geometry": False,
+            "generated_landmarks": 0,
+            "abstained": True,
+            "reason": "no_verified_reference_geometry_available",
+        },
+    )
+
+
 def _reference_derived_landmarks(executor, block: BlockSpec, failure: Exception) -> ExecutionResult:
     workspace = executor.workspace
     backend = workspace.metadata.get("_identity_backend")
     if backend is None or not hasattr(backend, "analyze"):
+        if not workspace.references:
+            return _landmark_abstention(executor, block, failure)
         raise BlockExecutionError(str(failure)) from failure
+
+    if not workspace.references:
+        return _landmark_abstention(executor, block, failure)
 
     runtime_order = workspace.metadata.get("runtime_source_order")
     if not isinstance(runtime_order, list) or len(runtime_order) != len(workspace.references) + 1:
@@ -158,9 +200,9 @@ def install_pretrained_face_resilience_policy() -> None:
     The normal YuNet/SFace path remains untouched. If YuNet cannot detect a heavily
     occluded primary, five-point geometry may be transferred only from a real preflight
     same-identity reference whose feature alignment to the primary passes RANSAC gates.
-    Partial/component references are also prevented from becoming negative SFace
-    evidence in the final identity block; when no full verified reference exists, the
-    already active per-block identity retention guardrails remain authoritative.
+    If no reference exists, the landmark block completes in explicit abstention mode
+    with zero synthesized geometry. Partial/component references are prevented from
+    becoming negative SFace evidence in the final identity block.
     """
     global _INSTALLED
     if _INSTALLED:
