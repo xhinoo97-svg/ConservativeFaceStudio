@@ -24,6 +24,7 @@ from app.automatic_integrity_policy import install_automatic_integrity_policy
 from app.pretrained_face_resilience_policy import install_pretrained_face_resilience_policy
 from app.preflight_selective_deblur_policy import install_preflight_selective_deblur_policy
 from app.reference_guided_seed_policy import install_reference_guided_seed_policy
+from app.fixed_primary_contract_policy import install_fixed_primary_contract_policy
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
@@ -35,3 +36,4 @@ install_automatic_integrity_policy()
 install_pretrained_face_resilience_policy()
 install_preflight_selective_deblur_policy()
 install_reference_guided_seed_policy()
+install_fixed_primary_contract_policy()
