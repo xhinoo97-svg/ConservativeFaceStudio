@@ -26,6 +26,7 @@ from app.single_image_core_policy import install_single_image_core_policy
 from app.evidence_confidence_runtime import install_evidence_confidence_runtime
 from app.core_quality_gate_policy import install_core_quality_gate_policy
 from app.adaptive_restoration_autoinstall import install_adaptive_restoration_autoinstall
+from app.immutable_input_autoinstall import install_immutable_input_policy
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
@@ -49,3 +50,5 @@ install_evidence_confidence_runtime()
 install_core_quality_gate_policy()
 # Must patch the final repair installer so LIGHT→MEDIUM→SEVERE wraps the real Block-8 handler.
 install_adaptive_restoration_autoinstall()
+# Capture imported MAIN/reference pixels before AutomaticPipelineRunner preflight mutates working copies.
+install_immutable_input_policy()
