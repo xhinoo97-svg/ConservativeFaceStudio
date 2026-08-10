@@ -56,12 +56,12 @@ class ImagePanel(QLabel):
 
 
 class MainWindow(QMainWindow):
-    """Automatic UI with an explicit user-selected primary and up to nine references."""
+    """Automatic UI with photo #1 fixed as MAIN IMAGE and up to nine references."""
 
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Conservative Face Studio — Automatic Strict Mode")
-        self.resize(1120, 760)
+        self.resize(1120, 790)
 
         self.primary: np.ndarray | None = None
         self.references: list[np.ndarray] = []
@@ -77,13 +77,17 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
         self.status = QLabel(
-            f"1. Carica la foto principale. 2. Aggiungi fino a {MAX_REFERENCE_IMAGES} reference."
+            f"1. Carica la MAIN IMAGE. 2. Aggiungi fino a {MAX_REFERENCE_IMAGES} reference."
         )
         self.status.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(self.status)
 
+        self.confidence_label = QLabel("Original Information Confidence: —")
+        self.confidence_label.setStyleSheet("font-size: 15px; font-weight: 600;")
+        layout.addWidget(self.confidence_label)
+
         panels = QHBoxLayout()
-        self.before_panel = ImagePanel("Foto principale")
+        self.before_panel = ImagePanel("MAIN IMAGE")
         self.after_panel = ImagePanel("Risultato finale")
         panels.addWidget(self.before_panel)
         panels.addWidget(self.after_panel)
@@ -94,7 +98,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.progress)
 
         controls = QHBoxLayout()
-        self.load_primary_button = QPushButton("Carica foto principale")
+        self.load_primary_button = QPushButton("Carica MAIN IMAGE")
         self.load_references_button = QPushButton(f"Aggiungi reference (max {MAX_REFERENCE_IMAGES})")
         self.clear_references_button = QPushButton("Svuota reference")
         self.start_button = QPushButton("Inizia")
@@ -119,7 +123,7 @@ class MainWindow(QMainWindow):
 
     def load_primary(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
-            self, "Seleziona la foto principale", "", "Immagini (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)"
+            self, "Seleziona la MAIN IMAGE", "", "Immagini (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)"
         )
         if not filename:
             return
@@ -130,8 +134,6 @@ class MainWindow(QMainWindow):
 
         self.primary = image
         self.primary_path = Path(filename)
-        # References are stored in primary coordinates. Reloading a primary therefore
-        # invalidates previous normalization and must not silently reuse it.
         self.references = []
         self.reference_paths = []
         self.reference_normalization = []
@@ -140,12 +142,13 @@ class MainWindow(QMainWindow):
         self.after_panel.clear()
         self.after_panel.setText("Risultato finale")
         self.progress.setValue(0)
-        self.status.setText("Foto principale caricata. Aggiungi da 0 a 9 reference.")
+        self.confidence_label.setText("Original Information Confidence: —")
+        self.status.setText("MAIN IMAGE caricata. La foto #1 resterà il canvas finale. Aggiungi da 0 a 9 reference.")
         self._update_controls()
 
     def load_references(self) -> None:
         if self.primary is None:
-            QMessageBox.information(self, "Foto principale mancante", "Carica prima la foto principale.")
+            QMessageBox.information(self, "MAIN IMAGE mancante", "Carica prima la MAIN IMAGE.")
             return
         filenames, _ = QFileDialog.getOpenFileNames(
             self,
@@ -160,7 +163,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Troppe reference",
-                f"Puoi aggiungere ancora {remaining} reference. Il progetto supporta {MAX_PROJECT_IMAGES} immagini totali: 1 principale + {MAX_REFERENCE_IMAGES} reference.",
+                f"Puoi aggiungere ancora {remaining} reference. Il progetto supporta {MAX_PROJECT_IMAGES} immagini totali: 1 MAIN IMAGE + {MAX_REFERENCE_IMAGES} reference.",
             )
             return
 
@@ -184,7 +187,7 @@ class MainWindow(QMainWindow):
         validate_reference_count(len(self.references))
         self.run_result = None
         self.status.setText(
-            f"Caricate 1 foto principale + {len(self.references)} reference. Puoi iniziare o aggiungerne altre fino a {MAX_REFERENCE_IMAGES}."
+            f"Caricate 1 MAIN IMAGE + {len(self.references)} reference. Puoi iniziare o aggiungerne altre fino a {MAX_REFERENCE_IMAGES}."
         )
         self._update_controls()
 
@@ -195,7 +198,8 @@ class MainWindow(QMainWindow):
         self.reference_paths = []
         self.reference_normalization = []
         self.run_result = None
-        self.status.setText("Reference rimosse. La foto principale resta invariata.")
+        self.confidence_label.setText("Original Information Confidence: —")
+        self.status.setText("Reference rimosse. La MAIN IMAGE resta invariata.")
         self._update_controls()
 
     def start_pipeline(self) -> None:
@@ -204,15 +208,14 @@ class MainWindow(QMainWindow):
         validate_reference_count(len(self.references))
         self.run_result = None
         self.run_directory = Path(tempfile.mkdtemp(prefix="ConservativeFaceStudio-"))
-        stem = self.primary_path.stem if self.primary_path is not None else "restauro"
-        output = self.run_directory / f"{stem}_finale.png"
+        output = self.run_directory / "final_restored_main.png"
         workspace = Workspace(
             primary=self.primary.copy(),
             references=[item.copy() for item in self.references],
             metadata={
                 "reference_normalization": list(self.reference_normalization),
                 "user_selected_primary": True,
-                "primary_priority_policy": "prefer-user-primary-unless-strongly-better-verified-base",
+                "primary_priority_policy": "fixed-photo-1-main-image",
                 "primary_source_path": str(self.primary_path) if self.primary_path is not None else None,
                 "reference_source_paths": [str(item) for item in self.reference_paths],
             },
@@ -234,6 +237,7 @@ class MainWindow(QMainWindow):
         self.worker = worker
         self.progress.setRange(0, 13)
         self.progress.setValue(0)
+        self.confidence_label.setText("Original Information Confidence: calcolo in corso")
         self.status.setText("Pipeline automatica in esecuzione")
         self._update_controls()
         thread.start()
@@ -253,12 +257,30 @@ class MainWindow(QMainWindow):
             return
         self.after_panel.set_cv_image(final)
         self.progress.setValue(13)
+
+        report = None
+        for item in reversed(result.results):
+            candidate = item.details.get("evidence_confidence")
+            if isinstance(candidate, dict):
+                report = candidate
+                break
+        if report is None:
+            self.confidence_label.setText("Original Information Confidence: non disponibile")
+        else:
+            evidence = float(report.get("evidence_confidence", 0.0))
+            generated = 100.0 * float(report.get("generated_fraction", 0.0))
+            symmetry = 100.0 * float(report.get("symmetry_fraction", 0.0))
+            unresolved = 100.0 * float(report.get("unresolved_fraction", 0.0))
+            self.confidence_label.setText(
+                f"Original Information Confidence: {evidence:.1f}%   |   Generated: {generated:.1f}%   |   Symmetry: {symmetry:.1f}%   |   Unresolved: {unresolved:.1f}%"
+            )
         self.status.setText("Elaborazione completata. Premi Scarica risultati ZIP.")
         self._update_controls()
 
     def _on_failed(self, message: str) -> None:
         self.progress.setValue(0)
         self.status.setText("Elaborazione non completata")
+        self.confidence_label.setText("Original Information Confidence: non disponibile")
         QMessageBox.critical(self, "Errore pipeline", str(message))
         self._update_controls()
 
