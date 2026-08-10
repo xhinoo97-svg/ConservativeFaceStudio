@@ -25,6 +25,8 @@ from app.pretrained_face_resilience_policy import install_pretrained_face_resili
 from app.preflight_selective_deblur_policy import install_preflight_selective_deblur_policy
 from app.reference_guided_seed_policy import install_reference_guided_seed_policy
 from app.fixed_primary_contract_policy import install_fixed_primary_contract_policy
+from app.fixed_primary_policy import install_fixed_primary_policy
+from app.cross_reference_preclean_autoinstall import install_cross_reference_preclean_autoinstall
 from app.full_residual_reconstruction_policy import install_full_residual_reconstruction_policy
 
 install_same_canvas_seed_support_policy()
@@ -38,4 +40,8 @@ install_pretrained_face_resilience_policy()
 install_preflight_selective_deblur_policy()
 install_reference_guided_seed_policy()
 install_fixed_primary_contract_policy()
+# Latest product contract is strict: photo #1 is always the target canvas.
+install_fixed_primary_policy()
+# Every aligned reference is cleaned from observed donor pixels before component-bank use.
+install_cross_reference_preclean_autoinstall()
 install_full_residual_reconstruction_policy()
