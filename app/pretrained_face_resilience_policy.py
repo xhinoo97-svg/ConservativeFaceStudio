@@ -94,12 +94,8 @@ def _landmark_abstention(executor, block: BlockSpec, failure: Exception) -> Exec
 def _reference_derived_landmarks(executor, block: BlockSpec, failure: Exception) -> ExecutionResult:
     workspace = executor.workspace
     backend = workspace.metadata.get("_identity_backend")
-    # Missing pretrained geometry is not a reason to revive a synthetic/obsolete Haar
-    # path. The block completes as an explicit conservative abstention; later reference
-    # alignment can still use observed SIFT/ORB/RANSAC geometry where available.
     if backend is None or not hasattr(backend, "analyze"):
         return _landmark_abstention(executor, block, failure)
-
     if not workspace.references:
         return _landmark_abstention(executor, block, failure)
 
@@ -149,19 +145,8 @@ def _reference_derived_landmarks(executor, block: BlockSpec, failure: Exception)
 
     reference_landmarks = [None if item is None else item.landmarks5 for item in reference_observations]
     reference_bboxes = [None if item is None else item.bbox for item in reference_observations]
-    verified_flags: list[bool] = []
-    identity_scores: list[float | None] = []
-    try:
-        primary_embedding = backend.analyze(workspace.primary).embedding
-    except Exception:
-        primary_embedding = None
-    for index, item in enumerate(reference_observations):
-        original_index = int(runtime_order[index + 1])
-        # Preflight membership alone is insufficient to call a component-only image a
-        # full identity reference. Keep the flag false unless a real SFace comparison
-        # can be produced later by the normal handler.
-        verified_flags.append(False)
-        identity_scores.append(None)
+    verified_flags = [False for _ in reference_observations]
+    identity_scores: list[float | None] = [None for _ in reference_observations]
 
     workspace.metadata.update(
         {
@@ -219,15 +204,40 @@ def _has_full_verified_identity_reference(workspace) -> bool:
     return False
 
 
-def install_pretrained_face_resilience_policy() -> None:
-    """Patch pretrained face installation with conservative occlusion resilience.
+def _observed_footprint(image: np.ndarray, support: np.ndarray) -> tuple[np.ndarray, int]:
+    """Remove only border-connected extreme canvas padding from donor support.
 
-    The normal YuNet/SFace path remains untouched. If YuNet cannot detect a heavily
-    occluded primary, five-point geometry may be transferred only from a real preflight
-    same-identity reference whose feature alignment to the primary passes RANSAC gates.
-    If no verified geometry exists, LANDMARKS completes in explicit abstention mode.
-    Partial/component references are prevented from becoming negative SFace evidence.
+    A partial reference may be stored on a full-size black/white canvas. Geometric warp
+    support alone then incorrectly marks that blank canvas as photographed evidence.
+    We remove only large near-black/near-white components that touch the outer image
+    border. Interior dark anatomy (hair, pupil, shadow) remains observed because it is
+    not connected to the canvas boundary through an extreme-valued component.
     """
+    shape = image.shape[:2]
+    mask = np.asarray(support)
+    if mask.shape != shape:
+        return mask.astype(np.uint8, copy=True), 0
+    if image.ndim != 3 or image.shape[2] < 3:
+        return mask.astype(np.uint8, copy=True), 0
+
+    rgb = np.asarray(image[:, :, :3], dtype=np.uint8)
+    near_black = np.max(rgb, axis=2) <= 4
+    near_white = np.min(rgb, axis=2) >= 251
+    candidate = (near_black | near_white).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(candidate, connectivity=8)
+    padding = np.zeros(shape, dtype=bool)
+    minimum_area = max(64, int(round(shape[0] * shape[1] * 0.005)))
+    for label in range(1, count):
+        x, y, w, h, area = (int(v) for v in stats[label])
+        touches_border = x <= 0 or y <= 0 or x + w >= shape[1] or y + h >= shape[0]
+        if touches_border and area >= minimum_area:
+            padding |= labels == label
+    refined = np.where((mask > 0) & ~padding, 255, 0).astype(np.uint8)
+    removed = int(np.count_nonzero((mask > 0) & padding))
+    return refined, removed
+
+
+def install_pretrained_face_resilience_policy() -> None:
     global _INSTALLED
     if _INSTALLED:
         return
@@ -250,6 +260,37 @@ def install_pretrained_face_resilience_policy() -> None:
                     return _reference_derived_landmarks(executor, block, exc)
 
             executor._handlers[BlockKind.LANDMARKS] = resilient_landmarks
+
+        align = executor._handlers.get(BlockKind.ALIGN)
+        if align is not None:
+            @wraps(align)
+            def resilient_align(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+                result = align(block, parameters)
+                supports = executor.workspace.metadata.get("aligned_reference_support_masks")
+                refs = list(executor.workspace.aligned_references)
+                if not isinstance(supports, list) or len(supports) != len(refs):
+                    return result
+                refined: list[np.ndarray] = []
+                removed_by_slot: list[int] = []
+                for reference, support in zip(refs, supports):
+                    value, removed = _observed_footprint(reference, np.asarray(support))
+                    refined.append(value)
+                    removed_by_slot.append(removed)
+                executor.workspace.metadata["aligned_reference_support_masks"] = refined
+                reliability = executor.workspace.metadata.get("aligned_reference_detail_reliability_maps")
+                if isinstance(reliability, list) and len(reliability) == len(refined):
+                    for index, support in enumerate(refined):
+                        item = np.asarray(reliability[index]).copy()
+                        if item.shape == support.shape:
+                            item[support == 0] = 0
+                            reliability[index] = item.astype(np.uint8)
+                    executor.workspace.metadata["aligned_reference_detail_reliability_maps"] = reliability
+                details = dict(result.details)
+                details["border_padding_support_excluded_pixels"] = removed_by_slot
+                details["observed_support_excludes_border_padding"] = True
+                return ExecutionResult(result.block, result.image, details)
+
+            executor._handlers[BlockKind.ALIGN] = resilient_align
 
         identity = executor._handlers.get(BlockKind.IDENTITY_CHECK)
         if identity is not None:
