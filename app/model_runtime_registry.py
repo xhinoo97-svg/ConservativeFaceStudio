@@ -10,6 +10,8 @@ from app.model_registry import inspect_model
 from app.optional_heavy_models import heavy_profile_by_key
 
 
+# Release activation is explicit. A manifest being conservative_default does not prove
+# that its loader, inference routing, smoke test and packaged weights are production-ready.
 ACTIVE = {
     "opencv_yunet",
     "opencv_sface",
@@ -33,16 +35,15 @@ TESTING = {
 DISABLED = {"insightface_identity"}
 
 
-def _status(key: str, conservative_default: bool) -> str:
+def _declared_status(key: str) -> str:
     if key in ACTIVE:
         return "ACTIVE"
     if key in FALLBACK:
         return "FALLBACK"
     if key in DISABLED:
         return "DISABLED"
-    if key in TESTING:
-        return "TESTING"
-    return "ACTIVE" if conservative_default else "TESTING"
+    # Fail closed: unlisted manifests are candidates, not production backends.
+    return "TESTING"
 
 
 def _function_for(key: str) -> str:
@@ -89,6 +90,10 @@ def build_runtime_registry(root: str | Path = ".") -> dict[str, Any]:
         except Exception as exc:
             local = {"exists": False, "error": str(exc)}
         profile = heavy.get(manifest.key)
+        declared = _declared_status(manifest.key)
+        checksum_ok = local.get("checksum_ok")
+        status = "BROKEN" if bool(local.get("exists", False)) and checksum_ok is False else declared
+        stable_active = status in {"ACTIVE", "FALLBACK"}
         entries.append({
             "key": manifest.key,
             "name": manifest.title,
@@ -103,10 +108,11 @@ def build_runtime_registry(root: str | Path = ".") -> dict[str, Any]:
             "ram_mb_peak_elitebook": None if profile is None else profile.elitebook_i7_8650u_peak_ram_mb,
             "vram_mb_peak_elitebook": None,
             "cpu_gpu": "CPU first; OpenCL only after self-test",
-            "status": _status(manifest.key, manifest.conservative_default),
-            "stable_active": manifest.key in ACTIVE or manifest.key in FALLBACK,
+            "status": status,
+            "declared_release_status": declared,
+            "stable_active": stable_active,
             "installed": bool(local.get("exists", False)),
-            "checksum_ok": local.get("checksum_ok"),
+            "checksum_ok": checksum_ok,
             "benchmark": (
                 "production smoke required"
                 if profile is None
@@ -120,9 +126,10 @@ def build_runtime_registry(root: str | Path = ".") -> dict[str, Any]:
         })
     return {
         "format": "ConservativeFaceStudio model runtime registry",
-        "version": 1,
+        "version": 2,
         "hardware_target": "HP EliteBook x360 1030 G3 / Intel i7-8650U / 16GB RAM / Windows 11 x64",
-        "states": ["ACTIVE", "TESTING", "FALLBACK", "DISABLED"],
+        "states": ["ACTIVE", "TESTING", "FALLBACK", "DISABLED", "BROKEN"],
+        "activation_policy": "explicit-only; manifest presence/conservative_default never auto-promotes a backend",
         "models": entries,
         "core_fallback_chains": exportable_core_fallbacks(),
     }
