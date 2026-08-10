@@ -29,6 +29,7 @@ from app.fixed_primary_policy import install_fixed_primary_policy
 from app.cross_reference_preclean_autoinstall import install_cross_reference_preclean_autoinstall
 from app.tiny_observed_evidence_autoinstall import install_tiny_observed_evidence_autoinstall
 from app.full_residual_reconstruction_policy import install_full_residual_reconstruction_policy
+from app.single_image_core_policy import install_single_image_core_policy
 from app.evidence_confidence_runtime import install_evidence_confidence_runtime
 
 install_same_canvas_seed_support_policy()
@@ -50,5 +51,7 @@ install_cross_reference_preclean_autoinstall()
 install_tiny_observed_evidence_autoinstall()
 # Only residual pixels with no usable observed evidence may be generated.
 install_full_residual_reconstruction_policy()
+# Blocks 5/7/9 execute deterministic abstentions instead of being skipped on 1-image projects.
+install_single_image_core_policy()
 # Final export always reports the provenance-derived Original Information Confidence.
 install_evidence_confidence_runtime()
