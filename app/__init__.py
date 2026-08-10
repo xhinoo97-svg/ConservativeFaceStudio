@@ -15,6 +15,7 @@ from app.observed_target_photometric_policy import install_observed_target_photo
 from app.automatic_integrity_policy import install_automatic_integrity_policy
 from app.pretrained_face_resilience_policy import install_pretrained_face_resilience_policy
 from app.preflight_selective_deblur_policy import install_preflight_selective_deblur_policy
+from app.severity_aware_deblur_policy import install_severity_aware_deblur_policy
 from app.reference_guided_seed_policy import install_reference_guided_seed_policy
 from app.fixed_primary_contract_policy import install_fixed_primary_contract_policy
 from app.fixed_primary_policy import install_fixed_primary_policy
@@ -33,7 +34,9 @@ install_automatic_quality_policy()
 install_observed_target_photometric_policy()
 install_automatic_integrity_policy()
 install_pretrained_face_resilience_policy()
+# First pass: protect reliable/occluded pixels. Second router: strong blur only.
 install_preflight_selective_deblur_policy()
+install_severity_aware_deblur_policy()
 install_reference_guided_seed_policy()
 install_fixed_primary_contract_policy()
 install_fixed_primary_policy()
@@ -42,5 +45,4 @@ install_tiny_observed_evidence_autoinstall()
 install_full_residual_reconstruction_policy()
 install_single_image_core_policy()
 install_evidence_confidence_runtime()
-# Last runtime gate: reject destructive core output while preserving block N-1.
 install_core_quality_gate_policy()
