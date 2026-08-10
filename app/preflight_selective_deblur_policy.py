@@ -18,6 +18,18 @@ def _observed_fraction(image: np.ndarray) -> float:
     return float(np.mean(np.max(image, axis=2) > 2))
 
 
+def _learned_deblur_indices(images: list[np.ndarray]) -> tuple[list[int], list[dict]]:
+    """Return only source indices that justify learned NAFNet inference."""
+    diagnostics = [classify_blur(np.asarray(item)) for item in images]
+    indices = [
+        index
+        for index, info in enumerate(diagnostics)
+        if str(info.get("level", "none")) in {"medium", "strong"}
+        and _observed_fraction(np.asarray(images[index])) >= 0.30
+    ]
+    return indices, [dict(item) for item in diagnostics]
+
+
 def _selective_learned_blend(original: np.ndarray, candidate: np.ndarray) -> tuple[np.ndarray, dict[str, float]]:
     """Keep a NAFNet candidate only where the original genuinely lacks detail."""
     if candidate.shape != original.shape:
@@ -69,19 +81,12 @@ def install_preflight_selective_deblur_policy() -> None:
     @wraps(original_deblur_all)
     def patched_deblur_all(images, model_path: Path | None, hardware_policy):
         originals = [np.asarray(item).copy() for item in images]
-        diagnostics = [classify_blur(item) for item in originals]
-        learned_indices = [
-            index
-            for index, info in enumerate(diagnostics)
-            if str(info.get("level", "none")) in {"medium", "strong"}
-            and _observed_fraction(originals[index]) >= 0.30
-        ]
+        learned_indices, diagnostics = _learned_deblur_indices(originals)
 
-        module._last_preflight_blur_diagnostics = [dict(item) for item in diagnostics]
+        module._last_preflight_blur_diagnostics = diagnostics
         module._last_preflight_nafnet_indices = list(learned_indices)
 
         if model_path is None or not Path(model_path).is_file() or not learned_indices:
-            # All images received a blur decision even when no learned inference was needed.
             return originals, len(originals)
 
         selected_inputs = [originals[index] for index in learned_indices]
@@ -99,7 +104,6 @@ def install_preflight_selective_deblur_policy() -> None:
             selective_diagnostics[source_index] = details
 
         module._last_preflight_selective_deblur = selective_diagnostics
-        # Historical name means all images were evaluated, not all were passed to NAFNet.
         return output, len(originals)
 
     module._deblur_all = patched_deblur_all
