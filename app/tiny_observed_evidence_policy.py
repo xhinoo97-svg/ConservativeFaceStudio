@@ -40,13 +40,17 @@ def _source_codes(workspace, count: int) -> list[int]:
     values = workspace.metadata.get("aligned_reference_original_source_indices")
     if isinstance(values, list) and len(values) == count:
         try:
-            # Provenance 0 is the primary; references use imported source index + 1.
-            return [int(value) + 1 for value in values]
+            # ``runtime_source_order`` and therefore original source indices already use
+            # 0 for MAIN and 1..9 for imported references. Do not add one again.
+            parsed = [int(value) for value in values]
+            if all(1 <= value <= 65533 for value in parsed):
+                return parsed
         except (TypeError, ValueError):
             pass
     runtime = workspace.metadata.get("aligned_reference_source_indices")
     if isinstance(runtime, list) and len(runtime) == count:
         try:
+            # Runtime reference slots are zero based and do need conversion to 1..N.
             return [int(value) + 1 for value in runtime]
         except (TypeError, ValueError):
             pass
@@ -83,6 +87,22 @@ def _support_masks(workspace, count: int, shape: tuple[int, int]) -> list[np.nda
     return [np.ones(shape, dtype=bool) for _ in range(count)]
 
 
+def _preclean_evidence_maps(workspace, count: int, shape: tuple[int, int]) -> list[np.ndarray] | None:
+    """Return authoritative per-pixel observed-source ids when preclean produced them."""
+    stored = workspace.metadata.get("preclean_reference_evidence_maps")
+    if not isinstance(stored, list) or len(stored) != count:
+        return None
+    result: list[np.ndarray] = []
+    for value in stored:
+        item = np.asarray(value)
+        if item.shape != shape:
+            return None
+        if item.ndim != 2:
+            return None
+        result.append(item.astype(np.uint16, copy=False))
+    return result
+
+
 def _complete_observed_pixels(workspace, image: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
     refs = list(workspace.aligned_references)
     if not refs:
@@ -95,6 +115,7 @@ def _complete_observed_pixels(workspace, image: np.ndarray) -> tuple[np.ndarray,
     blocked = _reference_masks(workspace, count, shape)
     reliability = _reliability_maps(workspace, count, shape)
     source_codes = _source_codes(workspace, count)
+    evidence_maps = _preclean_evidence_maps(workspace, count, shape)
 
     target = _binary(workspace.metadata.get("inpaint_target_mask"), shape)
     if not np.any(target) and isinstance(workspace.occlusion_masks, list) and workspace.occlusion_masks:
@@ -117,13 +138,28 @@ def _complete_observed_pixels(workspace, image: np.ndarray) -> tuple[np.ndarray,
     output = image.copy()
     best_score = np.full(shape, -np.inf, dtype=np.float32)
     best_source = np.full(shape, -1, dtype=np.int16)
+    best_provenance = np.zeros(shape, dtype=np.uint16)
     best_value = np.zeros_like(image)
     conflict = np.zeros(shape, dtype=bool)
 
     for index, reference in enumerate(refs):
         if not trusted[index] or reference.shape != image.shape:
             continue
-        valid = unresolved & support[index] & ~blocked[index]
+
+        if evidence_maps is not None:
+            evidence = evidence_maps[index]
+            # The preclean evidence map is authoritative once available: zero means the
+            # working pixel is not supported by any observed photograph. Non-zero means
+            # it is observed, possibly copied from another reference; that true source id
+            # must survive the transfer instead of being replaced by this working slot.
+            evidence_valid = (evidence > 0) & (evidence < np.uint16(65534))
+            valid = unresolved & support[index] & evidence_valid
+            provenance_candidate = evidence
+        else:
+            # Backward-compatible fail-closed path when no preclean evidence map exists.
+            valid = unresolved & support[index] & ~blocked[index]
+            provenance_candidate = np.full(shape, np.uint16(source_codes[index]), dtype=np.uint16)
+
         if not np.any(valid):
             continue
         score = reliability[index]
@@ -137,22 +173,20 @@ def _complete_observed_pixels(workspace, image: np.ndarray) -> tuple[np.ndarray,
         best_score[better] = score[better]
         best_source[better] = index
         best_value[better] = reference[better]
+        best_provenance[better] = provenance_candidate[better]
 
-    accepted = unresolved & (best_source >= 0) & ~conflict
+    accepted = unresolved & (best_source >= 0) & ~conflict & (best_provenance > 0) & (best_provenance < np.uint16(65534))
     if not np.any(accepted):
         return image, {
             "tiny_observed_pixels": 0,
             "tiny_observed_sources": [],
             "tiny_observed_conflicts": int(np.count_nonzero(conflict & unresolved)),
+            "preclean_evidence_authoritative": evidence_maps is not None,
         }
 
     output[accepted] = best_value[accepted]
-    used_sources: list[int] = []
-    for index, code in enumerate(source_codes):
-        selected = accepted & (best_source == index)
-        if np.any(selected):
-            provenance[selected] = np.uint16(max(1, min(65533, int(code))))
-            used_sources.append(index + 1)
+    provenance[accepted] = best_provenance[accepted]
+    used_source_codes = sorted(int(value) for value in np.unique(best_provenance[accepted]) if 0 < int(value) < 65534)
     workspace.provenance_map = provenance
 
     observed_mask = _binary(workspace.metadata.get("inpaint_observed_mask"), shape)
@@ -161,10 +195,12 @@ def _complete_observed_pixels(workspace, image: np.ndarray) -> tuple[np.ndarray,
 
     return output, {
         "tiny_observed_pixels": int(np.count_nonzero(accepted)),
-        "tiny_observed_sources": used_sources,
+        "tiny_observed_sources": used_source_codes,
         "tiny_observed_conflicts": int(np.count_nonzero(conflict & unresolved)),
         "minimum_transfer_pixels": 1,
         "requires_preverified_geometry": True,
+        "preclean_evidence_authoritative": evidence_maps is not None,
+        "true_source_provenance_preserved": True,
     }
 
 
