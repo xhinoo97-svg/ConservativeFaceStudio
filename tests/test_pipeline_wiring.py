@@ -20,10 +20,10 @@ def test_strict_executor_wires_every_default_pipeline_block() -> None:
     assert BlockKind.FRONTALIZE in wired
 
 
-def test_pipeline_keeps_generative_fallback_inside_inpaint_block() -> None:
+def test_pipeline_keeps_residual_generation_inside_mandatory_inpaint_block() -> None:
     blocks = {block.kind: block for block in default_pipeline()}
 
-    assert blocks[BlockKind.INPAINT].optional is True
+    assert blocks[BlockKind.INPAINT].optional is False
     assert blocks[BlockKind.FRONTALIZE].optional is True
     assert blocks[BlockKind.IDENTITY_CHECK].depends_on == ("fusion",)
     assert blocks[BlockKind.EXPORT].depends_on == ("identity_check",)
