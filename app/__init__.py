@@ -32,6 +32,7 @@ from app.adaptive_restoration_autoinstall import install_adaptive_restoration_au
 from app.immutable_input_autoinstall import install_immutable_input_policy
 from app.provenance_firewall_policy import install_provenance_firewall_policy
 from app.component_bank_evidence_policy import install_component_bank_evidence_policy
+from app.final_runtime_binding_policy import install_final_runtime_binding_policy
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
@@ -47,8 +48,8 @@ install_automatic_quality_policy()
 install_observed_target_photometric_policy()
 install_automatic_integrity_policy()
 install_pretrained_face_resilience_policy()
-# automatic.py imports the installer by value; rebind it after resilience wrapping so
-# an occluded MAIN never falls back into the removed OpenCV Haar path.
+# automatic.py imports the installer by value; this early binding fixes the face path.
+# A final binding pass below also refreshes all later-wrapped core installers.
 install_face_resilience_binding_policy()
 # Classify immutable inputs first; NAFNet only runs on justified medium/strong cases.
 install_preflight_selective_deblur_policy()
@@ -70,3 +71,7 @@ install_immutable_input_policy()
 install_provenance_firewall_policy()
 # Block 7 may inspect cleaned working references, but transfer eligibility remains tied to original observed pixels.
 install_component_bank_evidence_policy()
+# automatic.py imports several installers by value. Rebind only after every wrapper above
+# is installed, otherwise autorun silently keeps stale pre-wrapper handlers even though
+# direct unit tests against the modules are green.
+install_final_runtime_binding_policy()
