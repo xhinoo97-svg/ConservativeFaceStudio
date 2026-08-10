@@ -52,12 +52,17 @@ def test_single_image_core_handlers_return_valid_results() -> None:
         assert result.details.get("abstained") is True
 
 
-def test_single_image_inpaint_handler_is_case_aware() -> None:
+def test_single_image_inpaint_handler_is_case_aware_inside_adaptive_cascade() -> None:
     image = _single_face_with_lateral_marker()
     workspace = Workspace(image.copy(), references=[])
     workspace.metadata["primary_bbox"] = (24, 18, 80, 100)
     workspace.metadata["preflight_detail_reliability_maps"] = [np.full(image.shape[:2], 255, dtype=np.uint8)]
     runner = AutomaticPipelineRunner(workspace)
+
+    # Exercise the real pipeline contract: Block 6 establishes the local damage mask
+    # before Block 8 enters LIGHT -> MEDIUM -> SEVERE routing.
+    occ = next(item for item in runner.executor.pipeline.blocks if item.kind is BlockKind.OCCLUSION_MASK)
+    runner.executor.execute(occ)
     block = next(item for item in runner.executor.pipeline.blocks if item.kind is BlockKind.INPAINT)
 
     result = runner.executor.execute(
@@ -66,9 +71,11 @@ def test_single_image_inpaint_handler_is_case_aware() -> None:
         maximum_symmetry_face_fraction=0.08,
     )
 
-    assert result.details["engine"] in {"single-image-case-aware-repair", "single-image-abstain"}
-    assert "route" in result.details
+    assert result.details["engine"] == "adaptive-light-medium-severe"
+    assert result.details.get("adaptive_cascade") is True
+    assert getattr(runner.executor._handlers[BlockKind.INPAINT], "_adaptive_restoration_cascade", False) is True
     assert workspace.metadata.get("restoration_case") is not None
-    if result.details["engine"] == "single-image-case-aware-repair":
-        assert "inpaint_unresolved_mask" in workspace.metadata
-        assert "inpaint_symmetry_mask" in workspace.metadata
+    stages = result.details.get("stages")
+    assert isinstance(stages, list) and len(stages) == 3
+    assert int(stages[0]["generated_pixels"]) == 0
+    assert int(stages[1]["generated_pixels"]) == 0
