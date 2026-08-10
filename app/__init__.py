@@ -24,6 +24,7 @@ from app.edge_connected_seed_expansion_policy import install_edge_connected_seed
 from app.fixed_primary_contract_policy import install_fixed_primary_contract_policy
 from app.fixed_primary_policy import install_fixed_primary_policy
 from app.cross_reference_preclean_autoinstall import install_cross_reference_preclean_autoinstall
+from app.coordinate_reference_evidence_policy import install_coordinate_reference_evidence_policy
 from app.tiny_observed_evidence_autoinstall import install_tiny_observed_evidence_autoinstall
 from app.full_residual_reconstruction_policy import install_full_residual_reconstruction_policy
 from app.single_image_core_policy import install_single_image_core_policy
@@ -63,6 +64,10 @@ install_edge_connected_seed_expansion_policy()
 install_fixed_primary_contract_policy()
 install_fixed_primary_policy()
 install_cross_reference_preclean_autoinstall()
+# The generic dark/chroma detector is a proposal, not proof that a clean sparse donor
+# pixel is unusable. Exact coordinate peers that overlap and agree can preserve those
+# unresolved observed pixels as evidence without changing donor provenance.
+install_coordinate_reference_evidence_policy()
 install_tiny_observed_evidence_autoinstall()
 install_full_residual_reconstruction_policy()
 install_single_image_core_policy()
