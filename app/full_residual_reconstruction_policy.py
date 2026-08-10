@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-"""Complete the residual damage mask only after exhausting observed references.
+"""Complete residual damage only after observed evidence is exhausted.
 
-Observed evidence always wins.  This policy only changes the residual fallback:
-whatever remains unresolved after reference transfer may be sent to the verified
-pretrained LaMa engine, including single-image projects. Generated pixels are always
-marked with provenance 65535 and remain subject to the outer identity guardrail.
+The adaptive restoration cascade may scope this handler to LIGHT, MEDIUM or SEVERE
+ROIs. Generation is never forced: LIGHT/MEDIUM can explicitly forbid it, while the
+SEVERE stage may enable LaMa for the remaining unsupported pixels.
 """
 
 from pathlib import Path
@@ -39,6 +38,13 @@ def _damage_target(workspace) -> np.ndarray:
     stored = workspace.metadata.get("inpaint_target_mask")
     if isinstance(stored, np.ndarray):
         target = cv2.bitwise_or(target, _binary(stored, shape))
+
+    # The adaptive LIGHT→MEDIUM→SEVERE controller is authoritative about which ROI
+    # may be touched during the current stage. This prevents later stages from
+    # reprocessing pixels already validated by an earlier stage.
+    stage_mask = workspace.metadata.get("adaptive_restoration_stage_mask")
+    if isinstance(stage_mask, np.ndarray):
+        target = cv2.bitwise_and(target, _binary(stage_mask, shape))
     return target
 
 
@@ -100,12 +106,15 @@ def install_full_residual_reconstruction_policy() -> None:
 
         def handler(block, parameters):
             p = dict(parameters)
-            # Observed donors still run first inside the original handler. These values
-            # only remove the old artificial ceiling on the remaining generated mask.
-            p["allow_verified_generative"] = True
-            p["maximum_generated_face_fraction"] = 1.0
-            p["maximum_generated_target_fraction"] = 1.0
+            allow_generated = bool(p.get("allow_verified_generative", True))
+            p["allow_verified_generative"] = allow_generated
             p["maximum_occlusion_fraction"] = 1.0
+            if allow_generated:
+                p["maximum_generated_face_fraction"] = 1.0
+                p["maximum_generated_target_fraction"] = 1.0
+            else:
+                p["maximum_generated_face_fraction"] = 0.0
+                p["maximum_generated_target_fraction"] = 0.0
 
             base = executor.workspace.copy_primary()
             target = _damage_target(executor.workspace)
@@ -133,12 +142,22 @@ def install_full_residual_reconstruction_policy() -> None:
                     "reference_count": 0,
                 }
 
+            # LIGHT/MEDIUM deliberately stop here. Their unresolved pixels are handed
+            # forward to the next stage instead of being silently synthesized.
+            if not allow_generated:
+                executor.workspace.metadata["inpaint_target_mask"] = target.copy()
+                executor.workspace.metadata["inpaint_unresolved_mask"] = residual.copy()
+                details["generated_pixels"] = 0
+                details["unresolved_pixels"] = int(np.count_nonzero(residual))
+                details["residual_completion"] = {"attempted": False, "reason": "generation_forbidden_for_current_stage"}
+                details["observed_evidence_exhausted_before_generation"] = True
+                return ExecutionResult(block.key, image, details)
+
             if lama_path is None or not lama_path.is_file():
                 raise BlockExecutionError("Residuo non coperto dalle reference e modello LaMa non disponibile")
 
             completed, generated_mask, lama_details = run_lama(image, residual)
             generated_mask = cv2.bitwise_and(_binary(generated_mask, target.shape), residual)
-            # Never let the model alter pixels outside the residual target.
             final = image.copy()
             final[generated_mask > 0] = completed[generated_mask > 0]
 
