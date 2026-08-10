@@ -57,3 +57,25 @@ def test_verified_seed_support_outside_face_template_is_preserved() -> None:
     assert np.array_equal(repaired[damage > 0], reference[damage > 0])
     assert np.all(provenance[damage > 0] == 1)
     assert np.array_equal(repaired[damage == 0], primary[damage == 0])
+
+
+def test_false_same_canvas_match_with_large_baseline_residual_abstains() -> None:
+    primary = np.full((96, 96, 3), 80, dtype=np.uint8)
+    reference = np.full_like(primary, 190)
+    damage = np.zeros(primary.shape[:2], dtype=np.uint8)
+    cv2.rectangle(damage, (38, 38), (54, 54), 255, -1)
+    # Full photographed support makes the baseline check meaningful.  A reference
+    # this different outside the seed cannot be exact same-canvas evidence even if
+    # an earlier geometry classifier accidentally labelled it as such.
+    support = np.full(primary.shape[:2], 255, dtype=np.uint8)
+    workspace = _verified_workspace(primary, reference, support, damage)
+
+    repaired, provenance, details = exact_same_canvas_observed_repair(workspace, primary)
+
+    assert details["applied"] is False
+    assert details["reason"] == "same_canvas_baseline_mismatch_abstained"
+    assert details["same_canvas_baseline_guard"] is True
+    assert details["same_canvas_baseline_rejected_slots"] == 1
+    assert details["same_canvas_baseline_rejected_sources"] == [1]
+    assert not np.any(provenance)
+    assert np.array_equal(repaired, primary)
