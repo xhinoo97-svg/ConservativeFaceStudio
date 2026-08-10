@@ -31,11 +31,19 @@ def test_accept_and_advance() -> None:
 
 def test_optional_block_can_be_skipped() -> None:
     blocks = default_pipeline()
-    inpaint_index = next(index for index, block in enumerate(blocks) if block.key == "inpaint")
-    state = PipelineState(blocks, current_index=inpaint_index)
+    index = next(index for index, block in enumerate(blocks) if block.key == "frontalize")
+    state = PipelineState(blocks, current_index=index)
     state.skip_current()
-    assert "inpaint" in state.skipped
-    assert state.advance().key == "fusion"
+    assert "frontalize" in state.skipped
+    assert state.advance().key == "identity_check"
+
+
+def test_core_inpaint_cannot_be_skipped() -> None:
+    blocks = default_pipeline()
+    index = next(index for index, block in enumerate(blocks) if block.key == "inpaint")
+    state = PipelineState(blocks, current_index=index)
+    with pytest.raises(ValueError):
+        state.skip_current()
 
 
 def test_advance_requires_decision() -> None:
@@ -81,16 +89,16 @@ def test_undo_and_redo_accepted_decision() -> None:
 
 def test_undo_and_redo_skipped_optional_decision() -> None:
     blocks = default_pipeline()
-    index = next(index for index, block in enumerate(blocks) if block.key == "inpaint")
+    index = next(index for index, block in enumerate(blocks) if block.key == "frontalize")
     state = PipelineState(blocks, current_index=index)
     state.skip_current()
     state.advance()
     state.undo_last_decision()
-    assert state.current.key == "inpaint"
-    assert "inpaint" not in state.skipped
+    assert state.current.key == "frontalize"
+    assert "frontalize" not in state.skipped
     state.redo_last_decision()
-    assert state.current.key == "fusion"
-    assert "inpaint" in state.skipped
+    assert state.current.key == "identity_check"
+    assert "frontalize" in state.skipped
 
 
 def test_new_decision_clears_redo_stack() -> None:
