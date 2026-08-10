@@ -3,8 +3,8 @@ from __future__ import annotations
 """Keep image #1 as the immutable project primary during preflight.
 
 Preflight may still score every imported photo for identity, pose and quality, but a
-reference is never promoted to primary.  This preserves the user contract: photo #1
-is the target canvas and photos #2..#10 are donors.
+reference is never promoted to primary. The best ranked source remains available as an
+analysis/donor anchor without changing the user's target canvas.
 """
 
 from functools import wraps
@@ -56,13 +56,28 @@ def install_fixed_primary_policy() -> None:
                 if isinstance(values, list) and len(values) == len(slots):
                     workspace.metadata[key] = [values[index] for index in slots]
 
-        workspace.metadata["best_reference_source_index"] = int(result.selected_source_index)
+        # The inner absolute contract returns selected_source_index=0 by design. Keep
+        # the independently recorded recommendation rather than accidentally erasing it.
+        recommended_raw = workspace.metadata.get(
+            "preflight_recommended_front_source_index",
+            workspace.metadata.get("preflight_analysis_anchor_source_index", result.selected_source_index),
+        )
+        try:
+            recommended = int(recommended_raw)
+        except (TypeError, ValueError):
+            recommended = 0
+        if recommended < 0 or recommended >= len(runtime):
+            recommended = 0
+
+        workspace.metadata["best_reference_source_index"] = recommended
+        workspace.metadata["preflight_analysis_anchor_source_index"] = recommended
         workspace.metadata["selected_primary_original_source_index"] = 0
         workspace.metadata["fixed_primary_policy"] = {
             "applied": True,
             "primary_original_source_index": 0,
-            "best_reference_or_primary_by_preflight": int(result.selected_source_index),
+            "best_reference_or_primary_by_preflight": recommended,
             "reference_count": len(workspace.references),
+            "target_replaced": False,
         }
 
         return module.PreflightResult(
@@ -70,7 +85,7 @@ def install_fixed_primary_policy() -> None:
             candidates=result.candidates,
             deblurred_count=result.deblurred_count,
             identity_cluster_size=result.identity_cluster_size,
-            reason="foto #1 mantenuta come primary; ranking preflight usato solo per i donor",
+            reason="foto #1 mantenuta come primary; ranking preflight usato solo per analysis/donor",
         )
 
     module.preprocess_and_select_front_base = patched
