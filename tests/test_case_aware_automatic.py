@@ -15,22 +15,20 @@ def _single_face_with_lateral_marker() -> np.ndarray:
     cv2.circle(image, (78, 55), 4, (30, 30, 30), -1)
     cv2.line(image, (64, 60), (64, 80), (100, 90, 85), 2)
     cv2.ellipse(image, (64, 91), (12, 4), 0, 0, 180, (80, 70, 70), 2)
-    # Opaque lateral mark: central anatomy remains untouched so symmetry may abstain/use
-    # only a small low-confidence part, but INPAINT must not be skipped.
     cv2.rectangle(image, (32, 48), (46, 68), (0, 0, 0), -1)
     return image
 
 
-def test_single_image_runner_does_not_skip_inpaint() -> None:
+def test_single_image_runner_executes_core_abstentions_instead_of_skips() -> None:
     image = _single_face_with_lateral_marker()
     workspace = Workspace(image.copy(), references=[])
     workspace.metadata["primary_bbox"] = (24, 18, 80, 100)
     workspace.metadata["preflight_detail_reliability_maps"] = [np.full(image.shape[:2], 255, dtype=np.uint8)]
     runner = AutomaticPipelineRunner(workspace)
 
-    assert runner._skip_reason(BlockKind.ALIGN) is not None
-    assert runner._skip_reason(BlockKind.REGION_SELECT) is not None
-    assert runner._skip_reason(BlockKind.FUSION) is not None
+    assert runner._skip_reason(BlockKind.ALIGN) is None
+    assert runner._skip_reason(BlockKind.REGION_SELECT) is None
+    assert runner._skip_reason(BlockKind.FUSION) is None
     assert runner._skip_reason(BlockKind.INPAINT) is None
     assert workspace.metadata["restoration_case"] in {
         "single_image",
@@ -38,6 +36,20 @@ def test_single_image_runner_does_not_skip_inpaint() -> None:
         "translucent_occlusion",
         "strong_blur",
     }
+
+
+def test_single_image_core_handlers_return_valid_results() -> None:
+    image = _single_face_with_lateral_marker()
+    workspace = Workspace(image.copy(), references=[])
+    workspace.metadata["primary_bbox"] = (24, 18, 80, 100)
+    workspace.metadata["preflight_detail_reliability_maps"] = [np.full(image.shape[:2], 255, dtype=np.uint8)]
+    runner = AutomaticPipelineRunner(workspace)
+
+    for kind in (BlockKind.ALIGN, BlockKind.REGION_SELECT, BlockKind.FUSION):
+        block = next(item for item in runner.executor.pipeline.blocks if item.kind is kind)
+        result = runner.executor.execute(block)
+        assert result.image.shape == image.shape
+        assert result.details.get("abstained") is True
 
 
 def test_single_image_inpaint_handler_is_case_aware() -> None:
