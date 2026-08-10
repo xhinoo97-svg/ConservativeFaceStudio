@@ -26,7 +26,7 @@ def _original_eligibility_masks(workspace) -> list[np.ndarray]:
 
     A cleaned working reference may contain useful context copied from another source,
     but Block 7 only treats pixels photographed in that aligned source itself as its
-    original evidence.  Cross-cleaned evidence is still available later to Block 8,
+    original evidence. Cross-cleaned evidence is still available later to Block 8,
     where the per-pixel provenance firewall can name the true donor source exactly.
     """
     count = len(workspace.aligned_references)
@@ -61,9 +61,9 @@ def install_component_bank_evidence_policy() -> None:
         return
 
     from app.execution import BlockExecutionError, ExecutionResult
-    from app.reference_memory import specific_reference_memory_fusion
-    from app.strict_execution import StrictBlockExecutor, _remap_aligned_provenance
+    import app.strict_execution as strict_module
 
+    StrictBlockExecutor = strict_module.StrictBlockExecutor
     previous = StrictBlockExecutor._specific_memory_select
 
     @wraps(previous)
@@ -93,7 +93,9 @@ def install_component_bank_evidence_policy() -> None:
             else max(1, min(int(requested_top_k), len(self.workspace.aligned_references)))
         )
 
-        memory = specific_reference_memory_fusion(
+        # Resolve through strict_execution at call time. This preserves the existing
+        # runtime/test injection seam and avoids bypassing a validated provider patch.
+        memory = strict_module.specific_reference_memory_fusion(
             images,
             masks,
             landmarks,
@@ -106,7 +108,7 @@ def install_component_bank_evidence_policy() -> None:
             agreement_colour_threshold=float(p.get("agreement_colour_threshold", 22.0)),
         )
         source_indices = self._aligned_source_indices()
-        provenance = _remap_aligned_provenance(memory.provenance_map, source_indices)
+        provenance = strict_module._remap_aligned_provenance(memory.provenance_map, source_indices)
         self.workspace.provenance_map = provenance
         self.workspace.metadata["specific_reference_confidence"] = memory.confidence_map.copy()
         summary = [asdict(item) for item in memory.decisions]
@@ -125,7 +127,9 @@ def install_component_bank_evidence_policy() -> None:
             block.key,
             memory.image,
             {
-                "engine": "dmd-inspired-specific-memory-evidence-aware",
+                # Keep the stable public engine contract. Evidence hardening is
+                # reported independently so existing consumers do not break.
+                "engine": "dmd-inspired-specific-memory",
                 "conservative": True,
                 "generic_dictionary_used": False,
                 "reference_count": len(self.workspace.aligned_references),
@@ -135,6 +139,7 @@ def install_component_bank_evidence_policy() -> None:
                 "source_pixel_counts": counts,
                 "regions": summary,
                 "source_eligibility_enforced": True,
+                "source_eligibility_policy": "original-observed-only",
                 "source_eligibility_pixels": list(
                     self.workspace.metadata.get("component_bank_source_eligibility_pixels", [])
                 ),
