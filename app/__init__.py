@@ -27,6 +27,7 @@ from app.reference_guided_seed_policy import install_reference_guided_seed_polic
 from app.fixed_primary_contract_policy import install_fixed_primary_contract_policy
 from app.fixed_primary_policy import install_fixed_primary_policy
 from app.cross_reference_preclean_autoinstall import install_cross_reference_preclean_autoinstall
+from app.tiny_observed_evidence_autoinstall import install_tiny_observed_evidence_autoinstall
 from app.full_residual_reconstruction_policy import install_full_residual_reconstruction_policy
 
 install_same_canvas_seed_support_policy()
@@ -44,4 +45,6 @@ install_fixed_primary_contract_policy()
 install_fixed_primary_policy()
 # Every aligned reference is cleaned from observed donor pixels before component-bank use.
 install_cross_reference_preclean_autoinstall()
+# Once geometry is verified, even one observed donor pixel remains eligible for repair.
+install_tiny_observed_evidence_autoinstall()
 install_full_residual_reconstruction_policy()
