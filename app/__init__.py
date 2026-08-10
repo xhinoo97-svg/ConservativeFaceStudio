@@ -15,5 +15,7 @@ os.environ.setdefault("OPENCV_FORCE_DNN_ENGINE", "1")
 # Explicit observed support, not RGB intensity or an approximate face template, is
 # authoritative for verified damaged seed pixels.
 from app.same_canvas_seed_support_policy import install_same_canvas_seed_support_policy
+from app.same_canvas_seed_precision_policy import install_same_canvas_seed_precision_policy
 
 install_same_canvas_seed_support_policy()
+install_same_canvas_seed_precision_policy()
