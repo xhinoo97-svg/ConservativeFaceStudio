@@ -36,6 +36,38 @@ def test_component_micro_refinement_corrects_small_shift_only() -> None:
     assert after < before
 
 
+def test_strict_component_refinement_uses_integer_nearest_transfer() -> None:
+    primary = np.zeros((96, 96, 3), dtype=np.uint8)
+    # Deliberately discrete colours make interpolation-created values easy to detect.
+    primary[34:62, 36:44] = (17, 73, 191)
+    primary[42:50, 44:68] = (211, 31, 89)
+    shifted = np.zeros_like(primary)
+    shifted[36:64, 39:47] = (17, 73, 191)
+    shifted[44:52, 47:71] = (211, 31, 89)
+
+    support = np.zeros((96, 96), dtype=np.uint8)
+    support[30:70, 30:78] = 255
+    component = support.copy()
+
+    result = refine_component_translation(
+        shifted,
+        primary,
+        support,
+        component,
+        maximum_shift=5.0,
+        minimum_response=0.01,
+        minimum_similarity_gain=0.001,
+        preserve_observed_pixels=True,
+    )
+
+    assert result.accepted
+    assert float(result.dx).is_integer()
+    assert float(result.dy).is_integer()
+    source_colours = {tuple(value) for value in np.unique(shifted.reshape(-1, 3), axis=0)}
+    output_colours = {tuple(value) for value in np.unique(result.image.reshape(-1, 3), axis=0)}
+    assert output_colours.issubset(source_colours)
+
+
 def test_component_micro_refinement_abstains_on_large_shift() -> None:
     primary = np.zeros((96, 96, 3), dtype=np.uint8)
     cv2.circle(primary, (48, 48), 10, (220, 220, 220), -1)
