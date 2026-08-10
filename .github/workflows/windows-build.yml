@@ -82,9 +82,9 @@ jobs:
           $errors | ForEach-Object { Write-Host "ERROR portrait=$($_.portrait) scenario=$($_.scenario) message=$($_.error)" }
           if ($errors.Count -gt 0) { throw "Extended practical matrix contains runtime errors" }
 
-      - name: Export model registry
+      - name: Export model manifest catalog
         shell: pwsh
-        run: python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-registry.json', all_model_manifests())"
+        run: python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-manifests.json', all_model_manifests())"
 
       - name: Free build cache before PyInstaller
         shell: pwsh
@@ -123,6 +123,18 @@ jobs:
         shell: pwsh
         run: python scripts/smoke_lama_runtime.py
 
+      - name: Export verified runtime model registry
+        shell: pwsh
+        run: |
+          python -c "from app.model_runtime_registry import export_runtime_registry; export_runtime_registry('models/model-registry.json','.')"
+          $registry = Get-Content models/model-registry.json -Raw | ConvertFrom-Json
+          $production = @($registry.models | Where-Object { $_.status -in @('ACTIVE','FALLBACK') })
+          if ($production.Count -lt 6) { throw "Runtime registry missing production backends" }
+          foreach ($model in $production) {
+            if ($model.installed -ne $true) { throw "Production backend not installed: $($model.key)" }
+            if ($model.checksum_ok -eq $false) { throw "Production backend checksum failed: $($model.key)" }
+          }
+
       - name: Stage verified production models
         shell: pwsh
         run: .\scripts\stage_production_models.ps1
@@ -136,7 +148,12 @@ jobs:
           }
           if (!(Test-Path "dist\ConservativeFaceStudio\models\model-registry.json")) { throw "Model registry missing" }
           $registry = Get-Content "dist\ConservativeFaceStudio\models\model-registry.json" -Raw | ConvertFrom-Json
-          if ($registry.Count -lt 10) { throw "Model registry incomplete" }
+          if (@($registry.models).Count -lt 10) { throw "Model registry incomplete" }
+          $production = @($registry.models | Where-Object { $_.status -in @('ACTIVE','FALLBACK') })
+          foreach ($entry in $production) {
+            if ($entry.installed -ne $true) { throw "Packaged ACTIVE/FALLBACK model missing before stage: $($entry.key)" }
+            if ($entry.checksum_ok -eq $false) { throw "Packaged ACTIVE/FALLBACK checksum invalid: $($entry.key)" }
+          }
           foreach ($model in @(
             'models\opencv_zoo\face_detection_yunet_2023mar.onnx',
             'models\opencv_zoo\face_recognition_sface_2021dec.onnx',
