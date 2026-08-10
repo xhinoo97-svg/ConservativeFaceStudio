@@ -75,10 +75,11 @@ def _demonstrated_residual(workspace, before: np.ndarray, after: np.ndarray, tar
 
     unresolved_hint = workspace.metadata.get("inpaint_unresolved_mask")
     hinted = _binary(unresolved_hint, shape) > 0 if isinstance(unresolved_hint, np.ndarray) else np.zeros(shape, bool)
-    # An explicit unresolved hint can only add unresolved pixels, never erase residual
-    # that the outer target has no evidence of having repaired.
+    # The outer target plus demonstrated provenance is authoritative. An inner hint can
+    # document residual state, but it can never reopen a pixel already proven observed,
+    # symmetric, or generated; otherwise SEVERE could overwrite real reference evidence.
     residual_bool = active & ~resolved
-    residual_bool |= active & hinted
+    ignored_resolved_hint = active & hinted & resolved
     residual = np.where(residual_bool, 255, 0).astype(np.uint8)
     diagnostics = {
         "target_pixels": int(np.count_nonzero(active)),
@@ -87,6 +88,7 @@ def _demonstrated_residual(workspace, before: np.ndarray, after: np.ndarray, tar
         "generated_resolved_pixels": int(np.count_nonzero(active & generated)),
         "reference_provenance_changed_pixels": int(np.count_nonzero(active & changed & reference_provenance)),
         "inner_unresolved_hint_pixels": int(np.count_nonzero(active & hinted)),
+        "ignored_inner_hint_on_demonstrated_pixels": int(np.count_nonzero(ignored_resolved_hint)),
         "demonstrated_residual_pixels": int(np.count_nonzero(residual_bool)),
     }
     return residual, diagnostics
