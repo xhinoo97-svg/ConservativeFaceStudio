@@ -47,7 +47,7 @@ def test_reference_provenance_changed_pixels_are_demonstrably_resolved() -> None
     assert diagnostics["reference_provenance_changed_pixels"] == int(np.count_nonzero(repaired))
 
 
-def test_explicit_unresolved_hint_can_only_add_residual_not_erase_it() -> None:
+def test_unresolved_hint_does_not_erase_outer_residual() -> None:
     before = np.full((24, 24, 3), 80, dtype=np.uint8)
     workspace = Workspace(primary=before.copy())
     target = np.zeros((24, 24), dtype=np.uint8)
@@ -58,4 +58,30 @@ def test_explicit_unresolved_hint_can_only_add_residual_not_erase_it() -> None:
 
     residual, _ = _demonstrated_residual(workspace, before, before.copy(), target)
 
+    # The outer target already defines every pixel that still lacks demonstrated repair;
+    # a narrower inner hint is therefore not allowed to shrink it.
     assert np.all(residual[target > 0] == 255)
+
+
+def test_stale_unresolved_hint_cannot_reopen_observed_reference_evidence() -> None:
+    before = np.full((24, 24, 3), 90, dtype=np.uint8)
+    after = before.copy()
+    target = np.zeros((24, 24), dtype=np.uint8)
+    target[4:20, 4:20] = 255
+
+    repaired = np.zeros((24, 24), dtype=bool)
+    repaired[8:13, 9:14] = True
+    after[repaired] = (40, 60, 80)
+
+    workspace = Workspace(primary=after.copy())
+    provenance = np.zeros((24, 24), dtype=np.uint16)
+    provenance[repaired] = np.uint16(3)
+    workspace.provenance_map = provenance
+    stale = np.zeros((24, 24), dtype=np.uint8)
+    stale[repaired] = 255
+    workspace.metadata["inpaint_unresolved_mask"] = stale
+
+    residual, diagnostics = _demonstrated_residual(workspace, before, after, target)
+
+    assert not np.any(residual[repaired])
+    assert diagnostics["ignored_inner_hint_on_demonstrated_pixels"] == int(np.count_nonzero(repaired))
