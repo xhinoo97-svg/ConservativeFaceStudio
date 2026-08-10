@@ -8,23 +8,30 @@ from app.pipeline import BlockKind, default_pipeline
 
 
 class DummyExecutor:
-    def __init__(self, workspace: Workspace) -> None:
+    def __init__(self, workspace: Workspace, *, resolve_stage: str = "light") -> None:
         self.workspace = workspace
         self.calls: list[dict] = []
+        self.resolve_stage = resolve_stage
 
         def inpaint(block, parameters):
             self.calls.append(dict(parameters))
             stage = str(self.workspace.metadata.get("adaptive_restoration_stage"))
             mask = np.asarray(self.workspace.metadata["adaptive_restoration_stage_mask"]) > 0
             image = self.workspace.primary.copy()
-            value = {"light": 101, "medium": 151, "severe": 201}[stage]
-            image[mask] = value
-            self.workspace.primary = image.copy()
             generated = np.zeros(mask.shape, np.uint8)
-            if bool(parameters.get("allow_verified_generative", False)):
-                generated[mask] = 255
+            unresolved = np.zeros(mask.shape, np.uint8)
+
+            if stage == self.resolve_stage:
+                value = {"light": 101, "medium": 151, "severe": 201}[stage]
+                image[mask] = value
+                if bool(parameters.get("allow_verified_generative", False)):
+                    generated[mask] = 255
+            else:
+                unresolved[mask] = 255
+
+            self.workspace.primary = image.copy()
             self.workspace.metadata["inpaint_generated_mask"] = generated
-            self.workspace.metadata["inpaint_unresolved_mask"] = np.zeros(mask.shape, np.uint8)
+            self.workspace.metadata["inpaint_unresolved_mask"] = unresolved
             return ExecutionResult(block.key, image, {"dummy_stage": stage})
 
         self._handlers = {BlockKind.INPAINT: inpaint}
@@ -49,9 +56,10 @@ def test_severity_map_is_local_for_small_and_large_occlusions() -> None:
     assert np.any(severity == LIGHT)
     assert np.any((severity == MEDIUM) | (severity == SEVERE))
     assert np.all(severity[occ == 0] == 0)
+    assert workspace.metadata["adaptive_severity_from_immutable_main"] is True
 
 
-def test_cascade_forbids_generation_before_severe_and_preserves_outside_roi() -> None:
+def test_severe_problem_escalates_light_medium_severe_and_preserves_outside_roi() -> None:
     image = np.full((90, 90, 3), 50, np.uint8)
     workspace = Workspace(image.copy())
     workspace.metadata["primary_bbox"] = (5, 5, 80, 80)
@@ -62,22 +70,49 @@ def test_cascade_forbids_generation_before_severe_and_preserves_outside_roi() ->
     workspace.metadata["preflight_original_occlusion_masks"] = [occ]
     workspace.metadata["preflight_detail_reliability_maps"] = [np.full((90, 90), 255, np.uint8)]
 
-    executor = DummyExecutor(workspace)
+    executor = DummyExecutor(workspace, resolve_stage="severe")
     install_adaptive_restoration_cascade(executor)
     before = workspace.primary.copy()
     result = executor._handlers[BlockKind.INPAINT](_block(), {"allow_verified_generative": True})
 
-    stages = result.details["stages"]
-    called = [item for item in stages if item["requested_pixels"] > 0]
-    assert called
-    assert executor.calls[-1]["allow_verified_generative"] is True
-    for call in executor.calls[:-1]:
-        assert call["allow_verified_generative"] is False
+    assert len(executor.calls) == 3
+    assert executor.calls[0]["allow_verified_generative"] is False
+    assert executor.calls[1]["allow_verified_generative"] is False
+    assert executor.calls[2]["allow_verified_generative"] is True
+    for call in executor.calls[:2]:
         assert call["maximum_generated_face_fraction"] == 0.0
         assert call["maximum_generated_target_fraction"] == 0.0
+
+    stages = result.details["stages"]
+    assert stages[0]["reason"] == "accepted_no_progress_escalate"
+    assert stages[1]["reason"] == "accepted_no_progress_escalate"
+    assert stages[2]["reason"] == "accepted"
     changed = np.any(result.image != before, axis=2)
     severity = workspace.metadata["adaptive_severity_map"]
     assert not np.any(changed & (severity == 0))
+    assert result.details["remaining_pixels"] == 0
+    assert result.details["protected_pixels"] == int(np.count_nonzero(severity != 0))
+
+
+def test_light_success_stops_medium_and_severe_for_resolved_region() -> None:
+    image = np.full((72, 72, 3), 70, np.uint8)
+    workspace = Workspace(image.copy())
+    workspace.metadata["primary_bbox"] = (8, 8, 56, 56)
+    occ = np.zeros((72, 72), np.uint8)
+    occ[25:30, 25:30] = 255
+    workspace.metadata["preflight_original_occlusion_masks"] = [occ]
+    workspace.metadata["preflight_detail_reliability_maps"] = [np.full((72, 72), 255, np.uint8)]
+
+    executor = DummyExecutor(workspace, resolve_stage="light")
+    install_adaptive_restoration_cascade(executor)
+    result = executor._handlers[BlockKind.INPAINT](_block(), {})
+
+    assert len(executor.calls) == 1
+    assert executor.calls[0]["allow_verified_generative"] is False
+    assert result.details["stages"][0]["reason"] == "accepted"
+    assert result.details["stages"][1]["reason"] == "not_required"
+    assert result.details["stages"][2]["reason"] == "not_required"
+    assert result.details["remaining_pixels"] == 0
 
 
 def test_cascade_skips_unneeded_stages() -> None:
