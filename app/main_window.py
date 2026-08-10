@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from .automatic import AutomaticRunResult
 from .execution import Workspace
 from .imaging import fit_to_canvas
+from .reference_limits import MAX_PROJECT_IMAGES, validate_reference_count
 from .worker import PipelineWorker
 
 
@@ -74,7 +75,9 @@ class MainWindow(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        self.status = QLabel("1. Carica una o più foto. La prima sarà la foto principale.")
+        self.status = QLabel(
+            f"1. Carica da 1 a {MAX_PROJECT_IMAGES} foto. La prima sarà la foto principale; le altre saranno riferimenti."
+        )
         self.status.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(self.status)
 
@@ -109,6 +112,15 @@ class MainWindow(QMainWindow):
         )
         if not filenames:
             return
+        if len(filenames) > MAX_PROJECT_IMAGES:
+            QMessageBox.warning(
+                self,
+                "Troppe immagini",
+                f"Puoi caricare al massimo {MAX_PROJECT_IMAGES} immagini totali: 1 principale + fino a {MAX_PROJECT_IMAGES - 1} riferimenti.",
+            )
+            return
+        validate_reference_count(len(filenames) - 1)
+
         images: list[np.ndarray] = []
         for filename in filenames:
             image = cv2.imread(filename, cv2.IMREAD_COLOR)
@@ -134,12 +146,15 @@ class MainWindow(QMainWindow):
         self.after_panel.clear()
         self.after_panel.setText("Risultato finale")
         self.progress.setValue(0)
-        self.status.setText(f"Caricate {len(normalized)} foto. Premi Inizia.")
+        self.status.setText(
+            f"Caricate {len(normalized)} foto: 1 principale + {len(self.references)} riferimenti. Premi Inizia."
+        )
         self._update_controls()
 
     def start_pipeline(self) -> None:
         if self.primary is None or self.worker_thread is not None:
             return
+        validate_reference_count(len(self.references))
         self.run_result = None
         self.run_directory = Path(tempfile.mkdtemp(prefix="ConservativeFaceStudio-"))
         stem = self.source_paths[0].stem if self.source_paths else "restauro"
