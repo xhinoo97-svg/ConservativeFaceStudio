@@ -14,6 +14,7 @@ from app.automatic_quality_policy import install_automatic_quality_policy
 from app.observed_target_photometric_policy import install_observed_target_photometric_policy
 from app.automatic_integrity_policy import install_automatic_integrity_policy
 from app.pretrained_face_resilience_policy import install_pretrained_face_resilience_policy
+from app.face_resilience_binding_policy import install_face_resilience_binding_policy
 from app.preflight_selective_deblur_policy import install_preflight_selective_deblur_policy
 from app.severity_aware_deblur_policy import install_severity_aware_deblur_policy
 from app.reference_guided_seed_policy import install_reference_guided_seed_policy
@@ -38,7 +39,10 @@ install_automatic_quality_policy()
 install_observed_target_photometric_policy()
 install_automatic_integrity_policy()
 install_pretrained_face_resilience_policy()
-# First pass: protect reliable/occluded pixels. Second router: strong blur only.
+# automatic.py imports the installer by value; rebind it after resilience wrapping so
+# an occluded MAIN never falls back into the removed OpenCV Haar path.
+install_face_resilience_binding_policy()
+# Classify immutable inputs first; NAFNet only runs on justified medium/strong cases.
 install_preflight_selective_deblur_policy()
 install_severity_aware_deblur_policy()
 install_reference_guided_seed_policy()
