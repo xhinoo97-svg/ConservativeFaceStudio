@@ -16,6 +16,7 @@ os.environ.setdefault("OPENCV_FORCE_DNN_ENGINE", "1")
 # authoritative for verified damaged seed pixels.
 from app.same_canvas_seed_support_policy import install_same_canvas_seed_support_policy
 from app.same_canvas_seed_precision_policy import install_same_canvas_seed_precision_policy
+from app.explicit_damage_domain_policy import install_explicit_damage_domain_policy
 from app.multi_reference_runtime_policy import install_multi_reference_runtime_policy
 from app.automatic_quality_policy import install_automatic_quality_policy
 from app.observed_target_photometric_policy import install_observed_target_photometric_policy
@@ -26,6 +27,7 @@ from app.reference_guided_seed_policy import install_reference_guided_seed_polic
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
+install_explicit_damage_domain_policy()
 install_multi_reference_runtime_policy()
 install_automatic_quality_policy()
 install_observed_target_photometric_policy()
