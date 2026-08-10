@@ -83,3 +83,27 @@ def test_seed_expansion_is_only_connected_and_never_adds_distant_island() -> Non
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     allowed = cv2.dilate(damage, kernel, iterations=1) > 0
     assert not np.any(merged & ~allowed)
+
+
+def test_existing_coordinate_preserving_sparse_verifier_can_also_recover_edge() -> None:
+    workspace, damage = _workspace_with_seed()
+    support = np.zeros((64, 64), dtype=np.uint8)
+    support[22:42, 18:46] = 255
+
+    workspace.metadata["aligned_reference_support_masks"] = [support]
+    workspace.metadata["aligned_reference_source_indices"] = [0]
+    workspace.metadata["same_canvas_partial_alignment_diagnostics"] = [
+        {
+            "runtime_reference_index": 0,
+            "method": "verified-same-canvas-partial",
+            "verification_basis": "coordinate-preserving-sparse-damage-overlap",
+            "global_transform_required": False,
+            "local_identity_transform": True,
+        }
+    ]
+    workspace.metadata["reference_consensus_occlusion"] = damage.copy()
+
+    result = expand_edge_connected_seed(workspace)
+
+    assert result["eligible_donors"] == 1
+    assert result["added_pixels"] > 0
