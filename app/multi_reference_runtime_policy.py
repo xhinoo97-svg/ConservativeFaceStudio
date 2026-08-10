@@ -16,18 +16,19 @@ _INSTALLED = False
 def install_multi_reference_runtime_policy() -> None:
     """Close runtime gaps left by the legacy strict executor.
 
-    Two conservative rules are installed:
+    Conservative rules installed here:
 
     1. REGION_SELECT must not silently fall back to the legacy ``top_k=2``.  When
-       callers do not request an explicit K, every aligned donor (up to the product
-       limit of nine references) is made eligible.  The reference-memory kernel still
-       decides per region/pixel whether to abstain, and its confidence/agreement gates
-       remain unchanged.
+       callers do not request an explicit K, every aligned donor (up to nine
+       references) is made eligible.
 
     2. The final SFace identity check is anchored to the observed primary selected by
-       preflight, captured before any restoration block runs.  Partial component donor
-       images can be mostly unsupported/black and are therefore unsuitable as the
-       *only* final identity anchors.  The numerical identity threshold is not lowered.
+       preflight rather than to sparse component sheets.
+
+    3. Once block 5 has already established trusted geometry for a reference, blocks
+       7/9 may consume even a single genuinely observed donor pixel. Minimum-area
+       thresholds remain valid for *estimating alignment* but are never used to throw
+       away already aligned photographic evidence.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -35,6 +36,7 @@ def install_multi_reference_runtime_policy() -> None:
 
     from app.execution import BlockExecutionError, ExecutionResult
     from app.strict_execution import StrictBlockExecutor
+    from app.tiny_observed_evidence_policy import install_tiny_observed_evidence_policy
 
     original_init = StrictBlockExecutor.__init__
     original_select = StrictBlockExecutor._specific_memory_select
@@ -45,6 +47,7 @@ def install_multi_reference_runtime_policy() -> None:
         original_init(self, workspace, history_limit=history_limit)
         self._trusted_identity_anchor = trusted_anchor
         self._handlers[BlockKind.IDENTITY_CHECK] = self._trusted_identity_check
+        install_tiny_observed_evidence_policy(self)
 
     @wraps(original_select)
     def patched_select(self, block, parameters: dict[str, Any]) -> ExecutionResult:
@@ -83,7 +86,7 @@ def install_multi_reference_runtime_policy() -> None:
             )
 
         # Defensive fallback for direct StrictBlockExecutor use where no observed
-        # anchor could be captured.  Preserve the original multi-reference check.
+        # anchor could be captured. Preserve the original multi-reference check.
         return super(StrictBlockExecutor, self)._identity(block, parameters)
 
     StrictBlockExecutor.__init__ = patched_init
