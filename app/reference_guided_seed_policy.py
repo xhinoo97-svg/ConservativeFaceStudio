@@ -17,13 +17,13 @@ def _binary(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
 
 
 def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.ndarray, dict[str, object]]:
-    """Validate frozen damage seeds against trusted observed references.
+    """Validate frozen damage seeds against observed references conservatively.
 
-    Full/same-canvas donors with enough unaffected overlap must pass a baseline
-    consistency guard before they may confirm a seed.  A trusted component-only donor
-    can legitimately have no such baseline.  In that case it may preserve only the
-    already-detected seed pixels that lie inside its explicit observed support; it may
-    never create or expand a damage region by itself.
+    A component-only donor with too little unaffected overlap must already be trusted by
+    identity/partial-geometry evidence and may confirm only existing seed pixels inside
+    its support. A broad/full donor can instead establish same-canvas trust from a large,
+    low-residual unaffected baseline, so legacy/full-reference paths do not depend on a
+    redundant metadata flag.
     """
     from app.observed_target_repair_runtime import _trusted_slots
 
@@ -34,14 +34,6 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
         return np.zeros(shape, np.uint8), {"trusted_donors": 0, "reason": "no_aligned_support"}
 
     trusted_flags = _trusted_slots(workspace, len(aligned))
-    if not any(trusted_flags):
-        return np.zeros(shape, np.uint8), {
-            "trusted_donors": 0,
-            "rejected_donors": len(aligned),
-            "refined_pixels": 0,
-            "reason": "no_identity_or_geometry_trusted_reference",
-        }
-
     frozen_primary = workspace.metadata.get("same_canvas_imported_primary")
     if not isinstance(frozen_primary, np.ndarray) or frozen_primary.shape != workspace.primary.shape:
         frozen_primary = workspace.primary
@@ -58,13 +50,10 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
     rejected = 0
     seed_only_pixels = 0
     baseline_confirmed_pixels = 0
+    baseline_proven_donors = 0
     diagnostics: list[dict[str, object]] = []
 
     for slot, (reference, support_raw, slot_trusted) in enumerate(zip(aligned, supports, trusted_flags)):
-        if not slot_trusted:
-            diagnostics.append({"slot": slot, "accepted": False, "reason": "untrusted_identity_or_geometry"})
-            rejected += 1
-            continue
         if reference.shape != workspace.primary.shape:
             diagnostics.append({"slot": slot, "accepted": False, "reason": "shape_mismatch"})
             rejected += 1
@@ -82,12 +71,18 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
         baseline_region = support & ~exclusion
         baseline_count = int(np.count_nonzero(baseline_region))
 
-        # Component-only references often observe only the missing eye/nose/mouth and
-        # therefore cannot prove a same-canvas baseline.  They are still useful as
-        # observed evidence, but only for an existing detector seed and never for seed
-        # expansion.  This is the conservative analogue of reference-guided inpainting:
-        # reference evidence controls the missing region rather than inventing a new one.
         if baseline_count < 96:
+            # Without an unaffected baseline, only a donor already trusted by alignment /
+            # identity may participate. It cannot create or expand the damage proposal.
+            if not slot_trusted:
+                diagnostics.append({
+                    "slot": slot,
+                    "accepted": False,
+                    "reason": "partial_without_baseline_requires_explicit_trust",
+                    "baseline_pixels": baseline_count,
+                })
+                rejected += 1
+                continue
             local = np.where(supported_seed, 255, 0).astype(np.uint8)
             refined = cv2.bitwise_or(refined, local)
             count = int(np.count_nonzero(local))
@@ -118,9 +113,11 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
             rejected += 1
             continue
 
-        # A detector seed needs only exceed the measured unaffected noise floor; the
-        # previous hard 0.035 floor discarded faint/semipermeable overlays.  The lower
-        # bound stays above ordinary compression noise and is still donor-baseline gated.
+        # A sufficiently large, low-residual unaffected baseline proves the donor is
+        # pixel-coincident strongly enough for seed confirmation, even if an older path
+        # did not persist a separate trust flag.
+        donor_trust_source = "explicit_identity_or_geometry" if slot_trusted else "baseline_proven_same_canvas"
+        baseline_proven_donors += int(not slot_trusted)
         noise_floor = max(0.018, p90 + 0.010, median + 0.015)
         disagreement = supported_seed & (delta >= noise_floor)
         if np.any(disagreement):
@@ -138,6 +135,7 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
             "slot": slot,
             "accepted": True,
             "reason": "baseline_verified_seed_confirmation",
+            "trust_source": donor_trust_source,
             "baseline_pixels": baseline_count,
             "baseline_median": median,
             "baseline_p90": p90,
@@ -150,6 +148,7 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
     return refined, {
         "trusted_donors": trusted,
         "rejected_donors": rejected,
+        "baseline_proven_donors": int(baseline_proven_donors),
         "refined_pixels": refined_pixels,
         "trusted_partial_seed_only_pixels": int(seed_only_pixels),
         "baseline_confirmed_seed_pixels": int(baseline_confirmed_pixels),
