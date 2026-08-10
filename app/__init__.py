@@ -29,9 +29,11 @@ from app.single_image_core_policy import install_single_image_core_policy
 from app.evidence_confidence_runtime import install_evidence_confidence_runtime
 from app.core_quality_gate_policy import install_core_quality_gate_policy
 from app.adaptive_restoration_autoinstall import install_adaptive_restoration_autoinstall
+from app.preexisting_observed_protection_policy import install_preexisting_observed_protection_policy
 from app.immutable_input_autoinstall import install_immutable_input_policy
 from app.provenance_firewall_policy import install_provenance_firewall_policy
 from app.component_bank_evidence_policy import install_component_bank_evidence_policy
+from app.adaptive_guardrail_state_policy import install_adaptive_guardrail_state_policy
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
@@ -64,6 +66,9 @@ install_evidence_confidence_runtime()
 install_core_quality_gate_policy()
 # Must patch the final repair installer so LIGHT→MEDIUM→SEVERE wraps the real Block-8 handler.
 install_adaptive_restoration_autoinstall()
+# Pixels already reconstructed from authoritative Block-7 reference provenance are final
+# observed evidence; the adaptive Block-8 cascade must not process them again.
+install_preexisting_observed_protection_policy()
 # Capture imported MAIN/reference pixels before AutomaticPipelineRunner preflight mutates working copies.
 install_immutable_input_policy()
 # The working reference may be cleaned, but only its per-pixel evidence map may authorize ORIGINAL_REFERENCE provenance.
@@ -85,3 +90,7 @@ _automatic.install_pretrained_face_handlers = _face_handlers.install_pretrained_
 _automatic.install_case_aware_runtime = _case_runtime.install_case_aware_runtime
 _automatic.install_verified_inpainting_handler = _inpaint_handlers.install_verified_inpainting_handler
 _automatic.install_observed_target_repair_runtime = _target_runtime.install_observed_target_repair_runtime
+
+# Outer guardrail rollback must restore adaptive masks/reports together with image and
+# provenance, otherwise Block 9 can inherit stale state from a rejected Block 8.
+install_adaptive_guardrail_state_policy()
