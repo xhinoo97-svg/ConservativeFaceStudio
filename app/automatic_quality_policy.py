@@ -9,14 +9,15 @@ _INSTALLED = False
 
 
 def install_automatic_quality_policy() -> None:
-    """Make the automatic ENHANCE block real without making it aggressive.
+    """Make automatic ENHANCE useful while preserving reference-driven evidence.
 
-    The automatic runner historically passed ``blend=0.0`` to ENHANCE.  That made
-    the block a no-op even though it was exported as one of the 13 processing stages.
-    In automatic strict mode, zero is now interpreted as "auto conservative": a small
-    CLAHE blend is applied and the existing per-block identity guardrail can still
-    roll it back if it changes the face too much.  Manual callers that pass a
-    positive blend keep their requested value unchanged.
+    ``blend<=0`` means automatic conservative selection. Single-image cases retain a
+    modest CLAHE blend. When real references are available, global contrast remapping
+    is counterproductive: later blocks can reconstruct the damaged region from observed
+    donor pixels, while a global CLAHE changes already-correct skin/background and the
+    donors no longer match photometrically. In that route ENHANCE therefore executes a
+    deliberate preserve decision rather than altering pixels merely to make the stage
+    visibly active. Manual positive blends remain unchanged.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -30,11 +31,14 @@ def install_automatic_quality_policy() -> None:
         p = dict(parameters)
         requested = float(p.get("blend", 0.2))
         automatic_conservative = requested <= 0.0
+        preserve_reference_evidence = automatic_conservative and bool(self.workspace.references)
+
         if automatic_conservative:
-            # Deliberately modest: enough to make the stage functional while leaving
-            # identity/skin geometry to the observed data rather than contrast priors.
-            p["blend"] = 0.12
-            p.setdefault("clip_limit", 1.45)
+            if preserve_reference_evidence:
+                p["blend"] = 0.0
+            else:
+                p["blend"] = 0.12
+                p.setdefault("clip_limit", 1.45)
 
         result = original(self, block, p)
         if not automatic_conservative:
@@ -46,7 +50,13 @@ def install_automatic_quality_policy() -> None:
                 "automatic_conservative": True,
                 "requested_blend": requested,
                 "effective_blend": float(p["blend"]),
-                "identity_guardrail_required": True,
+                "identity_guardrail_required": not preserve_reference_evidence,
+                "decision": (
+                    "preserve_observed_multi_reference_photometry"
+                    if preserve_reference_evidence
+                    else "mild_single_image_local_contrast"
+                ),
+                "reference_evidence_preserved": bool(preserve_reference_evidence),
             }
         )
         return ExecutionResult(result.block, result.image, details)
