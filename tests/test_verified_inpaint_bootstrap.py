@@ -15,9 +15,10 @@ def test_verified_reference_inpaint_is_installed_without_model_pack() -> None:
     runner = AutomaticPipelineRunner(workspace)
     handler = runner.executor._handlers[BlockKind.INPAINT]
 
-    # The final runner is intentionally wrapped by the case-aware runtime. The
-    # wrapper must remain installed even without a model pack so it can route
-    # single-image and multi-reference cases while delegating reference repair to
-    # the verified pretrained handler underneath.
-    assert handler.__module__ == "app.case_aware_runtime"
+    # The final production handler is the adaptive cascade. Case-aware/reference repair
+    # remains underneath it through the final autorun installer binding. This must also
+    # be true without a downloaded model pack so observed reference transfer still works
+    # and generation remains an optional severe-stage fallback only.
+    assert handler.__module__ == "app.adaptive_restoration_cascade"
+    assert getattr(handler, "_adaptive_restoration_cascade", False) is True
     assert "core_model_paths" not in workspace.metadata
