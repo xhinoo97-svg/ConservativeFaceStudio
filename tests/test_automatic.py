@@ -9,7 +9,8 @@ import cv2
 import numpy as np
 
 from app.automatic import AutomaticPipelineRunner
-from app.execution import Workspace
+from app.execution import ExecutionResult, Workspace
+from app.pipeline import BlockKind
 
 
 def sample_image() -> np.ndarray:
@@ -20,9 +21,53 @@ def sample_image() -> np.ndarray:
     return image
 
 
+def _install_synthetic_landmark_handler(runner: AutomaticPipelineRunner) -> None:
+    """Keep autorun plumbing tests independent from external face-model inference.
+
+    Real YuNet/SFace/semantic model inference has dedicated CI smoke tests. These two
+    tests use a deliberately synthetic drawing and only verify 13-block routing,
+    automatic progression and export integrity, so deterministic geometry is the
+    correct fixture instead of silently relying on a legacy Haar cascade.
+    """
+    primary_points = np.asarray(
+        [[37.0, 41.0], [59.0, 41.0], [48.0, 53.0], [41.0, 65.0], [55.0, 65.0]],
+        dtype=np.float32,
+    )
+
+    def landmarks(block, parameters):
+        reference_points: list[np.ndarray] = []
+        for _ in runner.executor.workspace.references:
+            reference_points.append(primary_points.copy())
+        runner.executor.workspace.metadata.update(
+            {
+                "primary_landmarks5": primary_points.copy(),
+                "primary_bbox": (18, 18, 60, 60),
+                "primary_landmark_confidence": 1.0,
+                "reference_landmarks5": reference_points,
+                "reference_landmark_confidence": [1.0] * len(reference_points),
+                "face_backend": "synthetic-test-fixture",
+            }
+        )
+        return ExecutionResult(
+            block.key,
+            runner.executor.workspace.copy_primary(),
+            {
+                "backend": "synthetic-test-fixture",
+                "bbox": [18, 18, 60, 60],
+                "landmark_count": 5,
+                "landmark_confidence": 1.0,
+                "reference_faces": len(reference_points),
+            },
+        )
+
+    runner.executor._handlers[BlockKind.LANDMARKS] = landmarks
+
+
 def test_automatic_pipeline_exports_every_block(tmp_path: Path) -> None:
     output = tmp_path / "final.png"
-    result = AutomaticPipelineRunner(Workspace(primary=sample_image())).run(output, upscale=1)
+    runner = AutomaticPipelineRunner(Workspace(primary=sample_image()))
+    _install_synthetic_landmark_handler(runner)
+    result = runner.run(output, upscale=1)
 
     assert result.final_image.exists()
     assert result.blocks_zip.exists()
@@ -34,6 +79,7 @@ def test_automatic_pipeline_exports_every_block(tmp_path: Path) -> None:
     assert enhance.details.get("requested_blend") == 0.0
     assert float(enhance.details.get("effective_blend", 0.0)) > 0.0
     assert float(enhance.details.get("blend", 0.0)) > 0.0
+    assert by_block["landmarks"].details.get("backend") == "synthetic-test-fixture"
 
     with zipfile.ZipFile(result.blocks_zip, "r") as archive:
         names = archive.namelist()
@@ -61,9 +107,9 @@ def test_automatic_pipeline_uses_references_without_confirmation(tmp_path: Path)
     primary = sample_image()
     matrix = np.float32([[1, 0, 2], [0, 1, -1]])
     reference = cv2.warpAffine(primary, matrix, (96, 96))
-    result = AutomaticPipelineRunner(Workspace(primary=primary, references=[reference])).run(
-        tmp_path / "with-reference.png", upscale=1
-    )
+    runner = AutomaticPipelineRunner(Workspace(primary=primary, references=[reference]))
+    _install_synthetic_landmark_handler(runner)
+    result = runner.run(tmp_path / "with-reference.png", upscale=1)
     by_block = {item.block: item for item in result.results}
     assert by_block["align"].details.get("skipped") is not True
     assert result.blocks_zip.exists()
