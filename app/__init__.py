@@ -20,6 +20,7 @@ from app.face_resilience_binding_policy import install_face_resilience_binding_p
 from app.preflight_selective_deblur_policy import install_preflight_selective_deblur_policy
 from app.severity_aware_deblur_policy import install_severity_aware_deblur_policy
 from app.reference_guided_seed_policy import install_reference_guided_seed_policy
+from app.edge_connected_seed_expansion_policy import install_edge_connected_seed_expansion_policy
 from app.fixed_primary_contract_policy import install_fixed_primary_contract_policy
 from app.fixed_primary_policy import install_fixed_primary_policy
 from app.cross_reference_preclean_autoinstall import install_cross_reference_preclean_autoinstall
@@ -56,6 +57,9 @@ install_face_resilience_binding_policy()
 install_preflight_selective_deblur_policy()
 install_severity_aware_deblur_policy()
 install_reference_guided_seed_policy()
+# Allow only a two-pixel, seed-connected detector-border correction from a verified
+# coordinate-preserving partial donor. This never creates distant damage components.
+install_edge_connected_seed_expansion_policy()
 install_fixed_primary_contract_policy()
 install_fixed_primary_policy()
 install_cross_reference_preclean_autoinstall()
