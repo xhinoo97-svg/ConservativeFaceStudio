@@ -29,6 +29,7 @@ from app.fixed_primary_policy import install_fixed_primary_policy
 from app.cross_reference_preclean_autoinstall import install_cross_reference_preclean_autoinstall
 from app.tiny_observed_evidence_autoinstall import install_tiny_observed_evidence_autoinstall
 from app.full_residual_reconstruction_policy import install_full_residual_reconstruction_policy
+from app.evidence_confidence_runtime import install_evidence_confidence_runtime
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
@@ -47,4 +48,7 @@ install_fixed_primary_policy()
 install_cross_reference_preclean_autoinstall()
 # Once geometry is verified, even one observed donor pixel remains eligible for repair.
 install_tiny_observed_evidence_autoinstall()
+# Only residual pixels with no usable observed evidence may be generated.
 install_full_residual_reconstruction_policy()
+# Final export always reports the provenance-derived Original Information Confidence.
+install_evidence_confidence_runtime()
