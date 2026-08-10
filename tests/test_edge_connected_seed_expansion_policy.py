@@ -56,7 +56,7 @@ def test_reference_extending_beyond_two_pixel_border_is_rejected() -> None:
     assert verify_edge_connected_seed_overlap(workspace, reference, 0) is None
 
 
-def test_seed_expansion_is_only_connected_and_never_adds_distant_island() -> None:
+def test_distant_support_island_causes_whole_donor_rejection() -> None:
     workspace, damage = _workspace_with_seed()
     support = np.zeros((64, 64), dtype=np.uint8)
     support[22:42, 18:46] = 255
@@ -76,13 +76,15 @@ def test_seed_expansion_is_only_connected_and_never_adds_distant_island() -> Non
     result = expand_edge_connected_seed(workspace)
     merged = np.asarray(workspace.metadata["reference_consensus_occlusion"]) > 0
 
-    assert result["added_pixels"] > 0
+    # Fail closed: a donor whose support is not essentially contained in the 2-pixel
+    # seed dilation is rejected as a whole. We do not cherry-pick the nearby island
+    # because the distant island means the support geometry itself is not trustworthy
+    # for automatic damage expansion.
+    assert result["added_pixels"] == 0
+    assert result["eligible_donors"] == 0
     assert result["distant_expansion_allowed"] is False
     assert not np.any(merged[5:8, 5:8])
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    allowed = cv2.dilate(damage, kernel, iterations=1) > 0
-    assert not np.any(merged & ~allowed)
+    assert np.array_equal(merged, damage > 0)
 
 
 def test_existing_coordinate_preserving_sparse_verifier_can_also_recover_edge() -> None:
