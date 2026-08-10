@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+import cv2
 import numpy as np
 
 from app.case_aware_runtime import install_case_aware_runtime
@@ -23,7 +24,7 @@ from app.pretrained_values import RESTORATION_SAFETY_DEFAULTS
 from app.primary_anchor_policy import restore_imported_primary_for_same_canvas
 from app.same_canvas_repair_runtime import install_same_canvas_repair_runtime
 from app.strict_execution import StrictBlockExecutor
-from app.validation import evaluate_identity_guardrail
+from app.validation import GuardrailDecision, evaluate_identity_guardrail
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,181 @@ class AutomaticPipelineRunner:
         if callback is not None:
             callback(int(index), str(name))
 
+    @staticmethod
+    def _binary_mask(value: Any, shape: tuple[int, int]) -> np.ndarray:
+        if not isinstance(value, np.ndarray):
+            return np.zeros(shape, dtype=bool)
+        item = np.asarray(value)
+        if item.ndim == 3:
+            item = cv2.cvtColor(item.astype(np.uint8), cv2.COLOR_BGR2GRAY)
+        if item.shape != shape:
+            return np.zeros(shape, dtype=bool)
+        return item > 0
+
+    def _authorized_observed_repair_domain(self, shape: tuple[int, int]) -> np.ndarray:
+        workspace = self.executor.workspace
+        target = np.zeros(shape, dtype=bool)
+        frozen = workspace.metadata.get("preflight_original_occlusion_masks")
+        if isinstance(frozen, list) and frozen:
+            target |= self._binary_mask(np.asarray(frozen[0]), shape)
+        if isinstance(workspace.occlusion_masks, list) and workspace.occlusion_masks:
+            target |= self._binary_mask(np.asarray(workspace.occlusion_masks[0]), shape)
+        for key in ("reference_consensus_occlusion", "inpaint_target_mask"):
+            target |= self._binary_mask(workspace.metadata.get(key), shape)
+        if np.any(target):
+            # Photometric feathering may legitimately touch only a narrow target edge.
+            target = cv2.dilate(
+                target.astype(np.uint8) * 255,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+                iterations=1,
+            ) > 0
+        return target
+
+    def _trusted_reference_source_codes(self) -> set[int]:
+        """Return imported reference provenance codes already verified upstream.
+
+        Partial same-canvas geometry is a local trust statement, not a global face
+        identity anchor.  It is nevertheless sufficient to preserve an exact observed
+        donor transfer inside the verified damage ROI.  Full identity-verified donors
+        are accepted here as well.
+        """
+        workspace = self.executor.workspace
+        originals_raw = workspace.metadata.get("aligned_reference_original_source_indices")
+        if not isinstance(originals_raw, list):
+            return set()
+        try:
+            originals = [max(1, int(value)) for value in originals_raw]
+        except (TypeError, ValueError):
+            return set()
+
+        count = len(originals)
+        identity = workspace.metadata.get("aligned_reference_identity_verified")
+        partial = workspace.metadata.get("aligned_reference_partial_geometry_verified")
+        identity_flags = [False] * count
+        partial_flags = [False] * count
+        if isinstance(identity, list) and len(identity) == count:
+            identity_flags = [bool(value) for value in identity]
+        if isinstance(partial, list) and len(partial) == count:
+            partial_flags = [bool(value) for value in partial]
+
+        trusted = {
+            originals[index]
+            for index in range(count)
+            if identity_flags[index] or partial_flags[index]
+        }
+
+        # Same-canvas verification records runtime indices explicitly. Resolve them to
+        # the already aligned original-source list when possible.
+        runtime_raw = workspace.metadata.get("aligned_reference_source_indices")
+        runtime = [int(value) for value in runtime_raw] if isinstance(runtime_raw, list) and len(runtime_raw) == count else list(range(count))
+        runtime_to_original = {runtime[index]: originals[index] for index in range(count)}
+        for key in ("verified_same_canvas_alignment", "same_canvas_partial_alignment_diagnostics"):
+            diagnostics = workspace.metadata.get(key)
+            if not isinstance(diagnostics, list):
+                continue
+            for item in diagnostics:
+                if not isinstance(item, dict) or item.get("runtime_reference_index") is None:
+                    continue
+                method = str(item.get("method", ""))
+                if method not in {"verified-same-canvas-observed", "verified-same-canvas-partial"}:
+                    continue
+                original = runtime_to_original.get(int(item["runtime_reference_index"]))
+                if original is not None:
+                    trusted.add(int(original))
+        return trusted
+
+    def _trusted_observed_reference_change(
+        self,
+        block,
+        before: np.ndarray,
+        candidate: np.ndarray,
+    ) -> tuple[bool, dict[str, Any]]:
+        """Recognise exact observed donor transfers that must not be judged as global sparse faces.
+
+        A partial reference is not a valid whole-face identity anchor. If blocks 7-9
+        changed only an authorised damaged ROI and every changed pixel is provenance-
+        backed by an already verified observed reference, the transfer has already
+        passed the stronger source/geometry contract. Global histogram/SFace comparison
+        against a mostly-black partial sheet would be the wrong validation class.
+        """
+        if block.kind not in {BlockKind.REGION_SELECT, BlockKind.INPAINT, BlockKind.FUSION}:
+            return False, {"reason": "block_not_reference_repair"}
+        if candidate.shape != before.shape:
+            return False, {"reason": "shape_changed"}
+
+        changed = np.any(candidate != before, axis=2)
+        changed_pixels = int(np.count_nonzero(changed))
+        if changed_pixels == 0:
+            return False, {"reason": "no_pixel_change"}
+
+        workspace = self.executor.workspace
+        provenance = workspace.provenance_map
+        if not isinstance(provenance, np.ndarray) or provenance.shape != changed.shape:
+            return False, {"reason": "missing_provenance", "changed_pixels": changed_pixels}
+        provenance = provenance.astype(np.uint16, copy=False)
+
+        observed_reference = changed & (provenance > 0) & (provenance < np.uint16(65534))
+        if int(np.count_nonzero(observed_reference)) != changed_pixels:
+            return False, {
+                "reason": "change_not_fully_observed_reference",
+                "changed_pixels": changed_pixels,
+                "observed_reference_changed_pixels": int(np.count_nonzero(observed_reference)),
+            }
+
+        trusted_codes = self._trusted_reference_source_codes()
+        changed_codes = {int(value) for value in np.unique(provenance[changed]) if 0 < int(value) < 65534}
+        if not changed_codes or not changed_codes.issubset(trusted_codes):
+            return False, {
+                "reason": "reference_source_not_verified",
+                "changed_source_codes": sorted(changed_codes),
+                "trusted_source_codes": sorted(trusted_codes),
+            }
+
+        authorized = self._authorized_observed_repair_domain(changed.shape)
+        outside = changed & ~authorized
+        if np.any(outside):
+            return False, {
+                "reason": "observed_transfer_outside_authorized_damage",
+                "changed_pixels": changed_pixels,
+                "outside_authorized_pixels": int(np.count_nonzero(outside)),
+            }
+
+        return True, {
+            "reason": "trusted_observed_reference_transfer",
+            "changed_pixels": changed_pixels,
+            "source_codes": sorted(changed_codes),
+            "trusted_source_codes": sorted(trusted_codes),
+            "outside_authorized_pixels": 0,
+        }
+
+    def _global_identity_anchors(self) -> list[np.ndarray]:
+        """Exclude sparse/partial sheets from whole-face identity scoring."""
+        workspace = self.executor.workspace
+        refs = list(workspace.references)
+        candidates = workspace.metadata.get("preflight_candidates")
+        if not isinstance(candidates, list):
+            return [self._original_anchor]
+
+        accepted_sources: set[int] = set()
+        for item in candidates:
+            if not isinstance(item, dict) or not bool(item.get("accepted_identity", False)):
+                continue
+            try:
+                source_index = int(item.get("source_index"))
+            except (TypeError, ValueError):
+                continue
+            if source_index > 0:
+                accepted_sources.add(source_index)
+
+        order_raw = workspace.metadata.get("runtime_source_order")
+        order = [int(value) for value in order_raw] if isinstance(order_raw, list) and len(order_raw) == len(refs) + 1 else list(range(len(refs) + 1))
+        full_face: list[np.ndarray] = []
+        for runtime_index, reference in enumerate(refs):
+            original_source = order[runtime_index + 1] if runtime_index + 1 < len(order) else runtime_index + 1
+            if original_source in accepted_sources:
+                full_face.append(reference)
+        return full_face or [self._original_anchor]
+
     def _snapshot_guardrail_state(self) -> dict[str, Any]:
         workspace = self.executor.workspace
         provenance = None if workspace.provenance_map is None else workspace.provenance_map.copy()
@@ -141,17 +317,32 @@ class AutomaticPipelineRunner:
     ) -> ExecutionResult:
         if block.kind in {BlockKind.IMPORT, BlockKind.EXPORT, BlockKind.IDENTITY_CHECK}:
             return result
-        anchors = list(self.executor.workspace.references) or [self._original_anchor]
-        identity_backend = self.executor.workspace.metadata.get("_identity_backend")
-        decision = evaluate_identity_guardrail(
-            before,
-            result.image,
-            anchors,
-            max_drop=RESTORATION_SAFETY_DEFAULTS.identity_max_drop,
-            absolute_minimum=0.20,
-            minimum_retention=RESTORATION_SAFETY_DEFAULTS.identity_minimum_retention,
-            backend=identity_backend,
-        )
+
+        trusted_observed, observed_details = self._trusted_observed_reference_change(block, before, result.image)
+        if trusted_observed:
+            decision = GuardrailDecision(
+                True,
+                1.0,
+                1.0,
+                0.0,
+                "trusted-observed-reference-provenance",
+                "accepted: exact observed reference transfer already passed source/geometry gate",
+                1.0,
+                RESTORATION_SAFETY_DEFAULTS.identity_minimum_retention,
+            )
+        else:
+            anchors = self._global_identity_anchors()
+            identity_backend = self.executor.workspace.metadata.get("_identity_backend")
+            decision = evaluate_identity_guardrail(
+                before,
+                result.image,
+                anchors,
+                max_drop=RESTORATION_SAFETY_DEFAULTS.identity_max_drop,
+                absolute_minimum=0.20,
+                minimum_retention=RESTORATION_SAFETY_DEFAULTS.identity_minimum_retention,
+                backend=identity_backend,
+            )
+
         details = dict(result.details)
         details["identity_guardrail"] = {
             "accepted": decision.accepted,
@@ -162,6 +353,8 @@ class AutomaticPipelineRunner:
             "minimum_retention": decision.minimum_retention,
             "engine": decision.engine,
             "reason": decision.reason,
+            "trusted_observed_reference_transfer": bool(trusted_observed),
+            "trusted_observed_details": observed_details,
         }
         if decision.accepted:
             if self.executor.project.operations:
@@ -217,14 +410,8 @@ class AutomaticPipelineRunner:
                 parameters["maximum_generated_face_fraction"] = 0.015
                 parameters["maximum_generated_target_fraction"] = 0.25
                 parameters["maximum_symmetry_face_fraction"] = 0.08
-                # A verified observed donor may legitimately cover the whole damage target.
-                # The damage mask, donor support, alignment trust and identity gate are the
-                # safety boundaries; a fixed 25% face cap discarded real evidence on large
-                # stickers/partial-face benchmark cases.
                 parameters["maximum_occlusion_fraction"] = 1.0
             elif block.kind is BlockKind.FUSION:
-                # Re-apply the same evidence ceiling after fusion because the exact
-                # same-canvas repair runtime also wraps this block.
                 parameters["maximum_occlusion_fraction"] = 1.0
             elif block.kind is BlockKind.UPSCALE:
                 parameters["scale"] = upscale
