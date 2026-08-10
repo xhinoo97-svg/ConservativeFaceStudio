@@ -101,6 +101,21 @@ def verify_edge_connected_seed_overlap(
     return support, reliability, updated
 
 
+def _coordinate_preserving_diagnostic(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if bool(item.get("edge_connected_seed_tolerance", False)):
+        return True
+    # Older verified sparse paths can already prove exact same-canvas geometry before
+    # this edge-specific fallback is reached. They are equally eligible for *border*
+    # recovery, but the strict support-vs-dilated-seed check below remains mandatory.
+    return bool(
+        item.get("local_identity_transform", False)
+        and item.get("global_transform_required", False) is False
+        and str(item.get("method", "")) == "verified-same-canvas-partial"
+    )
+
+
 def expand_edge_connected_seed(workspace) -> dict[str, Any]:
     """Add only verified donor pixels immediately connected to the frozen seed."""
     shape = workspace.primary.shape[:2]
@@ -127,25 +142,38 @@ def expand_edge_connected_seed(workspace) -> dict[str, Any]:
         merged = cv2.bitwise_or(merged, primary_damage)
 
     frozen_bool = primary_damage > 0
-    edge_band = (_dilate(primary_damage) > 0) & ~frozen_bool
+    dilated_damage = _dilate(primary_damage) > 0
+    edge_band = dilated_damage & ~frozen_bool
     total_added = 0
     eligible = 0
     donor_reports: list[dict[str, Any]] = []
+    normalized_runtime_indices = [int(v) for v in runtime_indices]
 
     for item in diagnostics:
-        if not isinstance(item, dict) or not bool(item.get("edge_connected_seed_tolerance", False)):
+        if not _coordinate_preserving_diagnostic(item):
             continue
         runtime_index = item.get("runtime_reference_index")
         try:
-            slot = [int(v) for v in runtime_indices].index(int(runtime_index))
+            slot = normalized_runtime_indices.index(int(runtime_index))
         except (TypeError, ValueError):
             continue
         support = _binary(np.asarray(supports[slot]), shape)
         if support is None:
             continue
         support_bool = support > 0
+        support_pixels = int(np.count_nonzero(support_bool))
+        if support_pixels <= 0:
+            continue
+
         supported_seed = support_bool & frozen_bool
-        if not np.any(supported_seed):
+        exact_pixels = int(np.count_nonzero(supported_seed))
+        if exact_pixels < 32:
+            continue
+        dilated_overlap = float(np.count_nonzero(support_bool & dilated_damage) / support_pixels)
+        if dilated_overlap < 0.995:
+            # Component sheets containing legitimate visible context are not allowed to
+            # promote that context into damage merely because part of the sheet overlaps
+            # the seed. Only support essentially contained in the 2-px band qualifies.
             continue
 
         # Expansion must stay in this donor's own support and within two pixels of
@@ -165,6 +193,8 @@ def expand_edge_connected_seed(workspace) -> dict[str, Any]:
             "slot": int(slot),
             "added_pixels": added,
             "edge_tolerance_pixels": int(_EDGE_RADIUS),
+            "dilated_damage_overlap_fraction": dilated_overlap,
+            "verification_basis": str(item.get("verification_basis", "unknown")),
         })
 
     workspace.metadata["reference_consensus_occlusion"] = merged
