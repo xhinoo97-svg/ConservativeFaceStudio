@@ -61,6 +61,23 @@ def test_component_bank_allows_different_sources_for_different_parts() -> None:
     assert bank["mouth"][0].source_index == 22
 
 
+def test_brow_only_reference_does_not_claim_eye_or_forehead() -> None:
+    shape, landmarks, bbox = _geometry()
+    masks = canonical_component_masks(shape, landmarks, bbox)
+    support = masks["left_brow"].copy()
+    bank = build_component_bank(
+        [support],
+        landmarks,
+        bbox,
+        source_indices=[27],
+        minimum_coverage=0.50,
+    )
+    assert bank["left_brow"] and bank["left_brow"][0].source_index == 27
+    assert bank["left_eye"] == []
+    assert bank["forehead"] == []
+    assert np.count_nonzero((masks["left_brow"] > 0) & (masks["left_eye"] > 0)) == 0
+
+
 def test_lower_face_crop_can_supply_mouth_chin_without_claiming_eyes() -> None:
     shape, landmarks, bbox = _geometry()
     masks = canonical_component_masks(shape, landmarks, bbox)
