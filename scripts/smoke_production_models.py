@@ -10,7 +10,7 @@ from app.opencv_nafnet import NafNetDeblurEngine
 from app.opencv_semantic_models import FaceParsingEngine, HeadPoseEngine
 
 
-MODEL_CHOICES = ("all", "nafnet", "parsing", "headpose")
+MODEL_CHOICES = ("all", "face", "nafnet", "parsing", "headpose")
 
 
 def _synthetic_face(size: int = 128) -> np.ndarray:
@@ -28,6 +28,46 @@ def _require(path: Path) -> Path:
     if not path.is_file():
         raise SystemExit(f"Required pretrained model missing: {path}")
     return path
+
+
+def _smoke_face(root: Path, image: np.ndarray) -> dict[str, object]:
+    yunet = _require(root / "models/opencv_zoo/face_detection_yunet_2023mar.onnx")
+    sface = _require(root / "models/opencv_zoo/face_recognition_sface_2021dec.onnx")
+    if not hasattr(cv2, "FaceDetectorYN") or not hasattr(cv2, "FaceRecognizerSF"):
+        raise SystemExit("[smoke:face] OpenCV build lacks YuNet/SFace APIs")
+
+    print(f"[smoke:face] loading YuNet {yunet}", flush=True)
+    detector = cv2.FaceDetectorYN.create(
+        str(yunet), "", (image.shape[1], image.shape[0]), 0.1, 0.3, 5000,
+        cv2.dnn.DNN_BACKEND_OPENCV, cv2.dnn.DNN_TARGET_CPU,
+    )
+    detector.setInputSize((image.shape[1], image.shape[0]))
+    try:
+        _status, faces = detector.detect(image)
+    except cv2.error as exc:
+        raise SystemExit(f"[smoke:face] YuNet CPU inference failed: {exc}") from exc
+    face_count = 0 if faces is None else int(len(faces))
+    if faces is not None and not np.isfinite(np.asarray(faces, dtype=np.float32)).all():
+        raise SystemExit("[smoke:face] YuNet returned non-finite detection values")
+
+    print(f"[smoke:face] loading SFace {sface}", flush=True)
+    recognizer = cv2.FaceRecognizerSF.create(
+        str(sface), "", cv2.dnn.DNN_BACKEND_OPENCV, cv2.dnn.DNN_TARGET_CPU,
+    )
+    # SFace feature() consumes an aligned 112x112 face. For a smoke test we only need
+    # a real forward pass through the checkpoint; detector accuracy is tested elsewhere.
+    aligned = cv2.resize(image, (112, 112), interpolation=cv2.INTER_AREA)
+    try:
+        feature = recognizer.feature(aligned)
+    except cv2.error as exc:
+        raise SystemExit(f"[smoke:face] SFace CPU inference failed: {exc}") from exc
+    embedding = np.asarray(feature, dtype=np.float32).reshape(-1)
+    if embedding.size == 0 or not np.isfinite(embedding).all():
+        raise SystemExit("[smoke:face] SFace returned an invalid embedding")
+
+    result = {"yunet_faces": face_count, "sface_embedding_dim": int(embedding.size)}
+    print(f"[smoke:face] PASS {result}", flush=True)
+    return result
 
 
 def _smoke_nafnet(root: Path, image: np.ndarray) -> dict[str, object]:
@@ -80,6 +120,7 @@ def main() -> None:
     image = _synthetic_face(128)
     requested = MODEL_CHOICES[1:] if args.only == "all" else (args.only,)
     checks = {
+        "face": _smoke_face,
         "nafnet": _smoke_nafnet,
         "parsing": _smoke_parsing,
         "headpose": _smoke_headpose,
