@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import wraps
 from typing import Any
 
 import numpy as np
@@ -38,12 +39,14 @@ def install_multi_reference_runtime_policy() -> None:
     original_init = StrictBlockExecutor.__init__
     original_select = StrictBlockExecutor._specific_memory_select
 
+    @wraps(original_init)
     def patched_init(self, workspace, *, history_limit: int = 12) -> None:
         trusted_anchor = workspace.copy_primary()
         original_init(self, workspace, history_limit=history_limit)
         self._trusted_identity_anchor = trusted_anchor
         self._handlers[BlockKind.IDENTITY_CHECK] = self._trusted_identity_check
 
+    @wraps(original_select)
     def patched_select(self, block, parameters: dict[str, Any]) -> ExecutionResult:
         p = dict(parameters)
         requested = p.get("top_k")
