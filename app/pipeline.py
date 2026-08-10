@@ -127,14 +127,17 @@ def default_pipeline() -> tuple[BlockSpec, ...]:
         BlockSpec("import", "Importa foto e riferimenti", BlockKind.IMPORT),
         BlockSpec("deblur", "Deblur, denoise e nitidezza conservativa", BlockKind.DEBLUR, depends_on=("import",)),
         BlockSpec("enhance", "Contrasto locale e recupero qualità", BlockKind.ENHANCE, depends_on=("deblur",)),
-        BlockSpec("landmarks", "Rilevamento volto e landmark", BlockKind.LANDMARKS, required_modules=("landmarks", "insightface"), depends_on=("enhance",)),
-        BlockSpec("align", "Allineamento e confronto multi-foto", BlockKind.ALIGN, required_modules=("landmarks", "insightface"), depends_on=("landmarks",)),
-        BlockSpec("occlusion_mask", "Rilevamento coperture e consenso multi-foto", BlockKind.OCCLUSION_MASK, depends_on=("align",)),
-        BlockSpec("region_select", "Selezione delle regioni migliori", BlockKind.REGION_SELECT, required_modules=("reference_fusion",), depends_on=("align", "occlusion_mask")),
-        BlockSpec("inpaint", "Riparazione coperture da foto reali", BlockKind.INPAINT, required_modules=("reference_fusion",), depends_on=("occlusion_mask", "region_select"), optional=True),
-        BlockSpec("fusion", "Fusione conservativa delle regioni", BlockKind.FUSION, required_modules=("reference_fusion",), depends_on=("region_select", "inpaint")),
+        BlockSpec("landmarks", "Rilevamento volto e landmark", BlockKind.LANDMARKS, required_modules=("face_detection", "landmarks", "identity_guardrail"), depends_on=("enhance",)),
+        BlockSpec("align", "Allineamento e confronto multi-foto", BlockKind.ALIGN, required_modules=("landmarks", "reference_alignment"), depends_on=("landmarks",)),
+        BlockSpec("occlusion_mask", "Rilevamento coperture e consenso multi-foto", BlockKind.OCCLUSION_MASK, required_modules=("occlusion_detection", "face_parsing"), depends_on=("align",)),
+        BlockSpec("region_select", "Selezione delle regioni migliori", BlockKind.REGION_SELECT, required_modules=("component_bank", "reference_fusion"), depends_on=("align", "occlusion_mask")),
+        # Core block: it is mandatory. With no damage it must return a successful
+        # no-op/abstention; with damage it must use observed donors first and then a
+        # verified residual fallback instead of being silently skipped.
+        BlockSpec("inpaint", "Riparazione coperture da foto reali e residuo verificato", BlockKind.INPAINT, required_modules=("reference_fusion", "inpainting_fallback"), depends_on=("occlusion_mask", "region_select"), optional=False),
+        BlockSpec("fusion", "Fusione conservativa delle regioni", BlockKind.FUSION, required_modules=("reference_fusion", "provenance"), depends_on=("region_select", "inpaint")),
         BlockSpec("frontalize", "Normalizzazione posa 2D senza sintesi", BlockKind.FRONTALIZE, depends_on=("fusion",), optional=True),
-        BlockSpec("identity_check", "Controllo identità e coerenza", BlockKind.IDENTITY_CHECK, required_modules=("insightface",), depends_on=("fusion",)),
+        BlockSpec("identity_check", "Controllo identità e coerenza", BlockKind.IDENTITY_CHECK, required_modules=("identity_guardrail",), depends_on=("fusion",)),
         BlockSpec("upscale", "Upscale finale", BlockKind.UPSCALE, depends_on=("identity_check",), optional=True),
         BlockSpec("export", "Esporta risultato e report", BlockKind.EXPORT, depends_on=("identity_check",)),
     )
