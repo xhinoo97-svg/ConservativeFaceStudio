@@ -28,6 +28,7 @@ from app.core_quality_gate_policy import install_core_quality_gate_policy
 from app.adaptive_restoration_autoinstall import install_adaptive_restoration_autoinstall
 from app.immutable_input_autoinstall import install_immutable_input_policy
 from app.provenance_firewall_policy import install_provenance_firewall_policy
+from app.component_bank_evidence_policy import install_component_bank_evidence_policy
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
@@ -55,3 +56,5 @@ install_adaptive_restoration_autoinstall()
 install_immutable_input_policy()
 # The working reference may be cleaned, but only its per-pixel evidence map may authorize ORIGINAL_REFERENCE provenance.
 install_provenance_firewall_policy()
+# Block 7 may inspect cleaned working references, but transfer eligibility remains tied to original observed pixels.
+install_component_bank_evidence_policy()
