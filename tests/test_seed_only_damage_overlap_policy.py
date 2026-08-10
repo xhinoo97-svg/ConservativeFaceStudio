@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 
 from app.case_aware_runtime import _same_canvas_partial_verification, _supplement_same_canvas_partials
+from app.seed_only_damage_overlap_policy import verify_seed_only_damage_overlap
 
 
 def _workspace(*, support_inside_damage: bool) -> tuple[SimpleNamespace, np.ndarray]:
@@ -60,9 +61,14 @@ def test_damage_only_same_canvas_sheet_recovers_exact_geometry() -> None:
     assert np.all(reliability[observed == 0] == 0)
 
 
-def test_sparse_sheet_outside_damage_is_not_promoted() -> None:
+def test_seed_only_fallback_does_not_promote_sparse_sheet_outside_damage() -> None:
     workspace, _ = _workspace(support_inside_damage=False)
-    assert _same_canvas_partial_verification(workspace, workspace.references[0], 0) is None
+
+    # The pre-existing photometric same-canvas verifier is allowed to accept a donor
+    # that matches clean MAIN pixels outside damage. This regression specifically tests
+    # the *new seed-only fallback*: it must never authorize that donor from damage
+    # overlap when the overlap condition itself is absent.
+    assert verify_seed_only_damage_overlap(workspace, workspace.references[0], 0) is None
 
 
 def test_global_abstention_can_still_recover_local_reference() -> None:
