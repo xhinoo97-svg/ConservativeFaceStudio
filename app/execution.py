@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+import cv2
 import numpy as np
 
 from app.alignment import align_from_points, align_to_reference, quality_map, select_best_observed_pixels
@@ -151,7 +152,16 @@ class BlockExecutor:
         })
 
     def _align(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
-        aligned, diagnostics = [], []
+        """Align every reference independently; one bad donor must never kill Block 5.
+
+        The MAIN geometry is established by the preceding landmark block.  Alignment
+        failures here therefore concern individual donor photographs.  A rejected
+        global transform is recorded and the reference is allowed to abstain; later
+        case-aware/component policies can still recover verified local/same-canvas
+        evidence from that source.  Thresholds are deliberately not relaxed.
+        """
+        aligned: list[np.ndarray] = []
+        diagnostics: list[dict[str, Any]] = []
         source_indices: list[int] = []
         primary_points = self.workspace.metadata.get("primary_landmarks5")
         ref_points = self.workspace.metadata.get("reference_landmarks5", [])
@@ -160,37 +170,77 @@ class BlockExecutor:
         identity_scores = self.workspace.metadata.get("reference_identity_scores", [])
         aligned_scores: list[float | None] = []
         rejected_identity = 0
+        rejected_geometry = 0
 
         for i, reference in enumerate(self.workspace.references):
             if identity_available:
                 verified = bool(identity_verified[i]) if i < len(identity_verified) else False
                 if not verified:
                     rejected_identity += 1
-                    diagnostics.append({"source_index": i, "rejected": True, "reason": "identity_mismatch"})
+                    diagnostics.append({
+                        "source_index": i,
+                        "rejected": True,
+                        "reason": "identity_mismatch",
+                    })
                     continue
 
             points = ref_points[i] if i < len(ref_points) else None
+            method = ""
+            landmark_error: str | None = None
             try:
                 if primary_points is not None and points is not None:
-                    r = align_from_points(reference, points, primary_points, self.workspace.primary.shape[:2]); method = "landmarks5-ransac"
+                    try:
+                        r = align_from_points(
+                            reference,
+                            points,
+                            primary_points,
+                            self.workspace.primary.shape[:2],
+                        )
+                        method = "landmarks5-ransac"
+                    except (ValueError, cv2.error) as exc:
+                        landmark_error = str(exc)
+                        r = align_to_reference(reference, self.workspace.primary)
+                        method = "orb-ransac-fallback"
                 else:
-                    r = align_to_reference(reference, self.workspace.primary); method = "orb-ransac"
-            except ValueError:
-                r = align_to_reference(reference, self.workspace.primary); method = "orb-ransac"
+                    r = align_to_reference(reference, self.workspace.primary)
+                    method = "orb-ransac"
+            except (ValueError, cv2.error) as exc:
+                rejected_geometry += 1
+                diagnostics.append({
+                    "source_index": i,
+                    "rejected": True,
+                    "reason": "alignment_abstained",
+                    "error": str(exc),
+                    "landmark_error": landmark_error,
+                    "reference_failure_is_nonfatal": True,
+                })
+                continue
+
             aligned.append(r.image)
             source_indices.append(i)
             aligned_scores.append(identity_scores[i] if i < len(identity_scores) else None)
-            diagnostics.append({"source_index": i, "method": method, "matches": r.matches, "inlier_ratio": r.inlier_ratio, "reprojection_error": r.reprojection_error})
+            diagnostics.append({
+                "source_index": i,
+                "method": method,
+                "matches": r.matches,
+                "inlier_ratio": r.inlier_ratio,
+                "reprojection_error": r.reprojection_error,
+                "landmark_error": landmark_error,
+            })
 
         self.workspace.aligned_references = aligned
         self.workspace.metadata["aligned_reference_source_indices"] = source_indices
         self.workspace.metadata["aligned_reference_identity_scores"] = aligned_scores
         self.workspace.metadata["aligned_reference_identity_verified"] = [True] * len(aligned) if identity_available else []
+        self.workspace.metadata["alignment_rejected_geometry_count"] = rejected_geometry
         return ExecutionResult(block.key, self.workspace.copy_primary(), {
             "aligned": len(aligned),
             "rejected_identity": rejected_identity,
+            "rejected_geometry": rejected_geometry,
             "identity_filter_applied": identity_available,
             "source_indices": source_indices,
+            "abstained_all_references": bool(self.workspace.references and not aligned),
+            "reference_alignment_failure_is_nonfatal": True,
             "diagnostics": diagnostics,
         })
 
