@@ -61,16 +61,21 @@ def refine_component_translation(
     minimum_response: float = 0.08,
     minimum_similarity_gain: float = 0.015,
     minimum_shift_magnitude: float = 0.75,
+    preserve_observed_pixels: bool = True,
 ) -> ComponentAlignmentResult:
-    """Strict sub-pixel translation refinement for one facial component.
+    """Strict local translation refinement for one facial component.
 
-    The global affine alignment remains authoritative. This function can only correct
-    a small residual translation inside an already aligned component. It cannot scale,
-    shear, mirror or reshape facial anatomy. A phase-correlation proposal is accepted
-    only if it produces a measurable improvement in local gradient similarity. Shifts
-    below ``minimum_shift_magnitude`` are deliberately ignored: at that scale the
-    interpolation cost/provenance ambiguity is larger than the geometric benefit for
-    strict observed-pixel transfer.
+    Phase correlation estimates a residual displacement after global alignment.  In the
+    conservative default, the estimate is quantized to the nearest integer translation
+    and the donor is warped with nearest-neighbour sampling.  This keeps transferred
+    colour values equal to pixels that were actually photographed; sub-pixel Lanczos or
+    bilinear interpolation would create new values and make exact provenance false.
+
+    The global affine alignment remains authoritative. This function cannot scale,
+    shear, mirror or reshape facial anatomy, and a proposal is accepted only when the
+    applied translation measurably improves local gradient similarity.  Callers may set
+    ``preserve_observed_pixels=False`` only for a non-strict preview path; production
+    reference transfer keeps the default enabled.
     """
     if aligned_reference.shape != primary.shape:
         raise ValueError("Reference e primary devono avere la stessa forma")
@@ -101,25 +106,36 @@ def refine_component_translation(
 
     window = cv2.createHanningWindow((ref_gray.shape[1], ref_gray.shape[0]), cv2.CV_32F)
     shift, response = cv2.phaseCorrelate(ref_gray, pri_gray, window)
-    dx, dy = float(shift[0]), float(shift[1])
+    estimated_dx, estimated_dy = float(shift[0]), float(shift[1])
     response = float(response)
     if (
-        not np.isfinite([dx, dy, response]).all()
+        not np.isfinite([estimated_dx, estimated_dy, response]).all()
         or response < minimum_response
-        or abs(dx) > maximum_shift
-        or abs(dy) > maximum_shift
+        or abs(estimated_dx) > maximum_shift
+        or abs(estimated_dy) > maximum_shift
     ):
         return ComponentAlignmentResult(
             aligned_reference.copy(), support_mask.copy(), 0.0, 0.0,
             response if np.isfinite(response) else 0.0, False
         )
 
-    # A subpixel phase-correlation displacement commonly appears when a sharp
-    # reference is compared with the same already-aligned anatomy after blur or
-    # compression. In strict mode, resampling such a tiny proposal weakens exact
-    # observed-pixel provenance for negligible geometric benefit.
-    shift_magnitude = float(np.hypot(dx, dy))
-    if shift_magnitude < max(0.0, float(minimum_shift_magnitude)):
+    estimated_magnitude = float(np.hypot(estimated_dx, estimated_dy))
+    if estimated_magnitude < max(0.0, float(minimum_shift_magnitude)):
+        return ComponentAlignmentResult(aligned_reference.copy(), support_mask.copy(), 0.0, 0.0, response, False)
+
+    if preserve_observed_pixels:
+        dx = float(np.rint(estimated_dx))
+        dy = float(np.rint(estimated_dy))
+        # A non-zero sub-pixel estimate can round to the identity transform. In strict
+        # mode that is an abstention, not a reason to resample the donor.
+        if dx == 0.0 and dy == 0.0:
+            return ComponentAlignmentResult(aligned_reference.copy(), support_mask.copy(), 0.0, 0.0, response, False)
+        interpolation = cv2.INTER_NEAREST
+    else:
+        dx, dy = estimated_dx, estimated_dy
+        interpolation = cv2.INTER_LINEAR
+
+    if abs(dx) > maximum_shift or abs(dy) > maximum_shift:
         return ComponentAlignmentResult(aligned_reference.copy(), support_mask.copy(), 0.0, 0.0, response, False)
 
     roi_matrix = np.asarray([[1.0, 0.0, dx], [0.0, 1.0, dy]], dtype=np.float32)
@@ -127,7 +143,7 @@ def refine_component_translation(
         raw_ref,
         roi_matrix,
         (raw_ref.shape[1], raw_ref.shape[0]),
-        flags=cv2.INTER_LINEAR,
+        flags=interpolation,
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=0,
     )
@@ -154,7 +170,7 @@ def refine_component_translation(
         aligned_reference,
         matrix,
         (width, height),
-        flags=cv2.INTER_LANCZOS4,
+        flags=interpolation,
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=0,
     )
