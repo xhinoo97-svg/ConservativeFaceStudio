@@ -65,3 +65,17 @@ def test_core_5_9_conservative_modules_are_importable() -> None:
     from app import observed_target_fusion_runtime  # noqa: F401
     from app import explicit_damage_domain_policy  # noqa: F401
     from app import same_canvas_seed_support_policy  # noqa: F401
+
+
+def test_automatic_runner_is_bound_to_final_wrapped_core_installers() -> None:
+    """Autorun must not keep stale by-value imports from before policy installation."""
+    import app.automatic as automatic
+    import app.case_aware_runtime as case_runtime
+    import app.observed_target_repair_runtime as target_runtime
+    import app.pretrained_face_handlers as face_handlers
+    import app.pretrained_inpaint_handler as inpaint_handlers
+
+    assert automatic.install_pretrained_face_handlers is face_handlers.install_pretrained_face_handlers
+    assert automatic.install_case_aware_runtime is case_runtime.install_case_aware_runtime
+    assert automatic.install_verified_inpainting_handler is inpaint_handlers.install_verified_inpainting_handler
+    assert automatic.install_observed_target_repair_runtime is target_runtime.install_observed_target_repair_runtime
