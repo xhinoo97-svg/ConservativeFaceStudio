@@ -10,7 +10,7 @@ import numpy as np
 
 from app.automatic import AutomaticPipelineRunner
 from app.execution import ExecutionResult, Workspace
-from app.pipeline import BlockKind
+from app.pipeline import BlockKind, default_pipeline
 
 
 def sample_image() -> np.ndarray:
@@ -113,3 +113,56 @@ def test_automatic_pipeline_uses_references_without_confirmation(tmp_path: Path)
     by_block = {item.block: item for item in result.results}
     assert by_block["align"].details.get("skipped") is not True
     assert result.blocks_zip.exists()
+
+
+def test_guardrail_preserves_verified_partial_reference_transfer() -> None:
+    clean = sample_image()
+    damage = np.zeros(clean.shape[:2], dtype=np.uint8)
+    cv2.rectangle(damage, (35, 35), (61, 61), 255, -1)
+
+    degraded = clean.copy()
+    degraded[damage > 0] = (5, 5, 5)
+    partial = np.zeros_like(clean)
+    partial[damage > 0] = clean[damage > 0]
+
+    runner = AutomaticPipelineRunner(Workspace(primary=degraded.copy(), references=[partial]))
+    workspace = runner.executor.workspace
+    workspace.aligned_references = [partial.copy()]
+    workspace.metadata["aligned_reference_source_indices"] = [0]
+    workspace.metadata["aligned_reference_original_source_indices"] = [1]
+    workspace.metadata["aligned_reference_identity_verified"] = [False]
+    workspace.metadata["aligned_reference_partial_geometry_verified"] = [True]
+    workspace.metadata["same_canvas_partial_alignment_diagnostics"] = [
+        {"runtime_reference_index": 0, "method": "verified-same-canvas-partial"}
+    ]
+    workspace.metadata["preflight_original_occlusion_masks"] = [
+        damage.copy(),
+        np.zeros_like(damage),
+    ]
+    workspace.metadata["inpaint_target_mask"] = damage.copy()
+
+    candidate = degraded.copy()
+    candidate[damage > 0] = clean[damage > 0]
+    provenance = np.zeros(clean.shape[:2], dtype=np.uint16)
+    provenance[damage > 0] = np.uint16(1)
+    workspace.provenance_map = provenance
+    workspace.primary = candidate.copy()
+
+    block = next(item for item in default_pipeline() if item.kind is BlockKind.INPAINT)
+    trusted, diagnostics = runner._trusted_observed_reference_change(block, degraded, candidate)
+    assert trusted is True
+    assert diagnostics["reason"] == "trusted_observed_reference_transfer"
+
+    result = runner._apply_guardrail(
+        block,
+        degraded,
+        ExecutionResult(block.key, candidate.copy(), {"engine": "test-observed-transfer"}),
+        None,
+    )
+
+    assert result.details.get("rolled_back") is not True
+    assert np.array_equal(result.image, candidate)
+    guard = result.details["identity_guardrail"]
+    assert guard["accepted"] is True
+    assert guard["engine"] == "trusted-observed-reference-provenance"
+    assert guard["trusted_observed_reference_transfer"] is True
