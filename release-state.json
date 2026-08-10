@@ -1,0 +1,40 @@
+{
+  "benchmark_evidence": {
+    "counterfactual_target95_min_score": 96.6665,
+    "counterfactual_target95_passed_with_exact_observed_transfer": 83,
+    "current_target95_donors_checked": 410,
+    "example_exact_reference_pixels_before_rollback": 7239,
+    "example_recovered_case": "peggy_whitson/face_scribble_ref2",
+    "seed_only_geometry_candidates_matching_new_gate": 410
+  },
+  "branch": "feature/block-pipeline-v1",
+  "current_blocker": {
+    "classification": "ROOT_CAUSE",
+    "job": "test-and-build",
+    "run_id": 31427058604,
+    "run_number": 1117,
+    "step": "Practical quality release gate",
+    "summary": "Runtime gates are green, but the practical quality gate remains red: 83/83 target95-applicable cases are below 95 and observed reference contribution remains almost zero. Current artifact evidence shows exact donor transfer is blocked by sparse damage-only geometry eligibility and stale runner-start context restoration.",
+    "workflow": "Windows build"
+  },
+  "current_head_at_last_verified_read": "565f1ebc0af9660914fd7c0e40deb383a90aea60",
+  "installer_status": "NOT_RUN",
+  "last_green_commit": null,
+  "next_exact_action": "Create one logical commit object from current HEAD containing the tested evidence-routing/transaction patch; update the branch once the currently running female workflow finishes; then let Windows CI run uninterrupted.",
+  "offline_status": "NOT_RUN",
+  "packaging_status": "BLOCKED_BY_PRACTICAL_QUALITY",
+  "prepared_fix": [
+    "Accept only deliberately sparse same-canvas donors whose clean observed support overlaps the frozen damage seed by >=95%, preserving identity_status=not_enough_evidence and forbidding seed expansion.",
+    "Preserve current accepted Block-8/9 context outside the active ROI instead of restoring an older runner-start anchor.",
+    "Add regression tests for seed-only local geometry, outside-damage rejection, partial recovery after global abstention, and current-context preservation."
+  ],
+  "schema_version": 1,
+  "verified_gates": {
+    "cpu_benchmark": {"status": "PASS"},
+    "extended_matrix_runtime": {"completed_cases": 82, "runtime_errors": 0, "status": "PASS"},
+    "practical_quality": {"status": "FAIL", "target95_applicable": 83, "target95_passed": 0},
+    "public_practical_runtime": {"completed_cases": 120, "runtime_errors": 0, "status": "PASS"},
+    "pytest": {"failed": 0, "status": "PASS"},
+    "validation_suite": {"status": "PASS"}
+  }
+}

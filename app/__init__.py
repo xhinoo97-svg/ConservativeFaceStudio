@@ -8,6 +8,8 @@ os.environ.setdefault("OPENCV_FORCE_DNN_ENGINE", "1")
 
 from app.same_canvas_seed_support_policy import install_same_canvas_seed_support_policy
 from app.same_canvas_seed_precision_policy import install_same_canvas_seed_precision_policy
+from app.seed_only_damage_overlap_policy import install_seed_only_damage_overlap_policy
+from app.current_context_transaction_policy import install_current_context_transaction_policy
 from app.explicit_damage_domain_policy import install_explicit_damage_domain_policy
 from app.multi_reference_runtime_policy import install_multi_reference_runtime_policy
 from app.automatic_quality_policy import install_automatic_quality_policy
@@ -33,6 +35,12 @@ from app.component_bank_evidence_policy import install_component_bank_evidence_p
 
 install_same_canvas_seed_support_policy()
 install_same_canvas_seed_precision_policy()
+# If a deliberately sparse full-canvas donor exists only under the frozen damage seed,
+# its exact coordinates remain usable geometry even when no unaffected baseline exists.
+install_seed_only_damage_overlap_policy()
+# Regional Block-8/9 repair must preserve the current accepted context, not reset intact
+# pixels to the runner-start image and trigger a destructive quality-gate rollback.
+install_current_context_transaction_policy()
 install_explicit_damage_domain_policy()
 install_multi_reference_runtime_policy()
 install_automatic_quality_policy()
