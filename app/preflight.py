@@ -145,12 +145,13 @@ def _deblur_all(images: list[np.ndarray], model_path: Path | None, hardware_poli
 
 
 def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Path]) -> PreflightResult:
-    """Process every photo once while preserving pre-restoration evidence quality."""
+    """Analyze every photo while keeping imported image #1 as the target canvas.
+
+    `selected_source_index` is a recommended analysis/donor anchor only. It must never
+    replace the user-selected MAIN target, pose, frame or final canvas.
+    """
     originals = [workspace.primary, *workspace.references]
 
-    # Reliability is measured on the observed photographs *before* NAFNet. A learned
-    # deblur may improve appearance, but it must never upgrade missing detail into
-    # evidence. Occlusion and blur remain separate signals throughout the pipeline.
     original_occlusion = [detect_occlusion_candidates(item) for item in originals]
     original_reliability = [
         detail_reliability_map(item, mask)
@@ -162,25 +163,29 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
     nafnet_raw = model_paths.get("opencv_nafnet_deblur")
     nafnet = Path(nafnet_raw) if nafnet_raw is not None else None
     processed, deblurred_count = _deblur_all(originals, nafnet, hardware_policy)
+    nafnet_indices_raw = globals().get("_last_preflight_nafnet_indices", [])
+    nafnet_indices = [int(value) for value in nafnet_indices_raw] if isinstance(nafnet_indices_raw, list) else []
 
     yunet_raw = model_paths.get("opencv_yunet")
     sface_raw = model_paths.get("opencv_sface")
     pose_raw = model_paths.get("head_pose_mobilenetv2_onnx")
     if yunet_raw is None or sface_raw is None or not Path(yunet_raw).is_file() or not Path(sface_raw).is_file():
-        workspace.primary = processed[0]
+        workspace.primary = processed[0].copy()
         workspace.references = [item.copy() for item in processed[1:]]
         workspace.metadata["preflight_deblurred_all"] = deblurred_count == len(processed) and len(processed) > 0
+        workspace.metadata["preflight_deblur_evaluated_all"] = deblurred_count == len(processed) and len(processed) > 0
+        workspace.metadata["preflight_nafnet_indices"] = nafnet_indices
+        workspace.metadata["preflight_nafnet_inference_count"] = len(nafnet_indices)
         workspace.metadata["runtime_source_order"] = list(range(len(processed)))
+        workspace.metadata["selected_primary_original_source_index"] = 0
+        workspace.metadata["preflight_recommended_front_source_index"] = 0
         workspace.metadata["preflight_original_occlusion_masks"] = original_occlusion
         workspace.metadata["preflight_detail_reliability_maps"] = original_reliability
-        return PreflightResult(0, (), deblurred_count, 1, "YuNet/SFace non disponibili: mantenuta la primaria importata")
+        return PreflightResult(0, (), deblurred_count, 1, "YuNet/SFace non disponibili: MAIN #1 mantenuta come target")
 
     target = str(hardware_policy.get("dnn_target", "cpu")).lower()
     target = "opencl" if target == "opencl" else "cpu"
     face = OpenCVZooFaceEngine(yunet_raw, sface_raw, dnn_target=target)
-    # Keep the already verified YuNet/SFace engine available to identity guardrails
-    # and benchmark metrics. Previously preflight used SFace internally and discarded
-    # the engine, so later reporting silently fell back to the LAB histogram proxy.
     workspace.metadata["_identity_backend"] = face
     observations = []
     for image in processed:
@@ -232,17 +237,22 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
             ranked.sort()
             selected = int(ranked[0][2])
 
-    selected_image = processed[selected].copy()
-    remaining_indices = [i for i in range(len(processed)) if i != selected]
-    runtime_order = [selected, *remaining_indices]
-    workspace.primary = selected_image
-    workspace.references = [processed[i].copy() for i in remaining_indices]
+    # Runtime target order is immutable: source 0 remains MAIN, sources 1..9 donors.
+    runtime_order = list(range(len(processed)))
+    workspace.primary = processed[0].copy()
+    workspace.references = [item.copy() for item in processed[1:]]
     workspace.metadata["runtime_source_order"] = runtime_order
-    workspace.metadata["selected_primary_original_source_index"] = selected
+    workspace.metadata["selected_primary_original_source_index"] = 0
+    workspace.metadata["preflight_recommended_front_source_index"] = selected
+    workspace.metadata["preflight_analysis_anchor_source_index"] = selected
+    workspace.metadata["preflight_target_canvas_source_index"] = 0
     workspace.metadata["preflight_deblurred_all"] = deblurred_count == len(processed) and len(processed) > 0
+    workspace.metadata["preflight_deblur_evaluated_all"] = deblurred_count == len(processed) and len(processed) > 0
     workspace.metadata["preflight_deblurred_count"] = deblurred_count
-    workspace.metadata["preflight_original_occlusion_masks"] = [original_occlusion[i] for i in runtime_order]
-    workspace.metadata["preflight_detail_reliability_maps"] = [original_reliability[i] for i in runtime_order]
+    workspace.metadata["preflight_nafnet_indices"] = nafnet_indices
+    workspace.metadata["preflight_nafnet_inference_count"] = len(nafnet_indices)
+    workspace.metadata["preflight_original_occlusion_masks"] = [item.copy() for item in original_occlusion]
+    workspace.metadata["preflight_detail_reliability_maps"] = [item.copy() for item in original_reliability]
 
     pose_engine = HeadPoseEngine(pose_raw) if pose_raw is not None and Path(pose_raw).is_file() else None
     candidates: list[PreflightCandidate] = []
@@ -276,5 +286,5 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
         tuple(candidates),
         deblurred_count,
         cluster_size,
-        "selezionata base reale same-identity bilanciando frontalita, visibilita e qualita",
+        "MAIN #1 mantenuta come target; migliore source conservata solo come analysis/donor anchor",
     )
