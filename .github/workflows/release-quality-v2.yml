@@ -63,6 +63,31 @@ jobs:
         run: |
           python -c "from app.production_models import ensure_production_pretrained_models; b=ensure_production_pretrained_models('.', face_timeout_seconds=60, restoration_timeout_seconds=180); print({k:str(v) for k,v in b.paths.items()}); print(b.errors); assert b.face_ready and b.standard_ready and b.inpaint_ready, b.errors"
 
+      - name: Prefetch frozen calibration sources with 429-only backoff
+        run: |
+          python - <<'PY'
+          import time
+          from pathlib import Path
+          from urllib.error import HTTPError
+
+          from scripts.run_face_smartphone_baseline import acquire_sources
+
+          cache = Path(".benchmark-cache/face-smartphone-v1")
+          delays = (0, 30, 90, 180)
+          for attempt, delay in enumerate(delays, start=1):
+              if delay:
+                  time.sleep(delay)
+              try:
+                  sources = acquire_sources(cache, offline=False)
+              except HTTPError as exc:
+                  if exc.code != 429 or attempt == len(delays):
+                      raise
+                  print(f"Wikimedia returned HTTP 429 on source acquisition; retry {attempt + 1}/{len(delays)} after backoff.")
+                  continue
+              print(f"Verified {len(sources)} frozen calibration source files.")
+              break
+          PY
+
       - name: V2 calibration on existing frozen 60-case calibration split
         run: |
           python scripts/run_face_smartphone_baseline.py \
@@ -71,6 +96,7 @@ jobs:
             --model-root . \
             --split calibration \
             --candidate-id face-domain-guard-v2 \
+            --offline-sources \
             --fail-on-errors
 
       - name: Enforce 60/60 calibration admission
