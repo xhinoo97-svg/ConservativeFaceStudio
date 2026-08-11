@@ -4,6 +4,9 @@ import sys
 
 
 def main() -> int:
+    from app.logging_setup import configure_logging
+
+    configure_logging()
     if "--verify-installation" in sys.argv:
         from app.installation_verifier import report_json, verify_installation
 

@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+import sys
 import urllib.request
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+import app  # noqa: F401  # Apply packaged process defaults.
 from app import female_domain_benchmark as benchmark
 from scripts import run_female_domain_benchmark_observed as observed
 from scripts.run_female_domain_benchmark_resilient import _resilient_urlopen

@@ -26,8 +26,8 @@ class OpenCVZooFaceEngine:
 
     def __init__(
         self,
-        yunet_path: str | Path = "models/opencv_zoo/face_detection_yunet_2023mar.onnx",
-        sface_path: str | Path | None = "models/opencv_zoo/face_recognition_sface_2021dec.onnx",
+        yunet_path: str | Path = "models/detection/face_detection_yunet_2023mar.onnx",
+        sface_path: str | Path | None = "models/identity/face_recognition_sface_2021dec.onnx",
         *,
         score_threshold: float = 0.75,
         nms_threshold: float = 0.3,

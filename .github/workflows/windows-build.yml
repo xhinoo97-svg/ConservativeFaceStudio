@@ -2,7 +2,7 @@ name: Windows build
 
 on:
   push:
-    branches: [main, feature/block-pipeline-v1]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q app tests scripts
-          python -c "import app; import cv2; import numpy; import onnxruntime; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.practical_benchmark; import app.practical_benchmark_matrix; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; import app.opencv_lama; import app.reference_inpainting; import app.pretrained_inpaint_handler; import app.installation_verifier; from app.model_catalog import all_model_manifests; from app.pretrained_values import validate_defaults; from app.model_registry import validate_manifest; [validate_manifest(m) for m in all_model_manifests()]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
+          python -c "import app; import cv2; import numpy; import onnxruntime; import PySide6; import app.project; import app.alignment; import app.history; import app.exporting; import app.execution; import app.safety; import app.benchmark; import app.imaging; import app.validation; import app.validation_suite; import app.practical_benchmark; import app.practical_benchmark_matrix; import app.regional_fusion; import app.standard_pretrained; import app.opencv_nafnet; import app.opencv_semantic_models; import app.pretrained_semantic_handlers; import app.opencv_lama; import app.reference_inpainting; import app.pretrained_inpaint_handler; import app.installation_verifier; import app.hardware; import app.update_manager; import app.update_worker; from app.model_catalog import all_model_manifests; from app.pretrained_values import validate_defaults; from app.model_registry import validate_manifest; [validate_manifest(m) for m in all_model_manifests()]; validate_defaults(); assert int(cv2.__version__.split('.')[0]) >= 5"
 
       - name: Run tests
         run: python -m pytest -q
@@ -138,6 +138,10 @@ jobs:
         shell: pwsh
         run: python scripts/smoke_lama_runtime.py
 
+      - name: Production pipeline with 0 through 9 references
+        shell: pwsh
+        run: python scripts/smoke_reference_counts.py --root . --output reference-count-smoke.json
+
       - name: Export verified runtime model registry
         shell: pwsh
         run: |
@@ -159,10 +163,14 @@ jobs:
         run: |
           $exePath = "dist\ConservativeFaceStudio\ConservativeFaceStudio.exe"
           if (!(Test-Path $exePath)) { throw "Executable missing" }
-          foreach ($dir in @('models','exports','projects')) {
+          foreach ($dir in @('models','config','licenses','runtime','logs','exports','projects','cache')) {
             if (!(Test-Path "dist\ConservativeFaceStudio\$dir")) { throw "$dir directory missing" }
           }
+          foreach ($dir in @('detection','identity','landmarks','parsing','pose','deblur','reference','inpainting','restoration','optional')) {
+            if (!(Test-Path "dist\ConservativeFaceStudio\models\$dir")) { throw "model directory missing: $dir" }
+          }
           if (!(Test-Path "dist\ConservativeFaceStudio\models\model-registry.json")) { throw "Model registry missing" }
+          if (!(Test-Path "dist\ConservativeFaceStudio\models\model-manifests.json")) { throw "Model manifest catalog missing" }
           $registry = Get-Content "dist\ConservativeFaceStudio\models\model-registry.json" -Raw | ConvertFrom-Json
           if (@($registry.models).Count -lt 10) { throw "Model registry incomplete" }
           foreach ($entry in @($registry.models | Where-Object { $_.status -in @('ACTIVE','FALLBACK') })) {
@@ -171,10 +179,13 @@ jobs:
           }
           $exe = Get-Item $exePath
           if ($exe.Length -lt 1MB) { throw "Executable unexpectedly small" }
+          $portableResults = @()
           foreach ($arg in @('--smoke-test','--verify-installation','--offline-test')) {
             $process = Start-Process -FilePath $exe.FullName -ArgumentList $arg -Wait -PassThru -NoNewWindow
             if ($process.ExitCode -ne 0) { throw "Packaged executable $arg failed with exit code $($process.ExitCode)" }
+            $portableResults += [PSCustomObject]@{ argument = $arg; exit_code = $process.ExitCode; passed = $true }
           }
+          [PSCustomObject]@{ package = $exe.FullName; checks = $portableResults; passed = $true } | ConvertTo-Json -Depth 5 | Set-Content portable-validation.json -Encoding utf8
 
       - name: Create portable ZIP
         shell: pwsh
@@ -201,10 +212,13 @@ jobs:
           if ($install.ExitCode -ne 0) { throw "Installer execution failed with exit code $($install.ExitCode)" }
           $installedExe = Join-Path $installDir "ConservativeFaceStudio.exe"
           if (!(Test-Path $installedExe)) { throw "Installed executable missing" }
-          foreach ($arg in @('--verify-installation','--offline-test')) {
+          $installedResults = @()
+          foreach ($arg in @('--smoke-test','--verify-installation','--offline-test')) {
             $process = Start-Process -FilePath $installedExe -ArgumentList $arg -Wait -PassThru -NoNewWindow
             if ($process.ExitCode -ne 0) { throw "Installed executable $arg failed with exit code $($process.ExitCode)" }
+            $installedResults += [PSCustomObject]@{ argument = $arg; exit_code = $process.ExitCode; passed = $true }
           }
+          [PSCustomObject]@{ installer_exit_code = $install.ExitCode; install_directory = $installDir; executable = $installedExe; checks = $installedResults; passed = $true } | ConvertTo-Json -Depth 5 | Set-Content installed-app-validation.json -Encoding utf8
 
       - name: Generate release checksums
         shell: pwsh
@@ -219,6 +233,18 @@ jobs:
           }
           $lines | Set-Content SHA256SUMS.txt -Encoding ascii
           Get-Content SHA256SUMS.txt
+
+      - name: Generate verified app/model update manifest
+        shell: pwsh
+        run: |
+          python scripts/generate_update_manifest.py --root . --installer dist-installer/ConservativeFaceStudio-Setup-x64.exe --base-url https://github.com/xhinoo97-svg/ConservativeFaceStudio/releases/download/v0.1.0 --output update-manifest.json
+          $manifest = Get-Content update-manifest.json -Raw | ConvertFrom-Json
+          if (@($manifest.models).Count -ne 6) { throw "Update manifest must contain exactly six production models" }
+
+      - name: Generate product-completion validation summary
+        shell: pwsh
+        run: |
+          python scripts/generate_validation_summary.py --root . --head $env:GITHUB_SHA --installer dist-installer/ConservativeFaceStudio-Setup-x64.exe --portable ConservativeFaceStudio-Windows-x64.zip --output validation-summary.json
 
       - name: Upload one-click Windows installer
         uses: actions/upload-artifact@v4
@@ -244,8 +270,27 @@ jobs:
             SHA256SUMS.txt
             models/model-registry.json
             models/model-manifests.json
+            update-manifest.json
+            validation-summary.json
+            portable-validation.json
+            installed-app-validation.json
             validation-report.json
             benchmark-windows-ci.json
+            reference-count-smoke.json
+          retention-days: 14
+
+      - name: Upload verified production model update assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConservativeFaceStudio-Production-Model-Updates
+          path: |
+            models/detection/face_detection_yunet_2023mar.onnx
+            models/identity/face_recognition_sface_2021dec.onnx
+            models/deblur/deblurring_nafnet_2025may.onnx
+            models/parsing/resnet18.onnx
+            models/pose/mobilenetv2.onnx
+            models/inpainting/inpainting_lama_2025jan.onnx
+          compression-level: 0
           retention-days: 14
 
       - name: Upload validation reports and practical visual evidence

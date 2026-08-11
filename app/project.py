@@ -31,6 +31,7 @@ class ProjectDocument:
     accepted_blocks: list[str] = field(default_factory=list)
     skipped_blocks: list[str] = field(default_factory=list)
     operations: list[OperationRecord] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     version: int = PROJECT_VERSION
 
 
@@ -76,6 +77,7 @@ def load_project(path: str | Path) -> ProjectDocument:
         accepted_blocks=[str(item) for item in payload.get("accepted_blocks", [])],
         skipped_blocks=[str(item) for item in payload.get("skipped_blocks", [])],
         operations=operations,
+        metadata=dict(payload.get("metadata", {})) if isinstance(payload.get("metadata", {}), dict) else {},
         version=version,
     )
 

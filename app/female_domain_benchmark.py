@@ -22,6 +22,7 @@ from app.validation import identity_anchor_score
 
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
+COMMONS_THUMBNAIL_WIDTH = 640
 _ALLOWED_LICENSE_MARKERS = ("public domain", "cc0", "cc by", "cc-by", "cc by-sa", "cc-by-sa")
 
 
@@ -97,6 +98,7 @@ def resolve_commons_portrait(item: CuratedPortrait, *, timeout: int = 45) -> dic
         "gsrlimit": "8",
         "prop": "imageinfo",
         "iiprop": "url|size|extmetadata",
+        "iiurlwidth": str(COMMONS_THUMBNAIL_WIDTH),
     }, timeout=timeout)
     pages = list(search.get("query", {}).get("pages", {}).values())
     candidates: list[dict[str, Any]] = []
@@ -109,6 +111,11 @@ def resolve_commons_portrait(item: CuratedPortrait, *, timeout: int = 45) -> dic
         extmetadata = info.get("extmetadata") or {}
         if min(width, height) < 256 or not _license_allowed(extmetadata):
             continue
+        original_url = str(info.get("url") or "")
+        thumbnail_url = str(info.get("thumburl") or "")
+        download_url = thumbnail_url or original_url
+        if not download_url:
+            continue
         title = str(page.get("title", ""))
         page_url = "https://commons.wikimedia.org/wiki/" + urllib.parse.quote(title.replace(" ", "_"), safe=":_()'-")
         candidates.append({
@@ -118,7 +125,11 @@ def resolve_commons_portrait(item: CuratedPortrait, *, timeout: int = 45) -> dic
             "query": item.search_query,
             "title": title,
             "page_url": page_url,
-            "download_url": info.get("url"),
+            "download_url": download_url,
+            "download_kind": "thumbnail" if thumbnail_url else "original_fallback",
+            "download_width": int(info.get("thumbwidth", width)),
+            "download_height": int(info.get("thumbheight", height)),
+            "original_url": original_url,
             "width": width,
             "height": height,
             "license": extmetadata.get("LicenseShortName", {}).get("value", "unknown"),
@@ -201,13 +212,13 @@ def evaluate_domain_scenario(clean: np.ndarray, scenario: Scenario, output_dir: 
     if final is None:
         raise RuntimeError("Output benchmark non leggibile")
     if final.shape != clean.shape:
-        final = cv2.resize(final, (clean.shape[1], clean.shape[0]), interpolation=cv2.INTER_AREA)
+        raise RuntimeError(f"Output benchmark corrotto: atteso {clean.shape}, ottenuto {final.shape}")
 
     damage = scenario.damage_mask > 0
     outside = ~damage
     provenance = workspace.provenance_map
     if provenance is None or provenance.shape != clean.shape[:2]:
-        provenance = np.zeros(clean.shape[:2], dtype=np.uint16)
+        raise RuntimeError("Mappa provenance mancante o corrotta")
     reference_pixels = (provenance > 0) & (provenance < SYMMETRY_PROVENANCE_CODE)
     generated_pixels = provenance == GENERATED_PROVENANCE_CODE
     damage_count = max(1, int(np.count_nonzero(damage)))

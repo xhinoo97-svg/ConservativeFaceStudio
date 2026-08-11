@@ -21,6 +21,21 @@ def test_project_roundtrip(tmp_path: Path) -> None:
     assert restored.operations[0].parameters["denoise"] == 5
 
 
+def test_project_roundtrip_keeps_recovery_metadata(tmp_path: Path) -> None:
+    project = ProjectDocument(
+        name="recovery",
+        sources=["main.jpg", "ref.jpg"],
+        metadata={"status": "running", "last_checkpoint": "checkpoints/05_align.png"},
+    )
+    path = tmp_path / "recovery.cfs.json"
+    save_project(project, path)
+
+    restored = load_project(path)
+
+    assert restored.metadata["status"] == "running"
+    assert restored.metadata["last_checkpoint"] == "checkpoints/05_align.png"
+
+
 def test_sha256_file_is_stable(tmp_path: Path) -> None:
     path = tmp_path / "sample.bin"
     path.write_bytes(b"conservative-face-studio")

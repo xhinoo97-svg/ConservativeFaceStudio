@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.model_registry import ModelManifest, inspect_model, registry_by_key
+from app.model_runtime_registry import _declared_status
 from app.pipeline import BlockKind
 from app.pretrained_plan import plan_by_block
 from app.standard_pretrained import standard_manifest_by_key
@@ -54,6 +55,8 @@ def select_model_for_block(block: BlockKind, root: str | Path = ".") -> ModelSel
     choice = plan_by_block()[block]
     registry = combined_registry()
     for key in choice.primary_models:
+        if _declared_status(key) not in {"ACTIVE", "FALLBACK"}:
+            continue
         manifest = registry.get(key)
         if manifest is None:
             continue

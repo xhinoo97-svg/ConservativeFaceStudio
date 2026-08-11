@@ -1,13 +1,16 @@
 $ErrorActionPreference = 'Stop'
 
 $package = 'dist/ConservativeFaceStudio'
+foreach ($directory in @('detection','identity','landmarks','parsing','pose','deblur','reference','inpainting','restoration','optional')) {
+  New-Item -ItemType Directory -Force -Path "$package/models/$directory" | Out-Null
+}
 $models = @(
-  'models/opencv_zoo/face_detection_yunet_2023mar.onnx',
-  'models/opencv_zoo/face_recognition_sface_2021dec.onnx',
-  'models/nafnet/deblurring_nafnet_2025may.onnx',
-  'models/face_parsing/resnet18.onnx',
-  'models/head_pose/mobilenetv2.onnx',
-  'models/lama/inpainting_lama_2025jan.onnx'
+  'models/detection/face_detection_yunet_2023mar.onnx',
+  'models/identity/face_recognition_sface_2021dec.onnx',
+  'models/deblur/deblurring_nafnet_2025may.onnx',
+  'models/parsing/resnet18.onnx',
+  'models/pose/mobilenetv2.onnx',
+  'models/inpainting/inpainting_lama_2025jan.onnx'
 )
 
 foreach ($model in $models) {

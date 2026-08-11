@@ -95,3 +95,23 @@ def test_installed_plan_has_one_selection_per_block(tmp_path: Path) -> None:
     selections = installed_plan(tmp_path)
     assert len(selections) == len(BlockKind)
     assert {item.block for item in selections} == set(BlockKind)
+
+
+def test_testing_model_is_never_selected_even_if_a_file_is_present(tmp_path: Path, monkeypatch) -> None:
+    from app import model_selection
+
+    _touch_manifest(tmp_path, "restormer_motion_deblur")
+    original = model_selection.inspect_model
+
+    def inspect_without_fixture_hash(manifest, root):
+        status = original(manifest, root)
+        if manifest.key == "restormer_motion_deblur" and status["exists"]:
+            status["checksum_ok"] = True
+        return status
+
+    monkeypatch.setattr(model_selection, "inspect_model", inspect_without_fixture_hash)
+
+    selected = select_model_for_block(BlockKind.DEBLUR, tmp_path)
+
+    assert selected.model_key is None
+    assert selected.uses_pretrained is False

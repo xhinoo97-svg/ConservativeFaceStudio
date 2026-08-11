@@ -1,4 +1,5 @@
 .venv/
+.benchmark-cache/
 __pycache__/
 *.py[cod]
 *.log

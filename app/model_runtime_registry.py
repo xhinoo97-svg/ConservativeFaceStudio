@@ -33,6 +33,7 @@ TESTING = {
     "restoreformer_v13_asset",
 }
 DISABLED = {"insightface_identity"}
+OPTIONAL_RESEARCH = {"refstar_research", "instantrestore_research", "osdface_research"}
 
 
 def _declared_status(key: str) -> str:
@@ -42,6 +43,8 @@ def _declared_status(key: str) -> str:
         return "FALLBACK"
     if key in DISABLED:
         return "DISABLED"
+    if key in OPTIONAL_RESEARCH:
+        return "OPTIONAL_RESEARCH"
     # Fail closed: unlisted manifests are candidates, not production backends.
     return "TESTING"
 
@@ -80,6 +83,34 @@ def _backend_for(key: str, filename: str) -> str:
     return "model-specific"
 
 
+def _tier_for(status: str, key: str) -> str:
+    if status in {"ACTIVE", "FALLBACK"}:
+        return "TIER_A_CORE_PRODUCTION"
+    if key in {"codeformer_v010", "gfpgan_v13", "restoreformer_v13_asset", "dmdnet"}:
+        return "TIER_C_HEAVY_OPTIONAL"
+    if status in {"DISABLED", "OPTIONAL_RESEARCH"}:
+        return "TIER_D_RESEARCH_DISABLED"
+    return "TIER_D_RESEARCH_UNSUPPORTED"
+
+
+def _capabilities(key: str, filename: str, status: str) -> dict[str, object]:
+    suffix = Path(filename).suffix.lower()
+    onnx = suffix == ".onnx"
+    production = status in {"ACTIVE", "FALLBACK"}
+    return {
+        "cpu_support": bool(onnx or production),
+        "opencl_support": key in {"opencv_yunet", "opencv_sface"},
+        "cuda_requirement": bool(suffix in {".pth", ".pt"} and not production),
+        "onnx_support": onnx,
+        "vulkan_support": key == "realesrgan_x2plus",
+        "expected_runtime": (
+            "CPU smoke measured in release workflow; host-dependent"
+            if production
+            else "Not measured on target hardware; disabled until benchmarked"
+        ),
+    }
+
+
 def build_runtime_registry(root: str | Path = ".") -> dict[str, Any]:
     root_path = Path(root).resolve()
     heavy = heavy_profile_by_key()
@@ -94,9 +125,11 @@ def build_runtime_registry(root: str | Path = ".") -> dict[str, Any]:
         checksum_ok = local.get("checksum_ok")
         status = "BROKEN" if bool(local.get("exists", False)) and checksum_ok is False else declared
         stable_active = status in {"ACTIVE", "FALLBACK"}
+        capabilities = _capabilities(manifest.key, manifest.filename, status)
         entries.append({
             "key": manifest.key,
             "name": manifest.title,
+            "task": _function_for(manifest.key),
             "function": _function_for(manifest.key),
             "version": Path(manifest.filename).stem,
             "path": manifest.destination,
@@ -104,11 +137,16 @@ def build_runtime_registry(root: str | Path = ".") -> dict[str, Any]:
             "sha256_local": local.get("sha256"),
             "size_bytes_local": local.get("size_bytes"),
             "maximum_download_bytes": manifest.max_bytes,
+            "model_size_bytes": local.get("size_bytes"),
             "backend": _backend_for(manifest.key, manifest.filename),
-            "ram_mb_peak_elitebook": None if profile is None else profile.elitebook_i7_8650u_peak_ram_mb,
-            "vram_mb_peak_elitebook": None,
+            "framework": _backend_for(manifest.key, manifest.filename),
+            "ram_estimate_mb": None if profile is None else profile.measured_peak_ram_mb,
+            "vram_estimate_mb": None,
             "cpu_gpu": "CPU first; OpenCL only after self-test",
+            **capabilities,
             "status": status,
+            "production_status": status,
+            "installation_tier": _tier_for(status, manifest.key),
             "declared_release_status": declared,
             "stable_active": stable_active,
             "installed": bool(local.get("exists", False)),
@@ -127,8 +165,8 @@ def build_runtime_registry(root: str | Path = ".") -> dict[str, Any]:
     return {
         "format": "ConservativeFaceStudio model runtime registry",
         "version": 2,
-        "hardware_target": "HP EliteBook x360 1030 G3 / Intel i7-8650U / 16GB RAM / Windows 11 x64",
-        "states": ["ACTIVE", "TESTING", "FALLBACK", "DISABLED", "BROKEN"],
+        "hardware_target": "runtime-detected; no CPU, RAM, GPU or driver is assumed",
+        "states": ["ACTIVE", "TESTING", "FALLBACK", "DISABLED", "OPTIONAL_RESEARCH", "BROKEN"],
         "activation_policy": "explicit-only; manifest presence/conservative_default never auto-promotes a backend",
         "models": entries,
         "core_fallback_chains": exportable_core_fallbacks(),

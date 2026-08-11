@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
 import random
+import sys
 import time
 import urllib.error
 import urllib.request
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+import app  # noqa: F401  # Apply packaged process defaults.
 from app import female_domain_benchmark
 
 

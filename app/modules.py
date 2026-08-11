@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import shutil
 
-from app.model_registry import OFFICIAL_MODELS, inspect_model
+from app.model_catalog import all_model_manifests
+from app.model_registry import inspect_model
 from app.pretrained_plan import PRETRAINED_BLOCK_PLAN
 
 
@@ -49,7 +50,7 @@ def discover_pretrained_models(root: str | Path = ".") -> list[ModuleStatus]:
     """Rileva solo modelli realmente registrati e con una sorgente/previsione d'uso documentata."""
     stages = _model_stage_map()
     result: list[ModuleStatus] = []
-    for manifest in OFFICIAL_MODELS:
+    for manifest in all_model_manifests():
         status = inspect_model(manifest, root)
         stage_names = stages.get(manifest.key, [])
         stage = ",".join(stage_names) if stage_names else "optional"
@@ -101,21 +102,21 @@ def discover_modules(root: str | Path = ".") -> list[ModuleStatus]:
                 "landmarks",
                 "Face landmarks",
                 "Landmark densi/5-point per regioni e allineamento",
-                ("mediapipe_face_landmarker", "insightface_identity"),
+                ("opencv_yunet", "mediapipe_face_landmarker", "insightface_identity"),
                 "landmarks",
             ),
             alias(
                 "insightface",
                 "Identity embeddings",
                 "ArcFace/InsightFace per guardrail identità",
-                ("insightface_identity",),
+                ("opencv_sface", "insightface_identity"),
                 "identity_check",
             ),
             alias(
                 "face_parsing",
                 "Face parsing",
                 "BiSeNet semantic face parsing",
-                ("bisenet_face_parsing",),
+                ("face_parsing_resnet18_onnx", "bisenet_face_parsing"),
                 "occlusion_mask",
             ),
             # Strict reference fusion is built in and needs no learned checkpoint.

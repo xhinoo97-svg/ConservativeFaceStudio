@@ -8,7 +8,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+import sys
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+import app  # noqa: F401  # Apply the packaged OpenCV boot policy before importing cv2.
 import cv2
 
 from app.practical_benchmark import PUBLIC_PORTRAITS

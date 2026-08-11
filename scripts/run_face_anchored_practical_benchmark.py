@@ -8,8 +8,15 @@ references. Target-95 applicability is fixed from the scenario evidence *before*
 restoration output is scored; it is never changed afterwards to excuse a poor result.
 """
 
+from pathlib import Path
 import shutil
+import sys
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+import app  # noqa: F401  # Apply the packaged OpenCV boot policy before importing cv2.
 import cv2
 import numpy as np
 

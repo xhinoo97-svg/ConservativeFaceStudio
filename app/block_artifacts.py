@@ -43,8 +43,49 @@ def _json_default(value: Any) -> Any:
 class BlockArtifactArchive:
     """Conserva un PNG lossless dopo ogni blocco e crea un archivio ZIP verificabile."""
 
-    def __init__(self) -> None:
+    def __init__(self, checkpoint_directory: str | Path | None = None) -> None:
         self._entries: list[tuple[BlockSnapshot, bytes]] = []
+        self._checkpoint_directory = None if checkpoint_directory is None else Path(checkpoint_directory)
+
+    def _persist_checkpoint(self, snapshot: BlockSnapshot, payload: bytes) -> None:
+        directory = self._checkpoint_directory
+        if directory is None:
+            return
+        directory.mkdir(parents=True, exist_ok=True)
+        image_path = directory / snapshot.filename
+        fd, temporary = tempfile.mkstemp(prefix=image_path.name, suffix=".tmp", dir=directory)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, image_path)
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+            raise
+        manifest = directory / "checkpoint-manifest.json"
+        manifest_payload = {
+            "format": "ConservativeFaceStudio recovery checkpoints",
+            "version": 1,
+            "latest": snapshot.filename,
+            "snapshots": [asdict(item[0]) for item in self._entries],
+        }
+        fd, temporary = tempfile.mkstemp(prefix=manifest.name, suffix=".tmp", dir=directory)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+                json.dump(manifest_payload, handle, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, manifest)
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+            raise
 
     @property
     def snapshots(self) -> tuple[BlockSnapshot, ...]:
@@ -68,6 +109,7 @@ class BlockArtifactArchive:
         height, width = image.shape[:2]
         snapshot = BlockSnapshot(order, block, title, filename, hashlib.sha256(payload).hexdigest(), int(width), int(height), dict(details or {}), datetime.now(timezone.utc).isoformat())
         self._entries.append((snapshot, payload))
+        self._persist_checkpoint(snapshot, payload)
         return snapshot
 
     def replace_last(self, image: np.ndarray, details: dict[str, Any]) -> BlockSnapshot:
@@ -78,6 +120,7 @@ class BlockArtifactArchive:
         h, w = image.shape[:2]
         replacement = BlockSnapshot(previous.order, previous.block, previous.title, previous.filename, hashlib.sha256(payload).hexdigest(), int(w), int(h), dict(details), datetime.now(timezone.utc).isoformat())
         self._entries[-1] = (replacement, payload)
+        self._persist_checkpoint(replacement, payload)
         return replacement
 
     def export_zip(self, destination: str | Path, *, project: ProjectDocument | None = None, attachments: Iterable[str | Path] = ()) -> Path:

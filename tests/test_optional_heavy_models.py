@@ -3,6 +3,8 @@ from __future__ import annotations
 from app.model_catalog import all_models_by_key
 from app.model_registry import validate_manifest
 from app.optional_heavy_models import OPTIONAL_HEAVY_MODELS, heavy_profile_by_key
+from app.model_runtime_registry import _declared_status
+from app.research_models import RESEARCH_MODELS
 
 
 def test_optional_heavy_models_are_never_strict_defaults() -> None:
@@ -28,3 +30,17 @@ def test_optional_heavy_models_are_audited_but_not_base_installer_models() -> No
     for key in ("codeformer_v010", "gfpgan_v13", "restoreformer_v13_asset"):
         assert key in catalog
         assert catalog[key].conservative_default is False
+
+
+def test_unverified_research_candidates_are_catalog_only() -> None:
+    catalog = all_models_by_key()
+    assert {item.key for item in RESEARCH_MODELS} == {
+        "refstar_research", "instantrestore_research", "osdface_research"
+    }
+    for manifest in RESEARCH_MODELS:
+        validate_manifest(manifest)
+        assert manifest.key in catalog
+        assert manifest.source_url is None
+        assert manifest.expected_sha256 is None
+        assert manifest.conservative_default is False
+        assert _declared_status(manifest.key) == "OPTIONAL_RESEARCH"

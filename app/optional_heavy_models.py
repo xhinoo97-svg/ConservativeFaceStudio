@@ -15,8 +15,8 @@ class HeavyModelRuntimeProfile:
     load_policy: str
     identity_guardrail_required: bool
     rollback_required: bool
-    elitebook_i7_8650u_peak_ram_mb: int | None
-    elitebook_i7_8650u_seconds_512: float | None
+    measured_peak_ram_mb: int | None
+    measured_seconds_512: float | None
     benchmark_status: str
 
 
@@ -87,8 +87,8 @@ OPTIONAL_HEAVY_RUNTIME_PROFILES: tuple[HeavyModelRuntimeProfile, ...] = (
         load_policy="single-heavy-model-sequential",
         identity_guardrail_required=True,
         rollback_required=True,
-        elitebook_i7_8650u_peak_ram_mb=None,
-        elitebook_i7_8650u_seconds_512=None,
+        measured_peak_ram_mb=None,
+        measured_seconds_512=None,
         benchmark_status="target-hardware measurement required before enablement",
     ),
     HeavyModelRuntimeProfile(
@@ -100,8 +100,8 @@ OPTIONAL_HEAVY_RUNTIME_PROFILES: tuple[HeavyModelRuntimeProfile, ...] = (
         load_policy="single-heavy-model-sequential",
         identity_guardrail_required=True,
         rollback_required=True,
-        elitebook_i7_8650u_peak_ram_mb=None,
-        elitebook_i7_8650u_seconds_512=None,
+        measured_peak_ram_mb=None,
+        measured_seconds_512=None,
         benchmark_status="target-hardware measurement required before enablement",
     ),
     HeavyModelRuntimeProfile(
@@ -113,8 +113,8 @@ OPTIONAL_HEAVY_RUNTIME_PROFILES: tuple[HeavyModelRuntimeProfile, ...] = (
         load_policy="single-heavy-model-sequential",
         identity_guardrail_required=True,
         rollback_required=True,
-        elitebook_i7_8650u_peak_ram_mb=None,
-        elitebook_i7_8650u_seconds_512=None,
+        measured_peak_ram_mb=None,
+        measured_seconds_512=None,
         benchmark_status="target-hardware measurement required before enablement",
     ),
 )

@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+import app  # noqa: F401  # Apply the same boot policy used by the packaged executable.
 import cv2
 import numpy as np
 
@@ -31,8 +37,8 @@ def _require(path: Path) -> Path:
 
 
 def _smoke_face(root: Path, image: np.ndarray) -> dict[str, object]:
-    yunet = _require(root / "models/opencv_zoo/face_detection_yunet_2023mar.onnx")
-    sface = _require(root / "models/opencv_zoo/face_recognition_sface_2021dec.onnx")
+    yunet = _require(root / "models/detection/face_detection_yunet_2023mar.onnx")
+    sface = _require(root / "models/identity/face_recognition_sface_2021dec.onnx")
     if not hasattr(cv2, "FaceDetectorYN") or not hasattr(cv2, "FaceRecognizerSF"):
         raise SystemExit("[smoke:face] OpenCV build lacks YuNet/SFace APIs")
 
@@ -71,7 +77,7 @@ def _smoke_face(root: Path, image: np.ndarray) -> dict[str, object]:
 
 
 def _smoke_nafnet(root: Path, image: np.ndarray) -> dict[str, object]:
-    path = _require(root / "models/nafnet/deblurring_nafnet_2025may.onnx")
+    path = _require(root / "models/deblur/deblurring_nafnet_2025may.onnx")
     print(f"[smoke:nafnet] loading {path}", flush=True)
     restored = NafNetDeblurEngine(path, target="cpu", tile_size=128, overlap=16).infer(image)
     if restored.shape != image.shape or restored.dtype != np.uint8 or not np.isfinite(restored).all():
@@ -82,7 +88,7 @@ def _smoke_nafnet(root: Path, image: np.ndarray) -> dict[str, object]:
 
 
 def _smoke_parsing(root: Path, image: np.ndarray) -> dict[str, object]:
-    path = _require(root / "models/face_parsing/resnet18.onnx")
+    path = _require(root / "models/parsing/resnet18.onnx")
     print(f"[smoke:parsing] loading {path}", flush=True)
     labels = FaceParsingEngine(path, target="cpu").predict(image)
     if labels.shape != image.shape[:2] or labels.dtype != np.uint8:
@@ -99,7 +105,7 @@ def _smoke_parsing(root: Path, image: np.ndarray) -> dict[str, object]:
 
 
 def _smoke_headpose(root: Path, image: np.ndarray) -> dict[str, object]:
-    path = _require(root / "models/head_pose/mobilenetv2.onnx")
+    path = _require(root / "models/pose/mobilenetv2.onnx")
     print(f"[smoke:headpose] loading {path}", flush=True)
     pose = HeadPoseEngine(path, target="cpu").estimate(image)
     if len(pose) != 3 or not all(np.isfinite(value) for value in pose):

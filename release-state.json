@@ -1,40 +1,101 @@
 {
-  "benchmark_evidence": {
-    "counterfactual_target95_min_score": 96.6665,
-    "counterfactual_target95_passed_with_exact_observed_transfer": 83,
-    "current_target95_donors_checked": 410,
-    "example_exact_reference_pixels_before_rollback": 7239,
-    "example_recovered_case": "peggy_whitson/face_scribble_ref2",
-    "seed_only_geometry_candidates_matching_new_gate": 410
-  },
   "branch": "feature/block-pipeline-v1",
+  "current_local_base_head": "feeb27675e9b3f63f5af10c0ea01e9ac181a4e11",
+  "current_remote_head": "feeb27675e9b3f63f5af10c0ea01e9ac181a4e11",
+  "last_green_commit": null,
+  "local_batch": {
+    "committed": false,
+    "pushed": false,
+    "purpose": "product completion before tuning"
+  },
+  "product_complete_pre_tuning": false,
+  "target95_policy": "REPORT_ONLY_UNTIL_PRODUCT_COMPLETE_PRE_TUNING",
   "current_blocker": {
     "classification": "ROOT_CAUSE",
     "job": "test-and-build",
-    "run_id": 31427058604,
-    "run_number": 1117,
-    "step": "Practical quality release gate",
-    "summary": "Runtime gates are green, but the practical quality gate remains red: 83/83 target95-applicable cases are below 95 and observed reference contribution remains almost zero. Current artifact evidence shows exact donor transfer is blocked by sparse damage-only geometry eligibility and stale runner-start context restoration.",
+    "run_id": 31438960782,
+    "run_number": 1175,
+    "step": "Smoke and offline test portable package",
+    "summary": "The complete remote job log proves source-process YuNet/SFace passed under OpenCV 5 auto engine, then packaged offline inference failed because app startup forced classic engine 1 before cv2 import; classic YuNet rejects dynamic input-shape redefinition. Auto engine 3 and a subprocess regression test are prepared and pass the real local route.",
     "workflow": "Windows build"
   },
-  "current_head_at_last_verified_read": "565f1ebc0af9660914fd7c0e40deb383a90aea60",
-  "installer_status": "NOT_RUN",
-  "last_green_commit": null,
-  "next_exact_action": "Create one logical commit object from current HEAD containing the tested evidence-routing/transaction patch; update the branch once the currently running female workflow finishes; then let Windows CI run uninterrupted.",
-  "offline_status": "NOT_RUN",
-  "packaging_status": "BLOCKED_BY_PRACTICAL_QUALITY",
-  "prepared_fix": [
-    "Accept only deliberately sparse same-canvas donors whose clean observed support overlaps the frozen damage seed by >=95%, preserving identity_status=not_enough_evidence and forbidding seed expansion.",
-    "Preserve current accepted Block-8/9 context outside the active ROI instead of restoring an older runner-start anchor.",
-    "Add regression tests for seed-only local geometry, outside-damage rejection, partial recovery after global abstention, and current-context preservation."
-  ],
-  "schema_version": 1,
-  "verified_gates": {
-    "cpu_benchmark": {"status": "PASS"},
-    "extended_matrix_runtime": {"completed_cases": 82, "runtime_errors": 0, "status": "PASS"},
-    "practical_quality": {"status": "FAIL", "target95_applicable": 83, "target95_passed": 0},
-    "public_practical_runtime": {"completed_cases": 120, "runtime_errors": 0, "status": "PASS"},
-    "pytest": {"failed": 0, "status": "PASS"},
-    "validation_suite": {"status": "PASS"}
-  }
+  "verified_local_gates": {
+    "compileall": "PASS",
+    "core_imports": "PASS",
+    "local_gui_import": "BLOCKED_BY_HOST_LIBEGL_WINDOWS_PACKAGE_GATE_REQUIRED",
+    "pytest": {
+      "failed": 0,
+      "passed": 393,
+      "status": "PASS"
+    },
+    "validation_suite": "PASS",
+    "cpu_benchmark": "PASS",
+    "practical_runtime": {
+      "completed": 120,
+      "runtime_errors": 0,
+      "status": "PASS",
+      "target95_applicable": 83,
+      "target95_pass_report_only": 75
+    },
+    "extended_matrix_runtime": {
+      "completed": 82,
+      "runtime_errors": 0,
+      "status": "PASS",
+      "target95_applicable": 70,
+      "target95_pass_report_only": 5
+    },
+    "production_model_checksums": "6/6 PASS",
+    "production_model_cpu_inference": "6/6 PASS",
+    "reference_count_e2e": "0..9 PASS",
+    "main_contract": "0..9 PASS",
+    "provenance": "0..9 PASS",
+    "offline_network_attempts": 0,
+    "offline_representative_pipeline": "MAIN+2_REFERENCES_PASS",
+    "model_updater": "ATOMIC_ROLLBACK_AND_REAL_YUNET_SFACE_STAGE_PASS",
+    "app_updater_staging": "PASS",
+    "restoration_activity_lock": "PASS",
+    "recovery_checkpoints": "PASS"
+  },
+  "remote_windows_build": {
+    "head": "feeb27675e9b3f63f5af10c0ea01e9ac181a4e11",
+    "run_id": 31438960782,
+    "run_number": 1175,
+    "status": "FAILURE",
+    "passed_through": [
+      "pytest",
+      "validation",
+      "cpu_benchmark",
+      "practical_runtime",
+      "extended_matrix_runtime",
+      "pyinstaller_exe",
+      "production_model_bootstrap",
+      "six_real_model_smokes",
+      "runtime_registry",
+      "model_staging"
+    ],
+    "first_failure": "portable_package_smoke_offline"
+  },
+  "remote_female_domain": {
+    "duplicate_run_id": 31438957143,
+    "run_id": 31438960769,
+    "run_number": 443,
+    "status": "CANCELLED_JOB_TIMEOUT",
+    "classification": "INFRASTRUCTURE_TRANSIENT",
+    "first_failure": "WIKIMEDIA_COMMONS_HTTP_429_DURING_FULL_RESOLUTION_DOWNLOADS",
+    "missing_report": "CASCADE_FAILURE",
+    "local_fix": "BOUNDED_640PX_THUMBNAILS_AND_NO_DUPLICATE_FEATURE_PUSH_TRIGGER",
+    "coverage_gate_unchanged": "80_PORTRAITS_REQUIRE_60_SOURCES"
+  },
+  "packaging_status": "EXE_BUILT_ON_REMOTE_HEAD_PORTABLE_SMOKE_FAILED",
+  "portable_zip_status": "NOT_CREATED_AFTER_CASCADE",
+  "installer_status": "NOT_RUN_AFTER_CASCADE",
+  "offline_status": "LOCAL_SOURCE_PASS_NORMAL_GUI_ROUTE_LOCAL_ONLY_REMOTE_PORTABLE_FAIL",
+  "updater_status": "LOCAL_IMPLEMENTATION_AND_TESTS_PASS_WINDOWS_PACKAGE_UNVERIFIED",
+  "product_audit": {
+    "path": "product-audit.json",
+    "functional_but_unverified": 8,
+    "product_complete_pre_tuning": false
+  },
+  "next_exact_action": "Create one logical product-completion commit and one push; let Windows and Female-domain CI finish without another push; inspect first real failure or record verified ZIP, installer and installed-app artifacts.",
+  "schema_version": 2
 }

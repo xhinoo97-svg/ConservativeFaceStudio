@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+import app  # noqa: F401  # Match packaged startup before loading OpenCV/ORT handlers.
 import cv2
 import numpy as np
 
@@ -9,7 +15,7 @@ from app.opencv_lama import OpenCVLamaEngine
 
 
 def main() -> int:
-    model = Path("models/lama/inpainting_lama_2025jan.onnx")
+    model = Path("models/inpainting/inpainting_lama_2025jan.onnx")
     if not model.is_file():
         raise RuntimeError(f"LaMa model missing: {model}")
 

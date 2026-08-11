@@ -109,7 +109,11 @@ def _robust_observed_donor(
 
     # Median only guides donor choice; output remains an observed donor pixel.
     masked = np.where(valid[..., None], stack, np.nan)
-    median = np.nanmedian(masked, axis=0)
+    median = np.zeros((*shape, 3), dtype=np.float32)
+    # Restrict the reduction to pixels with at least one contributor. Calling
+    # nanmedian over the full canvas creates All-NaN warnings for the normal
+    # NO_EVIDENCE state outside the target support.
+    median[usable] = np.nanmedian(masked[:, usable, :], axis=0)
     distances = np.mean(np.abs(stack - median[None, ...]), axis=3)
     distances[~valid] = np.inf
     best = np.argmin(distances, axis=0)
@@ -125,7 +129,8 @@ def _robust_observed_donor(
     multi = usable & (counts >= 2)
     if np.any(multi):
         finite = np.where(valid, distances, np.nan)
-        spread = np.nanmedian(finite, axis=0)
+        spread = np.zeros(shape, dtype=np.float32)
+        spread[multi] = np.nanmedian(finite[:, multi], axis=0)
         score = np.clip(1.0 - spread / 32.0, 0.0, 1.0)
         confidence[multi] = np.clip(np.rint(190.0 + 65.0 * score[multi]), 0, 255).astype(np.uint8)
     return chosen, confidence, provenance

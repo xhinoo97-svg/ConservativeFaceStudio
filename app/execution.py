@@ -51,7 +51,10 @@ class BlockExecutor:
         self.pipeline = PipelineState(default_pipeline())
         validate_pipeline(self.pipeline.blocks)
         self.project = ProjectDocument(name="Untitled")
-        self.block_artifacts = BlockArtifactArchive()
+        checkpoint_directory = workspace.metadata.get("checkpoint_directory")
+        self.block_artifacts = BlockArtifactArchive(
+            checkpoint_directory if isinstance(checkpoint_directory, (str, Path)) else None
+        )
         self.history.push(self.workspace.copy_primary(), "import")
         self._handlers: dict[BlockKind, Callable[[BlockSpec, dict[str, Any]], ExecutionResult]] = {
             BlockKind.IMPORT: self._import, BlockKind.DEBLUR: self._deblur, BlockKind.ENHANCE: self._enhance,

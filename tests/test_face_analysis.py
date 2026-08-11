@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from app.face_analysis import InsightFaceBackend, MediaPipeFaceLandmarkerBackend, cosine_similarity
+from app.face_analysis import InsightFaceBackend, MediaPipeFaceLandmarkerBackend, choose_backend, cosine_similarity
 
 
 def test_insightface_backend_never_downloads_missing_pack(tmp_path: Path) -> None:
@@ -30,3 +30,14 @@ def test_cosine_similarity_is_bounded() -> None:
     a = np.array([1.0, 2.0, 3.0], dtype=np.float32)
     b = np.array([1.0, 2.0, 3.0], dtype=np.float32)
     assert cosine_similarity(a, b) == pytest.approx(1.0)
+
+
+def test_missing_legacy_opencv_cascade_reports_model_repair_instead_of_attribute_error(monkeypatch) -> None:
+    import app.face_analysis as analysis
+
+    monkeypatch.setattr(analysis, "InsightFaceBackend", lambda: (_ for _ in ()).throw(RuntimeError("missing")))
+    monkeypatch.setattr(analysis, "MediaPipeFaceLandmarkerBackend", lambda: (_ for _ in ()).throw(RuntimeError("missing")))
+    monkeypatch.setattr(analysis, "OpenCVHaarBackend", lambda: (_ for _ in ()).throw(RuntimeError("removed")))
+
+    with pytest.raises(RuntimeError, match="ripara il model pack production"):
+        choose_backend()

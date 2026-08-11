@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import os
 
-os.environ.setdefault("OPENCV_FORCE_DNN_ENGINE", "1")
+# OpenCV 5 engine 1 (classic) rejects the production YuNet checkpoint when its input
+# is resized, while engine 4 requests an ORT build that may impose a static input.
+# Auto engine 3 is the cross-platform policy verified by the real Windows/Python
+# model smoke: it selects the new dynamic-shape engine and may fall back when needed.
+# Keep an explicit advanced-user override possible.
+os.environ.setdefault("OPENCV_FORCE_DNN_ENGINE", "3")
 
 from app.same_canvas_seed_support_policy import install_same_canvas_seed_support_policy
 from app.same_canvas_seed_precision_policy import install_same_canvas_seed_precision_policy

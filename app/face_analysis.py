@@ -35,6 +35,8 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _load_cascade(filename: str) -> cv2.CascadeClassifier | None:
+    if not hasattr(cv2, "CascadeClassifier") or not hasattr(cv2, "data") or not hasattr(cv2.data, "haarcascades"):
+        return None
     path = Path(cv2.data.haarcascades) / filename
     cascade = cv2.CascadeClassifier(str(path))
     return None if cascade.empty() else cascade
@@ -327,4 +329,9 @@ def choose_backend(prefer_embeddings: bool = True) -> FaceBackend:
         return MediaPipeFaceLandmarkerBackend()
     except Exception:
         pass
-    return OpenCVHaarBackend()
+    try:
+        return OpenCVHaarBackend()
+    except Exception as exc:
+        raise RuntimeError(
+            "Nessun backend facciale locale disponibile. Verifica o ripara il model pack production."
+        ) from exc
