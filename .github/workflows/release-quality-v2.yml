@@ -1,0 +1,125 @@
+name: Release quality v2
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - RELEASE_STATE.md
+      - release-state.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-quality-v2-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  calibration-and-independent-final-holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Freeze independent final holdout before candidate evaluation
+        run: |
+          python scripts/freeze_face_smartphone_v2_final_holdout.py
+          python scripts/freeze_face_smartphone_v2_final_holdout.py --verify
+
+      - name: Targeted source-eligibility, partial-reference, MAIN and provenance regressions
+        run: |
+          python -m pytest -q \
+            tests/test_face_domain_guard_v2_policy.py \
+            tests/test_pretrained_face_resilience_regressions.py \
+            tests/test_partial_reference_stage_gates.py \
+            tests/test_preflight_main_contract.py \
+            tests/test_nine_reference_support.py \
+            tests/test_provenance_firewall_policy.py \
+            tests/test_provenance_completeness.py
+
+      - name: Full pytest
+        run: python -m pytest -q
+
+      - name: Bootstrap unchanged verified production model pack
+        run: |
+          python -c "from app.production_models import ensure_production_pretrained_models; b=ensure_production_pretrained_models('.', face_timeout_seconds=60, restoration_timeout_seconds=180); print({k:str(v) for k,v in b.paths.items()}); print(b.errors); assert b.face_ready and b.standard_ready and b.inpaint_ready, b.errors"
+
+      - name: V2 calibration on existing frozen 60-case calibration split
+        run: |
+          python scripts/run_face_smartphone_baseline.py \
+            --output face-smartphone-v2-calibration \
+            --cache .benchmark-cache/face-smartphone-v1 \
+            --model-root . \
+            --split calibration \
+            --candidate-id face-domain-guard-v2 \
+            --fail-on-errors
+
+      - name: Enforce 60/60 calibration admission
+        run: |
+          python scripts/validate_face_smartphone_release_gate.py \
+            face-smartphone-v2-calibration/baseline.json \
+            --expected-count 60 \
+            --expected-benchmark cfs-face-smartphone-v1 \
+            --expected-split calibration \
+            --output face-smartphone-v2-calibration/gate.json
+
+      - name: Freeze committed V2 candidate after calibration and before final holdout
+        run: |
+          python scripts/freeze_face_domain_guard_v2_candidate.py \
+            --calibration-gate face-smartphone-v2-calibration/gate.json \
+            --model-root . \
+            --output face-domain-guard-v2-candidate-freeze.json
+
+      - name: One-shot independent 40-case final holdout
+        run: |
+          python scripts/run_face_smartphone_v2_final_holdout.py \
+            --output face-smartphone-v2-final-holdout-result \
+            --cache .benchmark-cache/face-smartphone-v2-final-holdout \
+            --model-root . \
+            --candidate-freeze face-domain-guard-v2-candidate-freeze.json
+
+      - name: Enforce 40/40 independent final-holdout admission
+        run: |
+          python scripts/validate_face_smartphone_release_gate.py \
+            face-smartphone-v2-final-holdout-result/baseline.json \
+            --expected-count 40 \
+            --expected-benchmark cfs-face-smartphone-v2-final-holdout \
+            --expected-split final_holdout \
+            --output face-smartphone-v2-final-holdout-result/gate.json
+
+      - name: Upload V2 release-quality evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-quality-v2-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            face-smartphone-v2-calibration/baseline.json
+            face-smartphone-v2-calibration/gate.json
+            face-domain-guard-v2-candidate-freeze.json
+            benchmarks/face-smartphone-v2-final-holdout/sources.json
+            benchmarks/face-smartphone-v2-final-holdout/cases.json
+            benchmarks/face-smartphone-v2-final-holdout/freeze.json
+            benchmarks/face-smartphone-v2-final-holdout/contract.json
+            face-smartphone-v2-final-holdout-result/baseline.json
+            face-smartphone-v2-final-holdout-result/gate.json
+            face-smartphone-v2-final-holdout-result/cases/**/final_provenance.json
