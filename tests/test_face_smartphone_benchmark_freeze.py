@@ -17,7 +17,8 @@ def test_frozen_face_smartphone_manifest_is_exactly_reproducible() -> None:
 
 def test_contract_digest_is_independent_of_windows_line_endings() -> None:
     contract = (freeze.BENCHMARK_ROOT / "contract.json").read_bytes()
-    windows_checkout = contract.replace(b"\n", b"\r\n")
+    canonical_contract = freeze._normalized_text_bytes(contract)
+    windows_checkout = canonical_contract.replace(b"\n", b"\r\n")
     expected = json.loads((freeze.BENCHMARK_ROOT / "freeze.json").read_text(encoding="utf-8"))
 
     assert hashlib.sha256(freeze._normalized_text_bytes(windows_checkout)).hexdigest() == expected["contract_sha256"]
