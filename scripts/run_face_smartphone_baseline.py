@@ -7,11 +7,15 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import resource
 import sys
 import time
 import urllib.request
 from typing import Any
+
+try:
+    import resource as _resource
+except ImportError:  # Windows has no POSIX resource module.
+    _resource = None
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
@@ -199,11 +203,45 @@ def materialize_scenario(case: dict[str, Any], sources: dict[str, dict[str, Any]
     return clean, scenario
 
 
+def _windows_peak_rss_mib() -> float:
+    """Return peak working-set MiB without adding a Windows-only dependency."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class ProcessMemoryCounters(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = ProcessMemoryCounters()
+        counters.cb = ctypes.sizeof(counters)
+        process = ctypes.windll.kernel32.GetCurrentProcess()
+        if not ctypes.windll.psapi.GetProcessMemoryInfo(process, ctypes.byref(counters), counters.cb):
+            return 0.0
+        return float(counters.PeakWorkingSetSize) / (1024.0 * 1024.0)
+    except (AttributeError, OSError, TypeError, ValueError):
+        return 0.0
+
+
 def _peak_rss_mib() -> float:
-    value = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-    if sys.platform == "darwin":
-        return value / (1024.0 * 1024.0)
-    return value / 1024.0
+    if _resource is not None:
+        value = float(_resource.getrusage(_resource.RUSAGE_SELF).ru_maxrss)
+        if sys.platform == "darwin":
+            return value / (1024.0 * 1024.0)
+        return value / 1024.0
+    if sys.platform == "win32":
+        return _windows_peak_rss_mib()
+    return 0.0
 
 
 def select_cases(cases: list[dict[str, Any]], split: str, case_ids: set[str] | None) -> list[dict[str, Any]]:

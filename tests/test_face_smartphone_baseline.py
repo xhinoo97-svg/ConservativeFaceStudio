@@ -57,3 +57,11 @@ def test_targeted_case_filter_is_exact_and_split_scoped() -> None:
     assert [item["case_id"] for item in selected] == [target["case_id"]]
     with np.testing.assert_raises_regex(ValueError, "not found in selected split"):
         baseline.select_cases(cases, target["calibration_or_holdout"], {"not-a-frozen-case"})
+
+
+def test_peak_rss_uses_windows_fallback_without_posix_resource(monkeypatch) -> None:
+    monkeypatch.setattr(baseline, "_resource", None)
+    monkeypatch.setattr(baseline.sys, "platform", "win32")
+    monkeypatch.setattr(baseline, "_windows_peak_rss_mib", lambda: 123.5)
+
+    assert baseline._peak_rss_mib() == 123.5
