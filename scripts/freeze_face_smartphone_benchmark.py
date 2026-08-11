@@ -136,6 +136,11 @@ def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _normalized_text_bytes(payload: bytes) -> bytes:
+    """Normalize checkout line endings without changing frozen JSON semantics."""
+    return payload.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
 def _load_sources() -> dict[str, Any]:
     return json.loads((BENCHMARK_ROOT / "sources.json").read_text(encoding="utf-8"))
 
@@ -361,7 +366,7 @@ def build_cases() -> dict[str, Any]:
 def build_freeze(cases_payload: dict[str, Any]) -> dict[str, Any]:
     sources_bytes = _canonical_json(_load_sources())
     cases_bytes = _canonical_json(cases_payload)
-    contract_bytes = (BENCHMARK_ROOT / "contract.json").read_bytes()
+    contract_bytes = _normalized_text_bytes((BENCHMARK_ROOT / "contract.json").read_bytes())
     return {
         "architecture_freeze_base_sha": "368f00c122520f471e7ef310f9daf8781b51f111",
         "benchmark_id": "cfs-face-smartphone-v1",
@@ -378,6 +383,9 @@ def build_freeze(cases_payload: dict[str, Any]) -> dict[str, Any]:
 
 def _verify_file(path: Path, expected: bytes) -> None:
     actual = path.read_bytes() if path.is_file() else b""
+    if path.suffix.lower() == ".json":
+        actual = _normalized_text_bytes(actual)
+        expected = _normalized_text_bytes(expected)
     if actual != expected:
         raise RuntimeError(f"Frozen benchmark drift: {path.relative_to(REPOSITORY_ROOT)}")
 

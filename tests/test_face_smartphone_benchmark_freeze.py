@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
 import json
 
 from scripts import freeze_face_smartphone_benchmark as freeze
@@ -12,6 +13,14 @@ def test_frozen_face_smartphone_manifest_is_exactly_reproducible() -> None:
     expected_freeze = json.loads((freeze.BENCHMARK_ROOT / "freeze.json").read_text(encoding="utf-8"))
     assert cases == expected_cases
     assert freeze.build_freeze(cases) == expected_freeze
+
+
+def test_contract_digest_is_independent_of_windows_line_endings() -> None:
+    contract = (freeze.BENCHMARK_ROOT / "contract.json").read_bytes()
+    windows_checkout = contract.replace(b"\n", b"\r\n")
+    expected = json.loads((freeze.BENCHMARK_ROOT / "freeze.json").read_text(encoding="utf-8"))
+
+    assert hashlib.sha256(freeze._normalized_text_bytes(windows_checkout)).hexdigest() == expected["contract_sha256"]
 
 
 def test_primary_case_distribution_and_split_are_frozen() -> None:
