@@ -25,6 +25,21 @@ def block(kind: BlockKind):
     return next(item for item in default_pipeline() if item.kind is kind)
 
 
+def test_workspace_initializes_explicit_main_original_provenance() -> None:
+    primary = textured()
+    workspace = Workspace(primary=primary)
+
+    assert workspace.provenance_map is not None
+    assert workspace.provenance_map.shape == primary.shape[:2]
+    assert workspace.provenance_map.dtype == np.uint16
+    assert np.count_nonzero(workspace.provenance_map) == 0
+
+
+def test_workspace_rejects_mismatched_provenance_shape() -> None:
+    with pytest.raises(BlockExecutionError, match="non compatibile"):
+        Workspace(primary=textured(), provenance_map=np.zeros((8, 8), dtype=np.uint16))
+
+
 def test_executor_runs_basic_cpu_pipeline(tmp_path: Path) -> None:
     primary = textured()
     executor = BlockExecutor(Workspace(primary=primary))

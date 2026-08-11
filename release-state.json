@@ -1,22 +1,26 @@
 {
   "branch": "feature/block-pipeline-v1",
-  "current_local_base_head": "feeb27675e9b3f63f5af10c0ea01e9ac181a4e11",
-  "current_remote_head": "feeb27675e9b3f63f5af10c0ea01e9ac181a4e11",
+  "current_local_base_head": "8214455",
+  "current_remote_head": "d4a017705273a2c939ddd3e6e1e23558b805da96",
   "last_green_commit": null,
   "local_batch": {
-    "committed": false,
-    "pushed": false,
-    "purpose": "product completion before tuning"
+    "committed": true,
+    "pushed": true,
+    "purpose": "product completion before tuning",
+    "local_commit": "8214455",
+    "remote_commit": "d4a017705273a2c939ddd3e6e1e23558b805da96",
+    "tested_tree": "b55b65e45cb67bb4f919052831b9dc5a6391cbcd",
+    "uncommitted_followup": "WINDOWS_SAFE_PID_PROBE_AND_EXPLICIT_MAIN_PROVENANCE"
   },
   "product_complete_pre_tuning": false,
   "target95_policy": "REPORT_ONLY_UNTIL_PRODUCT_COMPLETE_PRE_TUNING",
   "current_blocker": {
     "classification": "ROOT_CAUSE",
     "job": "test-and-build",
-    "run_id": 31438960782,
-    "run_number": 1175,
-    "step": "Smoke and offline test portable package",
-    "summary": "The complete remote job log proves source-process YuNet/SFace passed under OpenCV 5 auto engine, then packaged offline inference failed because app startup forced classic engine 1 before cv2 import; classic YuNet rejects dynamic input-shape redefinition. Auto engine 3 and a subprocess regression test are prepared and pass the real local route.",
+    "run_id": 31448331116,
+    "run_number": 1176,
+    "step": "Run tests",
+    "summary": "After two passing tests pytest received KeyboardInterrupt because the cross-process restoration lock used Unix os.kill(pid, 0) semantics on Windows. The verified local fix uses non-signalling Win32 OpenProcess and WaitForSingleObject and keeps os.kill only on non-Windows systems.",
     "workflow": "Windows build"
   },
   "verified_local_gates": {
@@ -25,7 +29,7 @@
     "local_gui_import": "BLOCKED_BY_HOST_LIBEGL_WINDOWS_PACKAGE_GATE_REQUIRED",
     "pytest": {
       "failed": 0,
-      "passed": 393,
+      "passed": 396,
       "status": "PASS"
     },
     "validation_suite": "PASS",
@@ -54,36 +58,47 @@
     "model_updater": "ATOMIC_ROLLBACK_AND_REAL_YUNET_SFACE_STAGE_PASS",
     "app_updater_staging": "PASS",
     "restoration_activity_lock": "PASS",
-    "recovery_checkpoints": "PASS"
+    "recovery_checkpoints": "PASS",
+    "female_domain_targeted_runtime": {
+      "before_completed": 44,
+      "before_errors": 6,
+      "after_completed": 50,
+      "after_errors": 0,
+      "portraits": 10,
+      "status": "PASS"
+    }
   },
   "remote_windows_build": {
-    "head": "feeb27675e9b3f63f5af10c0ea01e9ac181a4e11",
-    "run_id": 31438960782,
-    "run_number": 1175,
+    "head": "d4a017705273a2c939ddd3e6e1e23558b805da96",
+    "run_id": 31448331116,
+    "run_number": 1176,
     "status": "FAILURE",
     "passed_through": [
-      "pytest",
-      "validation",
-      "cpu_benchmark",
-      "practical_runtime",
-      "extended_matrix_runtime",
-      "pyinstaller_exe",
-      "production_model_bootstrap",
-      "six_real_model_smokes",
-      "runtime_registry",
-      "model_staging"
+      "compile_and_imports",
+      "model_manifest_validation"
     ],
-    "first_failure": "portable_package_smoke_offline"
+    "first_failure": "pytest_windows_pid_probe_keyboard_interrupt",
+    "local_root_fix": "WIN32_OPENPROCESS_WAITFORSINGLEOBJECT_PASS"
   },
   "remote_female_domain": {
-    "duplicate_run_id": 31438957143,
-    "run_id": 31438960769,
-    "run_number": 443,
-    "status": "CANCELLED_JOB_TIMEOUT",
-    "classification": "INFRASTRUCTURE_TRANSIENT",
-    "first_failure": "WIKIMEDIA_COMMONS_HTTP_429_DURING_FULL_RESOLUTION_DOWNLOADS",
-    "missing_report": "CASCADE_FAILURE",
-    "local_fix": "BOUNDED_640PX_THUMBNAILS_AND_NO_DUPLICATE_FEATURE_PUSH_TRIGGER",
+    "run_id": 31448331113,
+    "run_number": 444,
+    "head": "d4a017705273a2c939ddd3e6e1e23558b805da96",
+    "status": "FAILURE_AFTER_BENCHMARK",
+    "resolved_portraits": 76,
+    "requested_portraits": 80,
+    "completed_cases": 346,
+    "runtime_errors": 33,
+    "first_failure": "MAIN_ONLY_NOOP_PATH_MISSING_PROVENANCE_MAP",
+    "local_root_fix": "WORKSPACE_EXPLICIT_ZERO_MAIN_PROVENANCE_TARGETED_50_OF_50_ZERO_ERRORS",
+    "previous_runs": {
+      "run_ids": [31438960769, 31438957143],
+      "status": "CANCELLED_JOB_TIMEOUT",
+      "classification": "INFRASTRUCTURE_TRANSIENT",
+      "first_failure": "WIKIMEDIA_COMMONS_HTTP_429_DURING_FULL_RESOLUTION_DOWNLOADS",
+      "missing_report": "CASCADE_FAILURE"
+    },
+    "current_fix": "BOUNDED_640PX_THUMBNAILS_AND_NO_DUPLICATE_FEATURE_PUSH_TRIGGER",
     "coverage_gate_unchanged": "80_PORTRAITS_REQUIRE_60_SOURCES"
   },
   "packaging_status": "EXE_BUILT_ON_REMOTE_HEAD_PORTABLE_SMOKE_FAILED",
@@ -96,6 +111,6 @@
     "functional_but_unverified": 8,
     "product_complete_pre_tuning": false
   },
-  "next_exact_action": "Create one logical product-completion commit and one push; let Windows and Female-domain CI finish without another push; inspect first real failure or record verified ZIP, installer and installed-app artifacts.",
+  "next_exact_action": "Commit the verified Windows PID-probe and explicit MAIN provenance root fixes with the lightweight Female report artifact; push once; let Windows and Female CI finish without interruption.",
   "schema_version": 2
 }

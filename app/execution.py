@@ -31,6 +31,22 @@ class Workspace:
     provenance_map: np.ndarray | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        source = np.asarray(self.primary)
+        if source.ndim < 2 or source.size == 0:
+            return
+        shape = source.shape[:2]
+        if self.provenance_map is None:
+            # Source code 0 is immutable MAIN evidence. A no-op/abstaining pipeline
+            # still needs an explicit map; absence of reference transfer is not
+            # absence of provenance.
+            self.provenance_map = np.zeros(shape, dtype=np.uint16)
+            return
+        provenance = np.asarray(self.provenance_map)
+        if provenance.shape != shape:
+            raise BlockExecutionError("Mappa provenance non compatibile con l'immagine principale")
+        self.provenance_map = provenance.astype(np.uint16, copy=True)
+
     def copy_primary(self) -> np.ndarray:
         if self.primary is None or self.primary.size == 0:
             raise BlockExecutionError("Immagine principale non valida")

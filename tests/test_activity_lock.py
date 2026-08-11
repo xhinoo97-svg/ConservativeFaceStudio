@@ -28,3 +28,13 @@ def test_stale_restoration_lock_is_removed(monkeypatch, tmp_path: Path) -> None:
 
     assert activity.is_restoration_active(path) is False
     assert not path.exists()
+
+
+def test_windows_pid_probe_never_uses_os_kill(monkeypatch) -> None:
+    calls: list[int] = []
+    monkeypatch.setattr(activity, "_IS_WINDOWS", True)
+    monkeypatch.setattr(activity, "_windows_pid_alive", lambda pid: calls.append(pid) or True)
+    monkeypatch.setattr(activity.os, "kill", lambda pid, signal: pytest.fail("os.kill is unsafe for Windows PID probing"))
+
+    assert activity._pid_alive(1234) is True
+    assert calls == [1234]

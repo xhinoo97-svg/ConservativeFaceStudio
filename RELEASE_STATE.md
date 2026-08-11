@@ -1,36 +1,37 @@
 # Conservative Face Studio — Release State
 
 - Branch: `feature/block-pipeline-v1`
-- Current remote HEAD: `feeb27675e9b3f63f5af10c0ea01e9ac181a4e11`
-- Current local base HEAD: `feeb27675e9b3f63f5af10c0ea01e9ac181a4e11`
-- Local product-completion batch: **uncommitted; final local regression complete**
+- Current remote HEAD: `d4a017705273a2c939ddd3e6e1e23558b805da96`
+- Current local commit: `8214455` (tree `b55b65e45cb67bb4f919052831b9dc5a6391cbcd`, byte-identical to remote HEAD)
+- Product-completion batch: **committed and pushed once**
+- Functional follow-up: **Windows-safe PID probe plus explicit MAIN provenance fixed and verified locally**
 - Last fully green release commit: **none yet**
 - `PRODUCT_COMPLETE_PRE_TUNING`: **FALSE**
 - TARGET95: **REPORT ONLY**
 
 ## First current release blocker
 
-Windows build `#1175` (`31438960782`) reached the portable package and failed at:
+Windows build `#1176` (`31448331116`) passed checkout, dependencies and the complete import/model
+manifest gate, then stopped at pytest after two tests with `KeyboardInterrupt`.
 
-`Smoke and offline test portable package`
+The root cause is the new cross-process restoration lock using Unix-style `os.kill(pid, 0)` to
+probe a PID on Windows. Windows does not provide Unix signal-0 semantics and that call can signal
+or terminate the process being checked. The local follow-up uses a non-signalling Win32
+`OpenProcess + WaitForSingleObject` query, retains the Unix path on non-Windows hosts, and adds a
+regression test proving the Windows path never calls `os.kill`.
 
-All preceding steps passed, including compile/imports, pytest, validation, CPU benchmark,
-practical runtime, extended matrix runtime, PyInstaller EXE, production-model bootstrap,
-six real CPU model smokes, runtime registry export and model staging. ZIP and installer were
-correctly skipped as cascades.
-
-The complete job log proves that source-process YuNet/SFace smoke passed under OpenCV 5 auto
-engine, but the packaged process forced classic engine `1` before importing OpenCV. Classic
-YuNet then failed when `FaceDetectorYN` redefined its input shape. The prepared local policy
-uses auto engine `3`, which passes the same real YuNet/SFace route and keeps OpenCV's supported
-fallback behavior. A subprocess regression test pins this boot policy.
+Female-domain `#444` completed its full benchmark (76/80 sources, 346 completed cases) and then
+reported 33 runtime errors. All 33 shared one root cause: a MAIN-only gaussian/no-op path could
+finish with `provenance_map=None`. `Workspace` now establishes an explicit zero-valued `uint16`
+MAIN-original provenance map at creation and rejects mismatched supplied maps. The same first-ten
+portrait profile improved from 44 completed + 6 provenance errors to **50 completed + 0 errors**.
 
 ## Verified local functional gates
 
 - `compileall`: **PASS**
 - core imports: **PASS**
 - local GUI import: **BLOCKED BY HOST `libEGL.so.1`; Windows packaged GUI remains the required gate**
-- pytest: **393 passed / 0 failed**
+- pytest: **396 passed / 0 failed**
 - conservative validation suite: **PASS**
 - CPU benchmark: **PASS**
 - practical public-portrait runtime: **120/120 complete; 0 errors**
@@ -78,13 +79,14 @@ fallback behavior. A subprocess regression test pins this boot policy.
 
 ## Remote workflows
 
-- Windows build `#1175`: **FAIL at portable smoke; prior functional/model/build steps PASS**.
-- Female-domain `#443` and duplicate `#442`: **CANCELLED at the 140-minute job timeout**.
+- Windows build `#1176`: **FAIL at pytest due Windows PID-probe bug; local root fix PASS**.
+- Female-domain `#444`: **FAIL after benchmark; 33 missing-provenance errors share one locally fixed root cause**.
+- Previous Female-domain `#443` and duplicate `#442`: **CANCELLED at the 140-minute job timeout**.
   The first real failure was Commons HTTP 429 while the duplicate jobs downloaded original,
   full-resolution files; the missing final JSON was a cascade. No pipeline crash or provenance
   violation was demonstrated. The local bounded-thumbnail fix and removal of duplicate feature
   push triggers are regression-tested without reducing the 80-portrait/60-source gate.
-- Push policy: **one logical push is now allowed; do not push again while its workflows run**.
+- Push policy: **Female-domain #444 is finished; one logical follow-up push is now allowed**.
 
 ## Not yet verified
 
@@ -98,6 +100,6 @@ fallback behavior. A subprocess regression test pins this boot policy.
 
 ## Next exact action
 
-Create one logical product-completion commit, push once, and let the new Windows and
-Female-domain runs finish without interruption. Inspect the first real failure if either run is
-red; otherwise record the portable ZIP, installer and installed-app verification artifacts.
+Commit the two verified functional root fixes and lightweight Female report artifact together,
+push once, and allow Windows/Female CI to finish without interruption. Inspect only the first real
+failure or record the verified portable ZIP, installer and installed-app artifacts.
