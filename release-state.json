@@ -3,48 +3,51 @@
   "verified_at_utc": "2026-08-11",
   "branch": "feature/block-pipeline-v1",
   "pull_request": 1,
-  "pr_head_sha": "368f00c122520f471e7ef310f9daf8781b51f111",
-  "local_head_sha": "368f00c122520f471e7ef310f9daf8781b51f111",
+  "pr_head_sha": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
+  "local_head_sha": "68084d379d35db49bfb845aaa61e4e5a3624db8b",
   "base_main_sha": "5eff667373cd47c07ba14aaad2acafee6d5a61c1",
-  "tested_workflow_sha": "368f00c122520f471e7ef310f9daf8781b51f111",
-  "tested_merge_sha": null,
-  "pr_merge_candidate_sha": "f3420ba0eaec16a70b8919091dafff9819324a90",
-  "last_green_pre_tuning_commit": "368f00c122520f471e7ef310f9daf8781b51f111",
+  "tested_workflow_sha": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
+  "tested_merge_sha": "c1c15af445669ef700876599d5fac506b6511014",
+  "pr_merge_candidate_sha": "c1c15af445669ef700876599d5fac506b6511014",
+  "last_green_pre_tuning_commit": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
   "product_complete_pre_tuning": true,
   "architecture_frozen": true,
   "architecture_freeze_base": "368f00c122520f471e7ef310f9daf8781b51f111",
   "release_ready": false,
   "target95_policy": "REPORT_ONLY",
-  "current_gate": "HOLDOUT_CANDIDATE_NO_GO",
-  "classification": "ROOT_CAUSE",
+  "current_gate": "FINAL_FAILURE_INJECTION_CI",
+  "classification": "NONE",
   "remote_windows_build": {
     "workflow": "Windows build",
-    "run_id": 31451863435,
-    "run_number": 1177,
-    "head_sha": "368f00c122520f471e7ef310f9daf8781b51f111",
+    "run_id": 31471837461,
+    "run_number": 1181,
+    "head_sha": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
+    "tested_merge_sha": "c1c15af445669ef700876599d5fac506b6511014",
     "status": "SUCCESS",
     "product_complete_pre_tuning": true,
-    "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31451863435"
+    "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31471837461"
   },
   "remote_female_domain": {
     "workflow": "Female-domain benchmark",
-    "run_id": 31451863418,
-    "run_number": 445,
-    "head_sha": "368f00c122520f471e7ef310f9daf8781b51f111",
+    "run_id": 31471837454,
+    "run_number": 449,
+    "head_sha": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
     "status": "SUCCESS",
-    "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31451863418"
+    "completed_cases": 379,
+    "runtime_errors": 0,
+    "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31471837454"
   },
   "windows_artifacts": [
-    {"id": 9087192068, "name": "ConservativeFaceStudio-Validation", "expired": false},
-    {"id": 9087185020, "name": "ConservativeFaceStudio-Production-Model-Updates", "expired": false},
-    {"id": 9087183587, "name": "ConservativeFaceStudio-Release-Metadata", "expired": false},
-    {"id": 9087183162, "name": "ConservativeFaceStudio-Portable-Windows-x64", "expired": false},
-    {"id": 9087181439, "name": "ConservativeFaceStudio-Setup-Windows-x64", "expired": false}
+    {"id": 9094599248, "name": "ConservativeFaceStudio-Validation", "expired": false},
+    {"id": 9094589479, "name": "ConservativeFaceStudio-Production-Model-Updates", "expired": false},
+    {"id": 9094587606, "name": "ConservativeFaceStudio-Release-Metadata", "expired": false},
+    {"id": 9094587194, "name": "ConservativeFaceStudio-Portable-Windows-x64", "expired": false},
+    {"id": 9094585097, "name": "ConservativeFaceStudio-Setup-Windows-x64", "expired": false}
   ],
   "evidence_notes": {
-    "tested_merge_sha": "The current PR merge candidate is recorded separately and is not claimed as tested.",
+    "tested_merge_sha": "The workflow checkout SHA is recorded separately from the PR HEAD and is supported by validation-summary.json.",
     "product_audit": "Static source/module inventory; not modified to impersonate generated packaging evidence.",
-    "historical_failures": "Windows #1176 and Female #444 are superseded by green #1177 and #445."
+    "historical_failures": "Windows #1176 and Female #444 plus intermediate Windows portability failures are superseded by green #1181 and #449."
   },
   "benchmark_freeze": {
     "status": "COMPLETE",
@@ -110,10 +113,21 @@
       "used_for_further_tuning": false
     }
   },
-  "current_blocker": {
-    "classification": "ROOT_CAUSE",
-    "gate": "HOLDOUT_CANDIDATE_NO_GO",
-    "summary": "The calibration candidate failed one frozen holdout undamaged-region preservation guardrail. The holdout is consumed and cannot be used for tuning; the candidate production changes were removed."
+  "failure_injection": {
+    "status": "LOCAL_PASS_CI_PENDING",
+    "required_scenarios": 19,
+    "passed_scenarios": 19,
+    "full_pytest_passed": 416,
+    "runtime_errors": 0,
+    "functional_fix": "Unicode-safe input bytes with OpenCV EXIF-aware decode",
+    "production_models_changed": false,
+    "quality_parameters_changed": false,
+    "target95_changed": false
   },
-  "next_exact_action": "Preserve the NO-GO evidence and unchanged production baseline; do not tune against the consumed holdout. Further promotion requires an independently frozen holdout or an explicit decision to retain the unchanged production baseline."
+  "current_blocker": {
+    "classification": "NONE",
+    "gate": "FINAL_FAILURE_INJECTION_CI",
+    "summary": "The final failure-injection batch passes locally and awaits one Windows/Female CI cycle. Separately, the calibration candidate remains NO-GO on the consumed holdout and cannot be tuned against it."
+  },
+  "next_exact_action": "Push one final failure-injection batch and let both workflows finish. If green, preserve the NO-GO evidence and request a release decision between retaining the unchanged baseline and authorizing a new independently frozen holdout."
 }

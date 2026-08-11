@@ -12,6 +12,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from app.production_model_smoke import PRODUCTION_MODEL_KEYS
+from scripts.run_release_failure_injection import REQUIRED_SCENARIOS
 
 
 def _load(path: Path, expected: type) -> Any:
@@ -91,6 +92,15 @@ def generate_summary(root: Path, head: str, installer: Path, portable: Path) -> 
 
     practical = _runtime_report(root / "practical-benchmark/practical-benchmark.json")
     matrix = _runtime_report(root / "practical-matrix/practical-matrix.json")
+    failure_injection = _load(root / "failure-injection-summary.json", dict)
+    scenario_records = failure_injection.get("scenarios", [])
+    passed_scenarios = {
+        item.get("scenario")
+        for item in scenario_records
+        if isinstance(item, dict) and item.get("passed") is True and item.get("exit_code") == 0
+    } if isinstance(scenario_records, list) else set()
+    if failure_injection.get("status") != "PASS" or passed_scenarios != set(REQUIRED_SCENARIOS):
+        raise RuntimeError("Release failure-injection matrix is incomplete")
     return {
         "format": "ConservativeFaceStudio validation summary",
         "version": 1,
@@ -110,6 +120,7 @@ def generate_summary(root: Path, head: str, installer: Path, portable: Path) -> 
             "installer": "PASS",
             "installed_app": "PASS",
             "updater": "PASS_BY_PYTEST",
+            "failure_injection": f"{len(passed_scenarios)}/{len(REQUIRED_SCENARIOS)} PASS",
         },
         "production_models": sorted(verified_models),
         "artifacts": {

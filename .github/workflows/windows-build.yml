@@ -97,6 +97,10 @@ jobs:
             Write-Warning "TARGET95 fine tuning is deferred until the Windows product, offline models, portable ZIP and installer are complete."
           }
 
+      - name: Release failure injection
+        shell: pwsh
+        run: python scripts/run_release_failure_injection.py --output failure-injection-summary.json
+
       - name: Export model manifest catalog
         shell: pwsh
         run: python -c "from app.model_catalog import all_model_manifests; from app.model_registry import export_registry; export_registry('models/model-manifests.json', all_model_manifests())"
@@ -277,6 +281,7 @@ jobs:
             validation-report.json
             benchmark-windows-ci.json
             reference-count-smoke.json
+            failure-injection-summary.json
           retention-days: 14
 
       - name: Upload verified production model update assets

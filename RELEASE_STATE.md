@@ -4,33 +4,35 @@
 
 - Branch: `feature/block-pipeline-v1`
 - Pull request: `#1` → `main`
-- PR HEAD: `368f00c122520f471e7ef310f9daf8781b51f111`
-- Local clean-worktree HEAD: `368f00c122520f471e7ef310f9daf8781b51f111`
+- PR HEAD before the final failure-injection batch: `e54abd54216a527d4dbc57a4d4e1c50c0e6fa788`
+- Local content-equivalent base commit: `68084d379d35db49bfb845aaa61e4e5a3624db8b`
 - Base `main` SHA: `5eff667373cd47c07ba14aaad2acafee6d5a61c1`
-- Tested workflow SHA: `368f00c122520f471e7ef310f9daf8781b51f111`
-- Current PR merge-candidate SHA: `f3420ba0eaec16a70b8919091dafff9819324a90`
-- Tested merge SHA: **not separately established**; do not present the merge-candidate SHA as tested evidence.
+- Tested workflow PR HEAD: `e54abd54216a527d4dbc57a4d4e1c50c0e6fa788`
+- Tested PR merge SHA: `c1c15af445669ef700876599d5fac506b6511014`
+- The merge SHA is recorded separately from PR HEAD and was emitted as `GITHUB_SHA` by the verified Windows workflow.
 - `PRODUCT_COMPLETE_PRE_TUNING`: **TRUE**
 - `ARCHITECTURE_FROZEN`: **TRUE at the production runtime represented by PR HEAD**
 - `RELEASE_READY`: **FALSE**
 - TARGET95 policy: **REPORT ONLY**
-- Current required gate: **HOLDOUT_CANDIDATE_NO_GO**
+- Current required gate: **FINAL_FAILURE_INJECTION_CI**
 
 ## Verified workflow evidence
 
-- Windows build `#1177` (`31451863435`): **SUCCESS** on tested workflow SHA.
-- Female-domain benchmark `#445` (`31451863418`): **SUCCESS** on tested workflow SHA.
+- Windows build `#1181` (`31471837461`): **SUCCESS** on tested PR HEAD and merge SHA.
+- Female-domain benchmark `#449` (`31471837454`): **SUCCESS** on the same tested PR HEAD.
+- Female-domain report: **379 completed, 0 runtime errors**; TARGET95 remains report-only.
 - The Windows validation artifact reports `product_complete_pre_tuning = true` only after the
   full test, runtime, model, EXE, portable, offline, ZIP, updater, installer, clean-install and
   installed-application gates pass.
 - Windows artifacts are present and unexpired:
-  - `ConservativeFaceStudio-Validation` (`9087192068`)
-  - `ConservativeFaceStudio-Production-Model-Updates` (`9087185020`)
-  - `ConservativeFaceStudio-Release-Metadata` (`9087183587`)
-  - `ConservativeFaceStudio-Portable-Windows-x64` (`9087183162`)
-  - `ConservativeFaceStudio-Setup-Windows-x64` (`9087181439`)
+  - `ConservativeFaceStudio-Validation` (`9094599248`)
+  - `ConservativeFaceStudio-Production-Model-Updates` (`9094589479`)
+  - `ConservativeFaceStudio-Release-Metadata` (`9094587606`)
+  - `ConservativeFaceStudio-Portable-Windows-x64` (`9094587194`)
+  - `ConservativeFaceStudio-Setup-Windows-x64` (`9094585097`)
 
-The stale `#1176` / `#444` failures are historical and are not current blockers.
+The stale `#1176` / `#444` failures and the intermediate Windows `#1178`-`#1180`
+portability failures are historical and are not current blockers.
 `product-audit.json` remains a static source/module inventory; it is not edited to impersonate
 packaging or workflow evidence.
 
@@ -133,10 +135,22 @@ threshold or adapting the rejected candidate to the observed holdout case is pro
 
 Remaining sequence:
 
-`HOLDOUT PROTOCOL DECISION → FAILURE_INJECTION → FINAL_REGRESSION`
+`FINAL FAILURE-INJECTION CI → HOLDOUT PROTOCOL DECISION → FINAL REGRESSION`
+
+## Final failure-injection candidate
+
+The final evaluation-only gate covers 19 mandatory scenarios: missing/corrupt weights, checksum
+failure, model smoke failure, updater rollback, no network, no GPU, GPU inference failure, CPU
+fallback, wrong/unreadable references, 0/9 references, tiny MAIN, EXIF orientation, Unicode Windows
+paths, low disk, restoration crash, stale lock and restart/recovery. Local evidence is **19/19 PASS**
+and the complete local suite is **416/416 PASS**. One functional import defect found by this gate was
+fixed minimally: product image loading now uses a Unicode-safe byte read before OpenCV decode while
+retaining EXIF orientation. No production model, coefficient, quality threshold, TARGET95 rule or
+restoration routing changed. CI evidence for this final batch is still required.
 
 ## Next exact action
 
-Preserve the NO-GO record and the unchanged production baseline. Do not tune against the consumed
-holdout. A new candidate cannot be honestly promoted without a new independently frozen holdout or
-an explicit release decision to retain the unchanged production baseline.
+Push the single final failure-injection batch and let both workflows finish without interruption.
+If CI is green, preserve the NO-GO record and do not tune against the consumed holdout. Release still
+requires a product decision: retain the unchanged baseline or authorize a new independently frozen
+holdout for a new candidate.

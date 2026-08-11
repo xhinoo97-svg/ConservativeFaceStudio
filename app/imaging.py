@@ -4,6 +4,17 @@ import cv2
 import numpy as np
 
 
+def read_image(path: str) -> np.ndarray | None:
+    """Read one product input with Unicode paths and EXIF orientation on Windows."""
+    try:
+        encoded = np.fromfile(str(path), dtype=np.uint8)
+    except (OSError, ValueError):
+        return None
+    if encoded.size == 0:
+        return None
+    return cv2.imdecode(encoded, cv2.IMREAD_COLOR)
+
+
 def fit_to_canvas(image: np.ndarray, canvas_shape: tuple[int, int]) -> tuple[np.ndarray, dict[str, float | int]]:
     """Resize preserving aspect ratio, then center-pad to the requested HxW canvas.
 

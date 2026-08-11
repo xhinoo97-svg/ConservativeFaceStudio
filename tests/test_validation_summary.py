@@ -36,6 +36,13 @@ def test_validation_summary_requires_complete_installed_product(monkeypatch, tmp
     _write(tmp_path / "practical-matrix/practical-matrix.json", {"cases": [
         {"target95_applicable": False, "target95_passed": False, "error": None}
     ]})
+    _write(tmp_path / "failure-injection-summary.json", {
+        "status": "PASS",
+        "scenarios": [
+            {"scenario": scenario, "passed": True, "exit_code": 0}
+            for scenario in summary.REQUIRED_SCENARIOS
+        ],
+    })
 
     result = summary.generate_summary(tmp_path, "a" * 40, installer, portable)
 
@@ -44,3 +51,4 @@ def test_validation_summary_requires_complete_installed_product(monkeypatch, tmp
     assert result["gates"]["practical_runtime"]["runtime_errors"] == 0
     assert result["gates"]["practical_runtime"]["target95_pass"] == 0
     assert result["gates"]["installed_app"] == "PASS"
+    assert result["gates"]["failure_injection"] == "19/19 PASS"

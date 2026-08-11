@@ -27,7 +27,7 @@ from .automatic import AutomaticRunResult
 from .activity import is_restoration_active
 from .execution import Workspace
 from .hardware import detect_hardware_profile
-from .imaging import fit_to_canvas
+from .imaging import fit_to_canvas, read_image
 from .paths import model_search_roots, user_data_root
 from .project import ProjectDocument, load_project, save_project
 from .reference_limits import MAX_PROJECT_IMAGES, MAX_REFERENCE_IMAGES, validate_reference_count
@@ -277,7 +277,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _read_image(filename: str) -> np.ndarray | None:
-        return cv2.imread(filename, cv2.IMREAD_COLOR)
+        return read_image(filename)
 
     def load_primary(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
