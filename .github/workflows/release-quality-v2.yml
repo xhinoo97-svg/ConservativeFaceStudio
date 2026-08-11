@@ -53,8 +53,8 @@ jobs:
             tests/test_partial_reference_stage_gates.py \
             tests/test_preflight_main_contract.py \
             tests/test_nine_reference_support.py \
-            tests/test_provenance_firewall_policy.py \
-            tests/test_provenance_completeness.py
+            tests/test_immutable_input_and_provenance_firewall.py \
+            tests/test_provenance_source_mapping.py
 
       - name: Full pytest
         run: python -m pytest -q
