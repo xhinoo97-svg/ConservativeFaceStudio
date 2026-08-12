@@ -3,7 +3,10 @@ from __future__ import annotations
 import numpy as np
 
 from app.execution import Workspace
-from app.reference_guided_seed_authority_policy import prefer_verified_reference_guided_seed
+from app.reference_guided_seed_authority_policy import (
+    constrain_verified_reference_guided_transfer,
+    prefer_verified_reference_guided_seed,
+)
 
 
 def _mask(shape: tuple[int, int], y0: int, y1: int, x0: int, x1: int) -> np.ndarray:
@@ -60,3 +63,52 @@ def test_unverified_consensus_preserves_historical_inpaint_seed_priority() -> No
     chosen = prefer_verified_reference_guided_seed(workspace, shape, broad)
 
     assert np.array_equal(chosen, broad)
+
+
+def test_verified_authority_clamps_same_canvas_transfer_output_to_consensus() -> None:
+    workspace = _verified_workspace()
+    shape = workspace.primary.shape[:2]
+    consensus = workspace.metadata["reference_consensus_occlusion"] > 0
+    broad = _mask(shape, 8, 56, 6, 58) > 0
+    input_image = np.zeros((*shape, 3), dtype=np.uint8)
+    repaired = input_image.copy()
+    repaired[broad] = 200
+    provenance = np.zeros(shape, dtype=np.uint16)
+    provenance[broad] = 1
+
+    constrained, constrained_provenance, details = constrain_verified_reference_guided_transfer(
+        workspace,
+        input_image,
+        repaired,
+        provenance,
+        {"applied": True},
+    )
+
+    changed = np.any(constrained != input_image, axis=2)
+    assert np.array_equal(changed, consensus)
+    assert np.all(constrained_provenance[~consensus] == 0)
+    assert details["reference_guided_clamped_transfer_pixels"] == int(np.count_nonzero(broad & ~consensus))
+
+
+def test_unverified_authority_does_not_change_same_canvas_transfer_output() -> None:
+    workspace = _verified_workspace()
+    workspace.metadata["reference_guided_seed_diagnostics"]["trusted_donors"] = 0
+    shape = workspace.primary.shape[:2]
+    broad = _mask(shape, 8, 56, 6, 58) > 0
+    input_image = np.zeros((*shape, 3), dtype=np.uint8)
+    repaired = input_image.copy()
+    repaired[broad] = 200
+    provenance = np.zeros(shape, dtype=np.uint16)
+    provenance[broad] = 1
+
+    constrained, constrained_provenance, details = constrain_verified_reference_guided_transfer(
+        workspace,
+        input_image,
+        repaired,
+        provenance,
+        {"applied": True},
+    )
+
+    assert np.array_equal(constrained, repaired)
+    assert np.array_equal(constrained_provenance, provenance)
+    assert details == {"applied": True}
