@@ -76,7 +76,7 @@ jobs:
               gh api \
                 -H "Accept: application/vnd.github+json" \
                 "/repos/${GITHUB_REPOSITORY}/actions/workflows/windows-build.yml/runs?event=pull_request&head_sha=${EXPECTED_HEAD}&per_page=20" \
-                --jq '.workflow_runs | sort_by(.created_at) | reverse | .[0] | select(. != null) | [.id, .status, (.conclusion // ""), .head_sha] | @tsv' \
+                --jq '.workflow_runs | sort_by(.created_at) | reverse | .[0] | select(. != null) | [.id, .status, (.conclusion // "pending"), .head_sha] | @tsv' \
                 2>/dev/null || true
             )"
 
