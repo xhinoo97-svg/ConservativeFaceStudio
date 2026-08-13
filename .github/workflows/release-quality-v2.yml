@@ -256,6 +256,12 @@ jobs:
             models/model-registry.json
             face-smartphone-v2-calibration/baseline.json
             face-smartphone-v2-calibration/gate.json
+            face-smartphone-v2-calibration/cases/**/input.png
+            face-smartphone-v2-calibration/cases/**/clean.png
+            face-smartphone-v2-calibration/cases/**/damage_mask.png
+            face-smartphone-v2-calibration/cases/**/output.png
+            face-smartphone-v2-calibration/cases/**/blocks.zip
+            face-smartphone-v2-calibration/cases/**/final_provenance.json
             face-domain-guard-v2-candidate-freeze.json
             benchmarks/face-smartphone-v2-final-holdout/sources.json
             benchmarks/face-smartphone-v2-final-holdout/cases.json
