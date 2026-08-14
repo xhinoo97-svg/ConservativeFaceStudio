@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
+from urllib.error import HTTPError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
@@ -18,6 +20,19 @@ from scripts import freeze_face_smartphone_v2_final_holdout as final_freeze
 from scripts import run_face_smartphone_baseline as core
 
 CANDIDATE_ID = "face-domain-guard-v2"
+
+
+def _acquire_sources_with_429_backoff(cache: Path) -> dict[str, Path]:
+    delays = (0, 30, 90, 180)
+    for attempt, delay in enumerate(delays, start=1):
+        if delay:
+            time.sleep(delay)
+        try:
+            return core.acquire_sources(cache, offline=False)
+        except HTTPError as exc:
+            if exc.code != 429 or attempt == len(delays):
+                raise
+    raise RuntimeError("Final-holdout source acquisition exhausted retries")
 
 
 def _current_head() -> str:
@@ -67,7 +82,7 @@ def run(output: Path, *, cache: Path, model_root: Path, candidate_freeze: Path) 
     try:
         # Explicit source acquisition happens only after the calibration and candidate
         # freeze checks above have passed.
-        source_paths = core.acquire_sources(cache, offline=False)
+        source_paths = _acquire_sources_with_429_backoff(cache)
         _verify_source_dimensions(source_paths)
         report = core.run_baseline(
             output,
