@@ -1,133 +1,132 @@
 {
-  "schema_version": 3,
-  "verified_at_utc": "2026-08-11",
+  "schema_version": 4,
+  "verified_at_utc": "2026-08-14",
   "branch": "feature/block-pipeline-v1",
   "pull_request": 1,
-  "pr_head_sha": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
-  "local_head_sha": "68084d379d35db49bfb845aaa61e4e5a3624db8b",
   "base_main_sha": "5eff667373cd47c07ba14aaad2acafee6d5a61c1",
-  "tested_workflow_sha": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
-  "tested_merge_sha": "c1c15af445669ef700876599d5fac506b6511014",
-  "pr_merge_candidate_sha": "c1c15af445669ef700876599d5fac506b6511014",
-  "last_green_pre_tuning_commit": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
+  "certified_candidate_head_sha": "348c4d787a73d7b33cd339c0c14e29a4e162e067",
+  "certified_merge_sha": "7d826eaec32ff633df4bef1242be56484c4d25b7",
   "product_complete_pre_tuning": true,
   "architecture_frozen": true,
-  "architecture_freeze_base": "368f00c122520f471e7ef310f9daf8781b51f111",
+  "release_candidate_qualified": true,
   "release_ready": false,
+  "real_pc_acceptance": "PENDING",
   "target95_policy": "REPORT_ONLY",
-  "current_gate": "FINAL_FAILURE_INJECTION_CI",
-  "classification": "NONE",
-  "remote_windows_build": {
-    "workflow": "Windows build",
-    "run_id": 31471837461,
-    "run_number": 1181,
-    "head_sha": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
-    "tested_merge_sha": "c1c15af445669ef700876599d5fac506b6511014",
-    "status": "SUCCESS",
-    "product_complete_pre_tuning": true,
-    "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31471837461"
-  },
-  "remote_female_domain": {
-    "workflow": "Female-domain benchmark",
-    "run_id": 31471837454,
-    "run_number": 449,
-    "head_sha": "e54abd54216a527d4dbc57a4d4e1c50c0e6fa788",
-    "status": "SUCCESS",
-    "completed_cases": 379,
-    "runtime_errors": 0,
-    "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31471837454"
-  },
-  "windows_artifacts": [
-    {"id": 9094599248, "name": "ConservativeFaceStudio-Validation", "expired": false},
-    {"id": 9094589479, "name": "ConservativeFaceStudio-Production-Model-Updates", "expired": false},
-    {"id": 9094587606, "name": "ConservativeFaceStudio-Release-Metadata", "expired": false},
-    {"id": 9094587194, "name": "ConservativeFaceStudio-Portable-Windows-x64", "expired": false},
-    {"id": 9094585097, "name": "ConservativeFaceStudio-Setup-Windows-x64", "expired": false}
-  ],
-  "evidence_notes": {
-    "tested_merge_sha": "The workflow checkout SHA is recorded separately from the PR HEAD and is supported by validation-summary.json.",
-    "product_audit": "Static source/module inventory; not modified to impersonate generated packaging evidence.",
-    "historical_failures": "Windows #1176 and Female #444 plus intermediate Windows portability failures are superseded by green #1181 and #449."
-  },
-  "benchmark_freeze": {
-    "status": "COMPLETE",
-    "benchmark_id": "face-smartphone-v1",
-    "primary_case_target": 100,
-    "primary_cases_frozen": 100,
-    "calibration_target": 60,
-    "calibration_cases_frozen": 60,
-    "holdout_target": 40,
-    "holdout_cases_frozen": 40,
-    "minimum_primary_face_case_ratio": 0.95,
-    "actual_primary_face_case_ratio": 1.0,
-    "ordinary_damage_face_overlap_target": 0.95,
-    "ordinary_minimum_damage_face_overlap": 1.0,
-    "production_pipeline_changes": 0,
-    "case_manifest_sha256": "74162d364727c8fdcd8b5242b48ba3f05dd99e12c3c8aebfe65fcae58e08f537",
-    "source_manifest_sha256": "1bba20dcd587972b54e3b63d4e250d10e47c46b548eb144c8ae71375bf2c63a0",
-    "contract_sha256": "a14d2d3e45f34ec565442fa92e8ae32d6a776d780f7d09fe35a060df255a0973",
-    "frozen_baseline": {
-      "status": "COMPLETE",
-      "production_sha": "368f00c122520f471e7ef310f9daf8781b51f111",
-      "production_pipeline_changed": false,
-      "fast_subset_completed": 40,
-      "calibration_completed": 60,
-      "runtime_errors": 0,
-      "hard_guardrail_passes": 55,
-      "provenance_invalid_cases": 0,
-      "target95_policy": "REPORT_ONLY",
-      "full_report_sha256": "a1a0aab21dd08ba034d2dcca2a2511703290e789e5e23c836ac43490105c5f74"
+  "current_gate": "STATE_RECONCILIATION_CI",
+  "classification": "SAME_CANDIDATE_CERTIFIED_STATE_COMMIT_PENDING",
+  "required_workflows": {
+    "windows": {
+      "name": "Windows build",
+      "run_number": 1194,
+      "run_id": 31845859781,
+      "status": "SUCCESS",
+      "head_sha": "348c4d787a73d7b33cd339c0c14e29a4e162e067",
+      "artifact_ids": [
+        9236572348,
+        9236565718,
+        9236563640,
+        9236563205,
+        9236560981
+      ],
+      "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31845859781"
     },
-    "refsel": {
-      "decision": "DEFERRED_LEGAL_ARTIFACT",
-      "production_integrated": false,
-      "reason": "Official repository exposes no license and publishes no immutable RefSel checkpoint URL, SHA256, size or redistribution terms."
+    "female_domain": {
+      "name": "Female-domain benchmark",
+      "run_number": 462,
+      "run_id": 31845859790,
+      "status": "SUCCESS",
+      "head_sha": "348c4d787a73d7b33cd339c0c14e29a4e162e067",
+      "artifact_ids": [
+        9236714709,
+        9236714509
+      ],
+      "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31845859790"
     },
-    "calibration_candidate": {
-      "candidate_id": "face-domain-guard-v1",
-      "status": "NO_GO_HOLDOUT",
-      "production_changes_retained": false,
-      "calibration_completed": 60,
-      "calibration_runtime_errors": 0,
-      "calibration_hard_guardrail_passes": 60,
-      "calibration_provenance_invalid_cases": 0,
-      "calibration_wrong_person_final_pixels": 0,
-      "target95_policy": "REPORT_ONLY"
-    },
-    "holdout": {
-      "status": "COMPLETE_CANDIDATE_REJECTED",
-      "candidate_id": "face-domain-guard-v1",
-      "completed": 40,
-      "runtime_errors": 0,
-      "hard_guardrail_passes": 39,
-      "provenance_invalid_cases": 0,
-      "wrong_person_final_pixels": 0,
-      "failed_case_id": "cfsfs1-hol-079-small_block_mosaic",
-      "failed_metric": "outside_region_mae",
-      "failed_value": 8.464879989624023,
-      "frozen_limit": 8.0,
-      "target95_policy": "REPORT_ONLY",
-      "target95_applicable": 34,
-      "target95_passes": 9,
-      "raw_report_sha256": "58c64c6e400e2266d389f046e9dd23bdef744a5a6df199aec5bcb8d50d1775e6",
-      "used_for_further_tuning": false
+    "release_quality_v2": {
+      "name": "Release quality v2",
+      "run_number": 12,
+      "run_id": 31845859806,
+      "status": "SUCCESS",
+      "head_sha": "348c4d787a73d7b33cd339c0c14e29a4e162e067",
+      "artifact_id": 9237031662,
+      "artifact_sha256": "e36b1fcdbba2f6e0ae74e162e05e32a7aae7e135ef74671a8850d01b8a2a2d59",
+      "url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/31845859806"
     }
   },
-  "failure_injection": {
-    "status": "LOCAL_PASS_CI_PENDING",
-    "required_scenarios": 19,
-    "passed_scenarios": 19,
-    "full_pytest_passed": 416,
-    "runtime_errors": 0,
-    "functional_fix": "Unicode-safe input bytes with OpenCV EXIF-aware decode",
-    "production_models_changed": false,
-    "quality_parameters_changed": false,
-    "target95_changed": false
+  "release_quality": {
+    "candidate_id": "face-domain-guard-v3",
+    "calibration": {
+      "completed": 60,
+      "hard_guardrail_passes": 60,
+      "runtime_errors": 0,
+      "provenance_invalid_cases": 0,
+      "wrong_person_final_pixels": 0,
+      "report_sha256": "ebda0d3a6823c39185e59ed51593cc82dd497da62cdbf021d5b92ef0dfbdb947"
+    },
+    "final_holdout": {
+      "benchmark_id": "cfs-face-smartphone-v3-final-holdout",
+      "completed": 40,
+      "hard_guardrail_passes": 40,
+      "runtime_errors": 0,
+      "provenance_invalid_cases": 0,
+      "wrong_person_final_pixels": 0,
+      "frozen_before_candidate_evaluation": true,
+      "independent_from_consumed_v1_and_v2_holdouts": true,
+      "frozen_after_calibration_before_final_holdout": true,
+      "one_shot_protocol": true,
+      "used_for_tuning": false,
+      "source_manifest_sha256": "9310d78082b6a33bf79d7497f6823443ac922ee15576bf7dc2ec15bf17f9662a",
+      "report_sha256": "5a7e3d2c84905db0589b9e28799c9dcc97468b7b3ffd3d0028103706f9107ea1"
+    },
+    "consumed_holdouts": [
+      {
+        "version": "v1",
+        "result": "39/40",
+        "reused": false
+      },
+      {
+        "version": "v2",
+        "result": "38/40",
+        "reused": false
+      }
+    ]
+  },
+  "windows_validation": {
+    "tested_merge_sha": "7d826eaec32ff633df4bef1242be56484c4d25b7",
+    "product_complete_pre_tuning": true,
+    "production_model_smoke": "6/6 PASS",
+    "failure_injection": "19/19 PASS",
+    "reference_count_0_through_9": "PASS",
+    "portable": "PASS",
+    "installer": "PASS",
+    "installed_app": "PASS",
+    "offline": "PASS",
+    "practical_runtime": {
+      "completed": 120,
+      "runtime_errors": 0
+    },
+    "extended_matrix_runtime": {
+      "completed": 82,
+      "runtime_errors": 0
+    },
+    "model_registry_sha256": "95c172ff825cb7c2d3f8024a8f450bf548d4b5231b3e35d6e798d1251d5ac234",
+    "deliverables": {
+      "installer": {
+        "name": "ConservativeFaceStudio-Setup-x64.exe",
+        "sha256": "f032b17bb361c1eb4f5a58e615667abdb240e103699f9a0b39d70db91ed569a0",
+        "size_bytes": 334944870
+      },
+      "portable": {
+        "name": "ConservativeFaceStudio-Windows-x64.zip",
+        "sha256": "47ec80efd04688047dcb70133f7d45486962c5c43df2a9d9a20191098f7b1a65",
+        "size_bytes": 378359145
+      }
+    }
   },
   "current_blocker": {
-    "classification": "NONE",
-    "gate": "FINAL_FAILURE_INJECTION_CI",
-    "summary": "The final failure-injection batch passes locally and awaits one Windows/Female CI cycle. Separately, the calibration candidate remains NO-GO on the consumed holdout and cannot be tuned against it."
+    "classification": "CI_PENDING",
+    "gate": "STATE_RECONCILIATION_CI",
+    "summary": "State-only commit must complete all required same-HEAD workflows before merge."
   },
-  "next_exact_action": "Push one final failure-injection batch and let both workflows finish. If green, preserve the NO-GO evidence and request a release decision between retaining the unchanged baseline and authorizing a new independently frozen holdout."
+  "next_exact_action": "Wait for all workflows triggered by this state-only commit; merge PR #1 only if every required check is green on the resulting same PR HEAD. Do not edit release state again."
 }
