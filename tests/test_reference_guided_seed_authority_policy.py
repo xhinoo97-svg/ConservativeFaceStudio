@@ -6,6 +6,7 @@ from app.execution import Workspace
 from app.reference_guided_seed_authority_policy import (
     constrain_verified_reference_guided_target,
     constrain_verified_reference_guided_transfer,
+    preserve_imported_primary_outside_verified_authority,
     prefer_verified_reference_guided_seed,
 )
 
@@ -135,3 +136,20 @@ def test_unverified_authority_does_not_change_same_canvas_transfer_output() -> N
     assert np.array_equal(constrained, repaired)
     assert np.array_equal(constrained_provenance, provenance)
     assert details == {"applied": True}
+
+
+def test_verified_authority_restores_immutable_main_outside_repair_domain() -> None:
+    workspace = _verified_workspace()
+    authority = workspace.metadata["reference_guided_authority_mask"] > 0
+    anchor = np.full_like(workspace.primary, 40)
+    workspace.metadata["same_canvas_imported_primary"] = anchor.copy()
+    workspace.primary[:] = 180
+    workspace.provenance_map[:] = 7
+
+    preserved, restored = preserve_imported_primary_outside_verified_authority(workspace)
+
+    assert np.all(preserved[~authority] == 40)
+    assert np.all(preserved[authority] == 180)
+    assert np.all(workspace.provenance_map[~authority] == 0)
+    assert np.all(workspace.provenance_map[authority] == 7)
+    assert restored == int(np.count_nonzero(~authority))

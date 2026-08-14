@@ -177,6 +177,7 @@ def _install_alignment_firewall() -> None:
     @wraps(original_install)
     def guarded_install(executor, model_paths):
         original_install(executor, model_paths)
+        from app.reference_guided_seed_authority_policy import preserve_imported_primary_outside_verified_authority
         from app.pipeline import BlockKind
         from app.execution import ExecutionResult
 
@@ -200,6 +201,21 @@ def _install_alignment_firewall() -> None:
 
         guarded_align._cfs_v2_identity_firewall = True  # type: ignore[attr-defined]
         executor._handlers[BlockKind.ALIGN] = guarded_align
+
+        identity = executor._handlers.get(BlockKind.IDENTITY_CHECK)
+        if identity is not None and not getattr(identity, "_cfs_v2_main_preservation", False):
+            @wraps(identity)
+            def preserving_identity(block, parameters):
+                preserved, restored = preserve_imported_primary_outside_verified_authority(executor.workspace)
+                executor.workspace.primary = preserved.copy()
+                result = identity(block, parameters)
+                details = dict(result.details)
+                details["main_outside_verified_authority_restored_pixels"] = restored
+                details["main_outside_verified_authority_preserved"] = True
+                return ExecutionResult(result.block, result.image, details)
+
+            preserving_identity._cfs_v2_main_preservation = True  # type: ignore[attr-defined]
+            executor._handlers[BlockKind.IDENTITY_CHECK] = preserving_identity
 
     guarded_install._cfs_v2_identity_firewall = True  # type: ignore[attr-defined]
     handlers.install_pretrained_face_handlers = guarded_install

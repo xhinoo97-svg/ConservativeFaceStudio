@@ -52,6 +52,27 @@ def _verified_reference_guided_authority(workspace, shape: tuple[int, int]) -> n
     return authority
 
 
+def preserve_imported_primary_outside_verified_authority(workspace) -> tuple[np.ndarray, int]:
+    """Restore immutable MAIN pixels that no verified repair authority covers."""
+    image = np.asarray(workspace.primary)
+    anchor = workspace.metadata.get("same_canvas_imported_primary")
+    if not isinstance(anchor, np.ndarray) or anchor.shape != image.shape:
+        return image.copy(), 0
+    authority = _verified_reference_guided_authority(workspace, image.shape[:2])
+    if authority is None:
+        return image.copy(), 0
+
+    outside = authority == 0
+    changed = outside & np.any(image != anchor, axis=2)
+    restored = int(np.count_nonzero(changed))
+    result = image.copy()
+    result[outside] = anchor[outside]
+    provenance = workspace.provenance_map
+    if isinstance(provenance, np.ndarray) and provenance.shape == image.shape[:2]:
+        provenance[outside] = 0
+    return result, restored
+
+
 def constrain_verified_reference_guided_target(
     workspace,
     target: np.ndarray,
