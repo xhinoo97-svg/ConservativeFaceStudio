@@ -42,6 +42,27 @@ def test_non_same_canvas_reference_cannot_authorize_broad_seed() -> None:
     assert details["trusted_donors"] == 0
 
 
+def test_reference_guided_seed_mostly_outside_face_fails_closed() -> None:
+    primary = np.full((96, 96, 3), 120, dtype=np.uint8)
+    donor = primary.copy()
+    donor[4:24, 4:40] = 20
+
+    workspace = Workspace(primary=primary.copy(), references=[donor.copy()])
+    workspace.aligned_references = [donor.copy()]
+    workspace.metadata["aligned_reference_support_masks"] = [np.full((96, 96), 255, np.uint8)]
+    workspace.metadata["same_canvas_imported_primary"] = primary.copy()
+    workspace.metadata["primary_bbox"] = (32, 30, 32, 42)
+
+    frozen = np.zeros((96, 96), dtype=np.uint8)
+    frozen[4:24, 4:40] = 255
+    refined, details = _trusted_reference_disagreement(workspace, frozen)
+
+    assert not np.any(refined)
+    assert details["reason"] == "reference_guided_seed_outside_face_domain"
+    assert details["rejected_refined_pixels"] > 0
+    assert details["refined_face_fraction"] < 0.5
+
+
 def test_trusted_component_only_reference_preserves_only_supported_existing_seed() -> None:
     primary = np.full((96, 96, 3), 120, dtype=np.uint8)
     donor = np.zeros_like(primary)

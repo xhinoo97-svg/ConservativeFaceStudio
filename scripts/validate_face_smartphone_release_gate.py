@@ -39,12 +39,19 @@ def _wrong_person_evidence(case: dict[str, Any]) -> tuple[int, bool]:
     return total, True
 
 
-def validate(report_path: Path, *, expected_count: int, expected_benchmark: str, expected_split: str) -> dict[str, Any]:
+def validate(
+    report_path: Path,
+    *,
+    expected_count: int,
+    expected_benchmark: str,
+    expected_split: str,
+    expected_candidate: str = CANDIDATE_ID,
+) -> dict[str, Any]:
     report = json.loads(report_path.read_text(encoding="utf-8"))
     cases = report.get("cases")
     if not isinstance(cases, list):
         raise ValueError("Benchmark report has no case list")
-    if report.get("candidate_id") != CANDIDATE_ID:
+    if report.get("candidate_id") != expected_candidate:
         raise ValueError("Unexpected candidate id")
     if report.get("benchmark_id") != expected_benchmark:
         raise ValueError("Unexpected benchmark id")
@@ -80,7 +87,7 @@ def validate(report_path: Path, *, expected_count: int, expected_benchmark: str,
     )
     return {
         "schema_version": 1,
-        "candidate_id": CANDIDATE_ID,
+        "candidate_id": expected_candidate,
         "benchmark_id": expected_benchmark,
         "split": expected_split,
         "report_sha256": _sha256(report_path),
@@ -107,6 +114,7 @@ def main() -> int:
     parser.add_argument("--expected-count", type=int, required=True)
     parser.add_argument("--expected-benchmark", required=True)
     parser.add_argument("--expected-split", required=True)
+    parser.add_argument("--expected-candidate", default=CANDIDATE_ID)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     payload = validate(
@@ -114,6 +122,7 @@ def main() -> int:
         expected_count=args.expected_count,
         expected_benchmark=args.expected_benchmark,
         expected_split=args.expected_split,
+        expected_candidate=args.expected_candidate,
     )
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -41,10 +41,10 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
-      - name: Freeze independent final holdout before candidate evaluation
+      - name: Freeze new independent final holdout before candidate evaluation
         run: |
-          python scripts/freeze_face_smartphone_v2_final_holdout.py
-          python scripts/freeze_face_smartphone_v2_final_holdout.py --verify
+          python scripts/freeze_face_smartphone_v3_final_holdout.py
+          python scripts/freeze_face_smartphone_v3_final_holdout.py --verify
 
       - name: Targeted source-eligibility, partial-reference, MAIN and provenance regressions
         run: |
@@ -209,7 +209,7 @@ jobs:
             --cache .benchmark-cache/face-smartphone-v1 \
             --model-root . \
             --split calibration \
-            --candidate-id face-domain-guard-v2 \
+            --candidate-id face-domain-guard-v3 \
             --offline-sources \
             --fail-on-errors
 
@@ -220,31 +220,33 @@ jobs:
             --expected-count 60 \
             --expected-benchmark cfs-face-smartphone-v1 \
             --expected-split calibration \
+            --expected-candidate face-domain-guard-v3 \
             --output face-smartphone-v2-calibration/gate.json
 
-      - name: Freeze committed V2 candidate after calibration and before final holdout
+      - name: Freeze committed candidate after calibration and before final holdout
         run: |
-          python scripts/freeze_face_domain_guard_v2_candidate.py \
+          python scripts/freeze_face_domain_guard_v3_candidate.py \
             --calibration-gate face-smartphone-v2-calibration/gate.json \
             --model-root . \
-            --output face-domain-guard-v2-candidate-freeze.json
+            --output face-domain-guard-v3-candidate-freeze.json
 
       - name: One-shot independent 40-case final holdout
         run: |
-          python scripts/run_face_smartphone_v2_final_holdout.py \
-            --output face-smartphone-v2-final-holdout-result \
-            --cache .benchmark-cache/face-smartphone-v2-final-holdout \
+          python scripts/run_face_smartphone_v3_final_holdout.py \
+            --output face-smartphone-v3-final-holdout-result \
+            --cache .benchmark-cache/face-smartphone-v3-final-holdout \
             --model-root . \
-            --candidate-freeze face-domain-guard-v2-candidate-freeze.json
+            --candidate-freeze face-domain-guard-v3-candidate-freeze.json
 
       - name: Enforce 40/40 independent final-holdout admission
         run: |
           python scripts/validate_face_smartphone_release_gate.py \
-            face-smartphone-v2-final-holdout-result/baseline.json \
+            face-smartphone-v3-final-holdout-result/baseline.json \
             --expected-count 40 \
-            --expected-benchmark cfs-face-smartphone-v2-final-holdout \
+            --expected-benchmark cfs-face-smartphone-v3-final-holdout \
             --expected-split final_holdout \
-            --output face-smartphone-v2-final-holdout-result/gate.json
+            --expected-candidate face-domain-guard-v3 \
+            --output face-smartphone-v3-final-holdout-result/gate.json
 
       - name: Upload V2 release-quality evidence
         if: always()
@@ -262,11 +264,11 @@ jobs:
             face-smartphone-v2-calibration/cases/**/output.png
             face-smartphone-v2-calibration/cases/**/blocks.zip
             face-smartphone-v2-calibration/cases/**/final_provenance.json
-            face-domain-guard-v2-candidate-freeze.json
-            benchmarks/face-smartphone-v2-final-holdout/sources.json
-            benchmarks/face-smartphone-v2-final-holdout/cases.json
-            benchmarks/face-smartphone-v2-final-holdout/freeze.json
-            benchmarks/face-smartphone-v2-final-holdout/contract.json
-            face-smartphone-v2-final-holdout-result/baseline.json
-            face-smartphone-v2-final-holdout-result/gate.json
-            face-smartphone-v2-final-holdout-result/cases/**/final_provenance.json
+            face-domain-guard-v3-candidate-freeze.json
+            benchmarks/face-smartphone-v3-final-holdout/sources.json
+            benchmarks/face-smartphone-v3-final-holdout/cases.json
+            benchmarks/face-smartphone-v3-final-holdout/freeze.json
+            benchmarks/face-smartphone-v3-final-holdout/contract.json
+            face-smartphone-v3-final-holdout-result/baseline.json
+            face-smartphone-v3-final-holdout-result/gate.json
+            face-smartphone-v3-final-holdout-result/cases/**/final_provenance.json

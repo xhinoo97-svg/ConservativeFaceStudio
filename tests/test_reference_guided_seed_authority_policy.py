@@ -153,3 +153,24 @@ def test_verified_authority_restores_immutable_main_outside_repair_domain() -> N
     assert np.all(workspace.provenance_map[~authority] == 0)
     assert np.all(workspace.provenance_map[authority] == 7)
     assert restored == int(np.count_nonzero(~authority))
+
+
+def test_rejected_reference_guided_seed_forces_full_main_abstention() -> None:
+    workspace = _verified_workspace()
+    shape = workspace.primary.shape[:2]
+    anchor = np.full_like(workspace.primary, 40)
+    workspace.metadata["same_canvas_imported_primary"] = anchor.copy()
+    workspace.metadata.pop("reference_guided_authority_mask")
+    workspace.metadata["reference_guided_seed_diagnostics"] = {
+        "reason": "reference_guided_seed_outside_face_domain",
+        "trusted_donors": 1,
+        "refined_pixels": 0,
+    }
+    workspace.primary[:] = 180
+    broad = np.full(shape, 255, dtype=np.uint8)
+
+    assert not np.any(prefer_verified_reference_guided_seed(workspace, shape, broad))
+    assert not np.any(constrain_verified_reference_guided_target(workspace, broad))
+    preserved, restored = preserve_imported_primary_outside_verified_authority(workspace)
+    assert np.array_equal(preserved, anchor)
+    assert restored == shape[0] * shape[1]

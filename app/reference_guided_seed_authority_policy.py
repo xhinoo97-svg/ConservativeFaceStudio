@@ -19,6 +19,11 @@ import numpy as np
 _INSTALLED = False
 
 
+def _reference_guided_seed_rejected(workspace) -> bool:
+    diagnostics = workspace.metadata.get("reference_guided_seed_diagnostics")
+    return isinstance(diagnostics, dict) and str(diagnostics.get("reason", "")) == "reference_guided_seed_outside_face_domain"
+
+
 def _binary(value, shape: tuple[int, int]) -> np.ndarray | None:
     if not isinstance(value, np.ndarray):
         return None
@@ -59,10 +64,10 @@ def preserve_imported_primary_outside_verified_authority(workspace) -> tuple[np.
     if not isinstance(anchor, np.ndarray) or anchor.shape != image.shape:
         return image.copy(), 0
     authority = _verified_reference_guided_authority(workspace, image.shape[:2])
-    if authority is None:
+    if authority is None and not _reference_guided_seed_rejected(workspace):
         return image.copy(), 0
 
-    outside = authority == 0
+    outside = np.ones(image.shape[:2], dtype=bool) if authority is None else authority == 0
     changed = outside & np.any(image != anchor, axis=2)
     restored = int(np.count_nonzero(changed))
     result = image.copy()
@@ -83,6 +88,8 @@ def constrain_verified_reference_guided_target(
     if proposed is None:
         return np.asarray(target).copy()
 
+    if _reference_guided_seed_rejected(workspace):
+        return np.zeros(shape, dtype=np.uint8)
     authority = _verified_reference_guided_authority(workspace, shape)
     if authority is None:
         return proposed.copy()
@@ -95,6 +102,8 @@ def prefer_verified_reference_guided_seed(
     fallback_seed: np.ndarray,
 ) -> np.ndarray:
     """Return the narrowest mutually supported authoritative repair seed."""
+    if _reference_guided_seed_rejected(workspace):
+        return np.zeros(shape, dtype=np.uint8)
     authority = _verified_reference_guided_authority(workspace, shape)
     if authority is None:
         return np.asarray(fallback_seed).copy()
@@ -115,7 +124,7 @@ def constrain_verified_reference_guided_transfer(
     """Prevent a same-canvas transfer from modifying pixels outside verified authority."""
     shape = workspace.primary.shape[:2]
     authority = _verified_reference_guided_authority(workspace, shape)
-    if authority is None:
+    if authority is None and not _reference_guided_seed_rejected(workspace):
         return repaired, provenance, diagnostics
     if input_image.shape != workspace.primary.shape or repaired.shape != input_image.shape:
         return repaired, provenance, diagnostics
@@ -123,7 +132,8 @@ def constrain_verified_reference_guided_transfer(
         return repaired, provenance, diagnostics
 
     changed = np.any(np.asarray(repaired) != np.asarray(input_image), axis=2)
-    unauthorized = changed & ~(authority > 0)
+    authorized = np.zeros(shape, dtype=bool) if authority is None else authority > 0
+    unauthorized = changed & ~authorized
     unauthorized_pixels = int(np.count_nonzero(unauthorized))
 
     constrained = repaired.copy()
@@ -134,7 +144,7 @@ def constrain_verified_reference_guided_transfer(
 
     details = dict(diagnostics)
     details["reference_guided_authority_applied"] = True
-    details["reference_guided_authority_pixels"] = int(np.count_nonzero(authority))
+    details["reference_guided_authority_pixels"] = int(np.count_nonzero(authorized))
     details["reference_guided_clamped_transfer_pixels"] = unauthorized_pixels
     return constrained, constrained_provenance, details
 

@@ -145,6 +145,29 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
         })
 
     refined_pixels = int(np.count_nonzero(refined))
+    if refined_pixels:
+        from app.observed_target_repair_runtime import face_support_mask
+
+        bbox_raw = workspace.metadata.get("primary_bbox")
+        bbox = tuple(int(value) for value in bbox_raw) if bbox_raw is not None else None
+        face = face_support_mask(shape, bbox) > 0
+        face_pixels = int(np.count_nonzero((refined > 0) & face))
+        face_fraction = float(face_pixels / refined_pixels)
+        if face_fraction < 0.5:
+            return np.zeros(shape, np.uint8), {
+                "trusted_donors": trusted,
+                "rejected_donors": rejected,
+                "baseline_proven_donors": int(baseline_proven_donors),
+                "refined_pixels": 0,
+                "rejected_refined_pixels": refined_pixels,
+                "refined_face_pixels": face_pixels,
+                "refined_face_fraction": face_fraction,
+                "trusted_partial_seed_only_pixels": int(seed_only_pixels),
+                "baseline_confirmed_seed_pixels": int(baseline_confirmed_pixels),
+                "diagnostics": diagnostics,
+                "reason": "reference_guided_seed_outside_face_domain",
+                "seed_expansion_from_partial_reference": False,
+            }
     return refined, {
         "trusted_donors": trusted,
         "rejected_donors": rejected,
@@ -152,6 +175,8 @@ def _trusted_reference_disagreement(workspace, frozen: np.ndarray) -> tuple[np.n
         "refined_pixels": refined_pixels,
         "trusted_partial_seed_only_pixels": int(seed_only_pixels),
         "baseline_confirmed_seed_pixels": int(baseline_confirmed_pixels),
+        "refined_face_pixels": int(np.count_nonzero((refined > 0) & face)) if refined_pixels else 0,
+        "refined_face_fraction": float(np.count_nonzero((refined > 0) & face) / refined_pixels) if refined_pixels else 0.0,
         "diagnostics": diagnostics,
         "reason": "reference_guided_frozen_seed" if refined_pixels else "no_trusted_supported_seed",
         "seed_expansion_from_partial_reference": False,
