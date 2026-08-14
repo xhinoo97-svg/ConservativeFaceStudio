@@ -5,9 +5,9 @@ from __future__ import annotations
 The generic multi-reference inpaint detector is intentionally allowed to discover
 strong reference-supported differences outside a heuristic hint. Once the
 reference-guided seed policy has already validated a same-canvas/coordinate-preserving
-consensus, however, that consensus is stronger evidence and explicitly promises not to
-expand the frozen seed. Later repair stages must therefore preserve both seed and final
-transfer authority.
+authority, however, that immutable authority is stronger evidence and explicitly
+promises not to expand the frozen seed. Later repair stages must therefore preserve
+both seed and final transfer authority.
 """
 
 from functools import wraps
@@ -30,7 +30,7 @@ def _binary(value, shape: tuple[int, int]) -> np.ndarray | None:
     return np.where(item > 0, 255, 0).astype(np.uint8)
 
 
-def _verified_reference_guided_consensus(workspace, shape: tuple[int, int]) -> np.ndarray | None:
+def _verified_reference_guided_authority(workspace, shape: tuple[int, int]) -> np.ndarray | None:
     diagnostics = workspace.metadata.get("reference_guided_seed_diagnostics")
     if not isinstance(diagnostics, dict):
         return None
@@ -46,10 +46,26 @@ def _verified_reference_guided_consensus(workspace, shape: tuple[int, int]) -> n
     if diagnostics.get("seed_expansion_from_partial_reference") is not False:
         return None
 
-    consensus = _binary(workspace.metadata.get("reference_consensus_occlusion"), shape)
-    if consensus is None or not np.any(consensus):
+    authority = _binary(workspace.metadata.get("reference_guided_authority_mask"), shape)
+    if authority is None or not np.any(authority):
         return None
-    return consensus
+    return authority
+
+
+def constrain_verified_reference_guided_target(
+    workspace,
+    target: np.ndarray,
+) -> np.ndarray:
+    """Clamp a proposed observed-reference target to immutable verified authority."""
+    shape = workspace.primary.shape[:2]
+    proposed = _binary(target, shape)
+    if proposed is None:
+        return np.asarray(target).copy()
+
+    authority = _verified_reference_guided_authority(workspace, shape)
+    if authority is None:
+        return proposed.copy()
+    return cv2.bitwise_and(proposed, authority)
 
 
 def prefer_verified_reference_guided_seed(
@@ -58,14 +74,14 @@ def prefer_verified_reference_guided_seed(
     fallback_seed: np.ndarray,
 ) -> np.ndarray:
     """Return the narrowest mutually supported authoritative repair seed."""
-    consensus = _verified_reference_guided_consensus(workspace, shape)
-    if consensus is None:
+    authority = _verified_reference_guided_authority(workspace, shape)
+    if authority is None:
         return np.asarray(fallback_seed).copy()
 
     inpaint = _binary(workspace.metadata.get("inpaint_target_mask"), shape)
     if inpaint is not None and np.any(inpaint):
-        return cv2.bitwise_and(consensus, inpaint)
-    return consensus.copy()
+        return cv2.bitwise_and(authority, inpaint)
+    return authority.copy()
 
 
 def constrain_verified_reference_guided_transfer(
@@ -77,8 +93,8 @@ def constrain_verified_reference_guided_transfer(
 ) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
     """Prevent a same-canvas transfer from modifying pixels outside verified authority."""
     shape = workspace.primary.shape[:2]
-    consensus = _verified_reference_guided_consensus(workspace, shape)
-    if consensus is None:
+    authority = _verified_reference_guided_authority(workspace, shape)
+    if authority is None:
         return repaired, provenance, diagnostics
     if input_image.shape != workspace.primary.shape or repaired.shape != input_image.shape:
         return repaired, provenance, diagnostics
@@ -86,7 +102,7 @@ def constrain_verified_reference_guided_transfer(
         return repaired, provenance, diagnostics
 
     changed = np.any(np.asarray(repaired) != np.asarray(input_image), axis=2)
-    unauthorized = changed & ~(consensus > 0)
+    unauthorized = changed & ~(authority > 0)
     unauthorized_pixels = int(np.count_nonzero(unauthorized))
 
     constrained = repaired.copy()
@@ -97,7 +113,7 @@ def constrain_verified_reference_guided_transfer(
 
     details = dict(diagnostics)
     details["reference_guided_authority_applied"] = True
-    details["reference_guided_authority_pixels"] = int(np.count_nonzero(consensus))
+    details["reference_guided_authority_pixels"] = int(np.count_nonzero(authority))
     details["reference_guided_clamped_transfer_pixels"] = unauthorized_pixels
     return constrained, constrained_provenance, details
 

@@ -171,6 +171,7 @@ def install_reference_guided_seed_policy() -> None:
     def precise_merge(workspace) -> int:
         frozen = original_frozen(workspace)
         if frozen is None or not np.any(frozen):
+            workspace.metadata.pop("reference_guided_authority_mask", None)
             workspace.metadata["reference_guided_seed_diagnostics"] = {
                 "trusted_donors": 0,
                 "refined_pixels": 0,
@@ -181,6 +182,7 @@ def install_reference_guided_seed_policy() -> None:
         aligned = list(getattr(workspace, "aligned_references", []) or [])
         supports = workspace.metadata.get("aligned_reference_support_masks")
         if not aligned or not isinstance(supports, list) or len(supports) != len(aligned):
+            workspace.metadata.pop("reference_guided_authority_mask", None)
             added = int(original_merge(workspace))
             workspace.metadata["reference_guided_seed_diagnostics"] = {
                 "trusted_donors": 0,
@@ -192,6 +194,13 @@ def install_reference_guided_seed_policy() -> None:
 
         shape = workspace.primary.shape[:2]
         refined, diagnostics = _trusted_reference_disagreement(workspace, frozen)
+        if np.any(refined):
+            # Keep validated transfer authority immutable and separate from the mutable
+            # consensus detector, which may legitimately discover additional candidates.
+            workspace.metadata["reference_guided_authority_mask"] = refined.copy()
+        else:
+            workspace.metadata.pop("reference_guided_authority_mask", None)
+
         existing = workspace.metadata.get("reference_consensus_occlusion")
         if not isinstance(existing, np.ndarray) or existing.shape != shape:
             existing = np.zeros(shape, dtype=np.uint8)

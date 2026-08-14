@@ -10,6 +10,7 @@ from app.execution import BlockExecutionError, ExecutionResult
 from app.opencv_lama import LamaInpaintResult, OpenCVLamaEngine
 from app.pipeline import BlockKind, BlockSpec
 from app.pretrained_values import FACE_MODEL_DEFAULTS
+from app.reference_guided_seed_authority_policy import constrain_verified_reference_guided_target
 from app.reference_inpainting import verified_reference_repair
 from app.regional_fusion import facial_region_masks
 from app.restoration import detect_occlusion_candidates
@@ -98,6 +99,7 @@ def install_verified_inpainting_handler(executor, model_paths: dict[str, str | P
             agreement_threshold=float(p.get("occlusion_agreement_threshold", 0.055)),
             maximum_fraction=float(p.get("maximum_occlusion_fraction", 0.25)),
         )
+        target = constrain_verified_reference_guided_target(executor.workspace, target)
         if not np.any(target):
             return ExecutionResult(
                 block.key,
