@@ -1,0 +1,64 @@
+{
+  "benchmark_id": "cfs-face-smartphone-v2-final-holdout",
+  "download_date_utc": "2026-08-11",
+  "identity_disjointness": "All four people are new named/attributed source identities not present in cfs-face-smartphone-v1 calibration or consumed holdout.",
+  "sources": [
+    {
+      "author": "trec_lit",
+      "capture_notes": "Amateur square close portrait/selfie; ordinary consumer-image characteristics.",
+      "clean_source_sha256": "4790b9299e4ac17e906fb972c110dc373f1d2c38bc9c0d89ed7ed764e460d6b1",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/b/be/After-_new_hair_colour.jpg",
+      "face_bbox_normalized": [0.269546, 0.123999, 0.768993, 0.823169],
+      "filename": "After-_new_hair_colour.jpg",
+      "license": "CC BY 2.0",
+      "license_url": "https://creativecommons.org/licenses/by/2.0/",
+      "original_dimensions": [720, 720],
+      "page_url": "https://commons.wikimedia.org/wiki/File:After-_new_hair_colour.jpg",
+      "redistribution_status": "allowed_with_attribution",
+      "source_id": "finalholdout_01_trec_lit"
+    },
+    {
+      "author": "Deborah De Ridder",
+      "capture_notes": "Portrait-oriented clean real photograph with ordinary social/profile-image characteristics.",
+      "clean_source_sha256": "44e851ac71216697785e0d1d77f4d36cdf9b4a53e16ef0740aabaffd5d9b93f8",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/d/db/Profielfoto_van_Deborah_De_Ridder.jpg",
+      "face_bbox_normalized": [0.197068, 0.203091, 0.783294, 0.712188],
+      "filename": "Profielfoto_van_Deborah_De_Ridder.jpg",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "original_dimensions": [768, 960],
+      "page_url": "https://commons.wikimedia.org/wiki/File:Profielfoto_van_Deborah_De_Ridder.jpg",
+      "redistribution_status": "allowed_with_attribution_and_share_alike",
+      "source_id": "finalholdout_02_deborah"
+    },
+    {
+      "author": "Bánhalmi Norbert",
+      "capture_notes": "Real smartphone self-portrait; consumer-camera capture suitable for smartphone-domain validation.",
+      "clean_source_sha256": "e807c86d89c2eae50ad571a80cba00ab7da442d9717e840516182665628f656a",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/7/70/B%C3%A1nhalmi_Norbert_%C3%B6narck%C3%A9p.jpg",
+      "face_bbox_normalized": [0.383775, 0.36193, 0.743174, 0.618312],
+      "filename": "Bánhalmi_Norbert_önarckép.jpg",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "original_dimensions": [960, 1280],
+      "page_url": "https://commons.wikimedia.org/wiki/File:B%C3%A1nhalmi_Norbert_%C3%B6narck%C3%A9p.jpg",
+      "redistribution_status": "allowed_with_attribution_and_share_alike",
+      "source_id": "finalholdout_03_banhalmi"
+    },
+    {
+      "author": "Neondruid",
+      "capture_notes": "Real iPhone 13 Pro Max image with social/Instagram processing metadata; consumer smartphone domain.",
+      "clean_source_sha256": "af1b95452f8eaf666847a7c5b2d8fff96b0a62dca7694c9c3a90a7f327cdf278",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Angus_McLaren_2023.jpg",
+      "face_bbox_normalized": [0.349992, 0.097941, 0.584306, 0.6487],
+      "filename": "Angus_McLaren_2023.jpg",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "original_dimensions": [4032, 3024],
+      "page_url": "https://commons.wikimedia.org/wiki/File:Angus_McLaren_2023.jpg",
+      "redistribution_status": "allowed_with_attribution_and_share_alike",
+      "source_id": "finalholdout_04_angus"
+    }
+  ],
+  "version": 1
+}

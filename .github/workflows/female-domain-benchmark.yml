@@ -1,0 +1,108 @@
+name: Female-domain benchmark
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: female-domain-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: windows-latest
+    timeout-minutes: 140
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Domain benchmark unit checks
+        shell: pwsh
+        run: |
+          python -m compileall -q app tests scripts
+          python -m pytest -q tests/test_female_domain_benchmark.py tests/test_female_domain_observed.py tests/test_nine_reference_support.py
+
+      - name: Curated 80-portrait practical benchmark
+        shell: pwsh
+        run: |
+          python scripts/run_female_domain_benchmark_80.py --output female-domain-benchmark --cache .benchmark-cache/female-domain --limit 80 --size 320 --profile quick --require-sources 60
+          $report = Get-Content female-domain-benchmark/female-domain-benchmark.json -Raw | ConvertFrom-Json
+          $summary = $report.summary
+          Write-Host "resolved portraits=$($report.portrait_count)/$($report.requested_portrait_count)"
+          Write-Host "resolution errors=$($summary.source_resolution_error_count)"
+          Write-Host "completed cases=$($summary.completed_cases)"
+          Write-Host "recoverable mean=$($summary.mean_score_recoverable)"
+          Write-Host "target95=$($summary.target95_pass_count)/$($summary.target95_applicable_count)"
+          Write-Host "mean damage reference coverage=$($summary.mean_damage_reference_coverage)"
+          Write-Host "outside damage change fraction=$($summary.mean_outside_damage_change_fraction)"
+
+      - name: Upload female-domain evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConservativeFaceStudio-Female-Domain
+          path: |
+            female-domain-benchmark/female-domain-benchmark.json
+            female-domain-benchmark/female-domain-benchmark.csv
+            female-domain-benchmark/*/*/primary.png
+            female-domain-benchmark/*/*/ground-truth.png
+            female-domain-benchmark/*/*/final.png
+            female-domain-benchmark/*/*/damage-mask.png
+            female-domain-benchmark/*/*/diff-heatmap.png
+            female-domain-benchmark/*/*/reference*.png
+            female-domain-benchmark/*/*/confidence*.png
+            female-domain-benchmark/*/*/provenance*.png
+            female-domain-benchmark/*/*/final.png.blocks.zip
+            female-domain-benchmark/*/*/final.png.provenance.png
+            .benchmark-cache/female-domain/female-domain-manifest.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload lightweight female-domain report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConservativeFaceStudio-Female-Domain-Report
+          path: |
+            female-domain-benchmark/female-domain-benchmark.json
+            female-domain-benchmark/female-domain-benchmark.csv
+            .benchmark-cache/female-domain/female-domain-manifest.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Female-domain functional gate (quality deferred)
+        if: always()
+        shell: pwsh
+        run: |
+          $path = 'female-domain-benchmark/female-domain-benchmark.json'
+          if (!(Test-Path $path)) { throw "Female-domain benchmark report missing" }
+          $report = Get-Content $path -Raw | ConvertFrom-Json
+          $errors = @($report.cases | Where-Object { $_.error })
+          $failed95 = @($report.cases | Where-Object { $_.target95_applicable -eq $true -and $_.target95_passed -ne $true })
+          Write-Host "runtime errors=$($errors.Count)"
+          Write-Host "recoverable below95=$($failed95.Count)"
+          $failed95 | Select-Object -First 40 | ForEach-Object {
+            Write-Host "QUALITY_DEFERRED portrait=$($_.portrait) scenario=$($_.scenario) score=$($_.conservative_recovery_score) damage_ref=$($_.damage_reference_coverage) outside_change=$($_.outside_damage_change_fraction)"
+          }
+          if ($errors.Count -gt 0) { throw "Female-domain benchmark has $($errors.Count) runtime error case(s)" }
+          if ($failed95.Count -gt 0) { Write-Warning "TARGET95 tuning remains report-only until PRODUCT_COMPLETE_PRE_TUNING is true." }
