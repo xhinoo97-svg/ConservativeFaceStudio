@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "dataset_id": "cfs-face-restoration-v2",
+  "v1_baseline_sha": "2767513f95dde2d417e7c6f1faf2357149a1a32f",
+  "private_user_photos_allowed": false,
+  "identity_disjoint_splits": true,
+  "female_domain_target_fraction": {
+    "minimum": 0.80,
+    "preferred": 0.95
+  },
+  "face_corruption_target_fraction": 0.95,
+  "splits": {
+    "train": {"minimum_identities": 1000, "visible_during_development": true},
+    "validation": {"minimum_identities": 100, "visible_during_development": true},
+    "final_holdout": {"minimum_identities": 100, "visible_during_development": false}
+  },
+  "severity_levels": {
+    "1": "mild",
+    "2": "moderate",
+    "3": "heavy",
+    "4": "extreme",
+    "5": "insufficient_evidence_abstention"
+  },
+  "degradations": [
+    "gaussian_blur", "motion_blur", "defocus_blur", "anisotropic_blur",
+    "resize_blur", "pixelation", "jpeg", "noise", "low_light",
+    "smartphone_mixed", "marker_strokes", "scribble", "opaque_paint",
+    "opaque_sticker", "blur_rectangle"
+  ],
+  "required_sample_fields": [
+    "sample_id", "identity_id", "split", "clean_path", "clean_sha256",
+    "license", "source_url", "domain_label", "seed"
+  ],
+  "prohibited_sources": [
+    "benchmarks/face-smartphone-v1",
+    "benchmarks/face-smartphone-v2-final-holdout",
+    "benchmarks/face-smartphone-v3-final-holdout"
+  ]
+}
+
