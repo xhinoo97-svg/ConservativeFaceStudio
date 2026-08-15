@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 
 from app.evidence_confidence import compute_evidence_confidence
+from app.evidence_accounting import reconcile_evidence_accounting
 from app.execution import ExecutionResult
 from app.pipeline import BlockKind
 
@@ -110,11 +111,13 @@ def install_evidence_confidence_runtime() -> None:
 
         @wraps(export_handler)
         def export_with_confidence(block, parameters):
+            accounting = reconcile_evidence_accounting(self.workspace)
             report = compute_evidence_confidence(self.workspace)
             self.workspace.metadata["evidence_confidence"] = report.as_dict()
             result = export_handler(block, parameters)
             details = dict(result.details)
             details["evidence_confidence"] = report.as_dict()
+            details["evidence_accounting"] = accounting
 
             output_path = Path(details["path"])
             technical_path = output_path.with_name("final_provenance.json")

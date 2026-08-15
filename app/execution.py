@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from datetime import datetime, timezone
+from time import perf_counter
 from typing import Any, Callable
 
 import cv2
@@ -84,6 +86,8 @@ class BlockExecutor:
         if handler is None:
             raise BlockExecutionError(f"Blocco non ancora eseguibile senza modello esterno: {block.key}")
         before = self.workspace.copy_primary()
+        started_at = datetime.now(timezone.utc).isoformat()
+        started_clock = perf_counter()
         result = handler(block, parameters)
         if result.image is None or result.image.size == 0:
             raise BlockExecutionError(f"Il blocco {block.key} ha prodotto un'immagine non valida")
@@ -91,6 +95,12 @@ class BlockExecutor:
         if not np.array_equal(before, result.image):
             self.history.push(result.image, block.key)
         details = dict(result.details)
+        details.update({
+            "started_at": started_at,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": round((perf_counter() - started_clock) * 1000.0, 3),
+            "status": "PASS",
+        })
         operation = OperationRecord(block=block.key, parameters={**parameters, **details}, conservative=not block.generative)
         self.project.operations.append(operation)
         snapshot = self.block_artifacts.record(block.key, block.title, result.image, details)
@@ -110,7 +120,8 @@ class BlockExecutor:
         return ExecutionResult(result.block, result.image, details)
 
     def record_skipped(self, block: BlockSpec, reason: str) -> ExecutionResult:
-        details = {"skipped": True, "reason": str(reason)}
+        now = datetime.now(timezone.utc).isoformat()
+        details = {"skipped": True, "reason": str(reason), "started_at": now, "completed_at": now, "duration_ms": 0.0, "status": "SKIPPED"}
         image = self.workspace.copy_primary()
         self.project.operations.append(OperationRecord(block=block.key, parameters=details, conservative=not block.generative))
         snapshot = self.block_artifacts.record(block.key, block.title, image, details)

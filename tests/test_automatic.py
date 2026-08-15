@@ -7,6 +7,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import app.automatic as automatic_module
 
 from app.automatic import AutomaticPipelineRunner
 from app.execution import ExecutionResult, Workspace
@@ -101,6 +102,46 @@ def test_automatic_pipeline_exports_every_block(tmp_path: Path) -> None:
         provenance_bytes = archive.read(f"results/{result.provenance.name}")
         assert hashlib.sha256(final_bytes).hexdigest() == attachments[result.final_image.name]["sha256"]
         assert hashlib.sha256(provenance_bytes).hexdigest() == attachments[result.provenance.name]["sha256"]
+
+
+def test_deterministic_upscale_is_not_rejected_as_identity_synthesis(tmp_path: Path) -> None:
+    source = sample_image()
+    runner = AutomaticPipelineRunner(Workspace(primary=source.copy()))
+    _install_synthetic_landmark_handler(runner)
+    result = runner.run(tmp_path / "upscaled.png", upscale=2)
+    upscale = next(item for item in result.results if item.block == "upscale")
+    assert upscale.image.shape[:2] == (source.shape[0] * 2, source.shape[1] * 2)
+    assert upscale.details.get("rolled_back") is not True
+    assert upscale.details["identity_guardrail"]["engine"] == "deterministic-transform-consistency"
+
+
+def test_preflight_cannot_mutate_true_import_snapshot(monkeypatch, tmp_path: Path) -> None:
+    source = sample_image()
+
+    class Result:
+        selected_source_index = 0
+        identity_cluster_size = 1
+        reason = "fixture"
+        candidates = ()
+
+    def preflight(workspace, model_paths):
+        workspace.primary = np.full_like(workspace.primary, 77)
+        workspace.metadata["preflight_deblurred_all"] = True
+        return Result()
+
+    monkeypatch.setattr(automatic_module, "preprocess_and_select_front_base", preflight)
+    monkeypatch.setattr(automatic_module, "restore_imported_primary_for_same_canvas", lambda workspace, observed: type("D", (), {"applied": False, "reason": "fixture", "matched_reference_count": 0, "original_selected_source_index": 0})())
+    monkeypatch.setattr(automatic_module, "apply_observed_restoration_policy", lambda workspace, observed: None)
+    model = tmp_path / "nafnet.onnx"
+    model.write_bytes(b"fixture")
+    workspace = Workspace(primary=source.copy(), metadata={"core_model_paths": {"opencv_nafnet_deblur": str(model)}})
+    runner = AutomaticPipelineRunner(workspace)
+    _install_synthetic_landmark_handler(runner)
+    result = runner.run(tmp_path / "truth.png", upscale=1)
+    imported = next(item for item in result.results if item.block == "import")
+    deblurred = next(item for item in result.results if item.block == "deblur")
+    assert np.array_equal(imported.image, source)
+    assert np.array_equal(deblurred.image, np.full_like(source, 77))
 
 
 def test_automatic_pipeline_uses_references_without_confirmation(tmp_path: Path) -> None:

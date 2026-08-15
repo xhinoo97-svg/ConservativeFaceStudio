@@ -12,6 +12,7 @@ from app.exporting import export_image_atomic
 from app.pipeline import BlockKind, BlockSpec
 from app.reference_memory import specific_reference_memory_fusion
 from app.restoration import detect_occlusion_candidates
+from app.spatial_state import resize_workspace_spatial_state
 from app.strict_repair import (
     conservative_roll_normalize,
     face_support_mask,
@@ -345,21 +346,14 @@ class StrictBlockExecutor(BlockExecutor):
         })
 
     def _strict_upscale(self, block: BlockSpec, p: dict[str, Any]) -> ExecutionResult:
+        source_shape = self.workspace.primary.shape[:2]
         result = super()._upscale(block, p)
-        h, w = result.image.shape[:2]
-        if self.workspace.provenance_map is not None:
-            self.workspace.provenance_map = cv2.resize(
-                self.workspace.provenance_map,
-                (w, h),
-                interpolation=cv2.INTER_NEAREST,
-            ).astype(np.uint16)
-        confidence = self.workspace.metadata.get("specific_reference_confidence")
-        if isinstance(confidence, np.ndarray):
-            self.workspace.metadata["specific_reference_confidence"] = cv2.resize(
-                confidence,
-                (w, h),
-                interpolation=cv2.INTER_NEAREST,
-            ).astype(np.uint8)
+        target_shape = result.image.shape[:2]
+        transformed = resize_workspace_spatial_state(self.workspace, source_shape, target_shape)
         details = dict(result.details)
         details["provenance_geometry_updated"] = self.workspace.provenance_map is not None
+        details["auxiliary_maps_geometry_updated"] = transformed
+        details["deterministic_geometry_transform"] = "scale"
+        details["source_dimensions"] = [int(source_shape[1]), int(source_shape[0])]
+        details["target_dimensions"] = [int(target_shape[1]), int(target_shape[0])]
         return ExecutionResult(block.key, result.image, details)

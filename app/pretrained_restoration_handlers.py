@@ -60,6 +60,10 @@ def install_pretrained_restoration_handlers(executor, model_paths: dict[str, str
                     "preflight_reused": True,
                     "processed_all_imported_images": True,
                     "second_pass_skipped": True,
+                    "changed_pixels": int(executor.workspace.metadata.get("preflight_main_changed_pixels", 0)),
+                    "mae": float(executor.workspace.metadata.get("preflight_main_mae", 0.0)),
+                    "accepted_pixels": int(executor.workspace.metadata.get("preflight_main_changed_pixels", 0)),
+                    "abstained": int(executor.workspace.metadata.get("preflight_main_changed_pixels", 0)) == 0,
                     "identity_guardrail_required": False,
                 },
             )
