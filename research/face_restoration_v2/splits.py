@@ -7,7 +7,7 @@ from typing import Iterable
 
 
 REQUIRED_FIELDS = {
-    "sample_id", "identity_id", "split", "clean_path", "clean_sha256",
+    "sample_id", "identity_id", "split", "clean_path", "face_mask_path", "clean_sha256",
     "license", "source_url", "domain_label", "seed",
 }
 ALLOWED_SPLITS = {"train", "validation", "final_holdout"}
@@ -43,3 +43,10 @@ def write_frozen_manifest(rows: list[dict[str, object]], destination: Path) -> s
     destination.write_text(payload, encoding="utf-8")
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+
+def validate_development_manifest(rows: Iterable[dict[str, object]]) -> dict[str, int]:
+    materialized = list(rows)
+    counts = validate_identity_disjoint(materialized)
+    if counts["final_holdout"]:
+        raise ValueError("final_holdout is prohibited in the development dataset path")
+    return counts

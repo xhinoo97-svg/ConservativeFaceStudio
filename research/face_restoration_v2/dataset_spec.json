@@ -28,7 +28,7 @@
     "opaque_sticker", "blur_rectangle"
   ],
   "required_sample_fields": [
-    "sample_id", "identity_id", "split", "clean_path", "clean_sha256",
+    "sample_id", "identity_id", "split", "clean_path", "face_mask_path", "clean_sha256",
     "license", "source_url", "domain_label", "seed"
   ],
   "prohibited_sources": [
@@ -37,4 +37,3 @@
     "benchmarks/face-smartphone-v3-final-holdout"
   ]
 }
-
