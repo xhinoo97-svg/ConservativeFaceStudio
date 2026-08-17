@@ -19,9 +19,20 @@ jobs:
     env:
       PYTHONPATH: ${{ github.workspace }}
       QT_QPA_PLATFORM: offscreen
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact candidate checkout
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          $expected = $env:CANDIDATE_SHA.Trim().ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Female-domain checkout mismatch: $actual != $expected" }
+          Write-Host "Exact candidate SHA: $actual"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -48,6 +59,7 @@ jobs:
           python scripts/run_female_domain_benchmark_80.py --output female-domain-benchmark --cache .benchmark-cache/female-domain --limit 80 --size 320 --profile quick --require-sources 60
           $report = Get-Content female-domain-benchmark/female-domain-benchmark.json -Raw | ConvertFrom-Json
           $summary = $report.summary
+          Write-Host "candidate=$env:CANDIDATE_SHA"
           Write-Host "resolved portraits=$($report.portrait_count)/$($report.requested_portrait_count)"
           Write-Host "resolution errors=$($summary.source_resolution_error_count)"
           Write-Host "completed cases=$($summary.completed_cases)"
