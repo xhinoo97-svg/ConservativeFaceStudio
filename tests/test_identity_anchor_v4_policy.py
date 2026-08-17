@@ -8,6 +8,7 @@ from app.identity_anchor_v4_policy import (
     POLICY_NAME,
     _bridge_reference_identity,
     _effective_identity_eligibility,
+    _identity_check_anchors,
     _same_canvas_original_sources,
     _trusted_identity_source_indices,
     _trusted_raw_reference_positions,
@@ -30,6 +31,7 @@ def _workspace(
     flags: list[bool] | None = None,
 ):
     count = 3
+    primary = np.full((8, 8, 3), 77, dtype=np.uint8)
     refs = [np.full((8, 8, 3), index + 1, dtype=np.uint8) for index in range(count)]
     metadata = {
         "runtime_source_order": [0, 1, 2, 3],
@@ -52,7 +54,7 @@ def _workspace(
     if flags is not None:
         metadata["reference_identity_verified"] = list(flags)
         metadata["reference_identity_reasons"] = ["rejected"] * count
-    return SimpleNamespace(references=refs, metadata=metadata)
+    return SimpleNamespace(primary=primary, references=refs, metadata=metadata)
 
 
 def test_same_canvas_evidence_remains_valid_when_main_was_already_source_zero() -> None:
@@ -172,6 +174,42 @@ def test_final_identity_check_positions_exclude_wrong_person_raw_reference() -> 
     assert positions == [0, 1]
     assert sources == [1, 2]
     assert 2 not in positions  # raw slot 2 is original source 3, the wrong-person source
+
+
+def test_final_identity_firewall_always_keeps_immutable_main_anchor() -> None:
+    workspace = _workspace(
+        accepted={1, 2},
+        same_canvas=None,
+        scores=[0.10, 0.12, -0.20],
+        flags=[False, False, False],
+    )
+    original_main = workspace.primary.copy()
+
+    anchors, sources = _identity_check_anchors(workspace)
+
+    assert sources == []
+    assert len(anchors) == 1
+    assert np.array_equal(anchors[0], original_main)
+    anchors[0][:] = 0
+    assert np.array_equal(workspace.metadata["_immutable_input_store"].main, original_main)
+
+
+def test_final_identity_firewall_adds_only_trusted_refs_after_immutable_main() -> None:
+    workspace = _workspace(
+        accepted={1, 2},
+        same_canvas=[2],
+        scores=[0.20, 0.18, -0.25],
+        flags=[False, False, False],
+    )
+    _bridge_reference_identity(workspace)
+
+    anchors, sources = _identity_check_anchors(workspace)
+
+    assert sources == [1, 2]
+    assert len(anchors) == 3
+    assert np.array_equal(anchors[0], workspace.primary)
+    assert np.array_equal(anchors[1], workspace.references[0])
+    assert np.array_equal(anchors[2], workspace.references[1])
 
 
 def test_existing_direct_sface_flags_are_preserved_without_same_canvas() -> None:
