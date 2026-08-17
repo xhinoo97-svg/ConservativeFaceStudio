@@ -10,7 +10,7 @@ was previously discarded by the preflight-only firewall.
 """
 
 from functools import wraps
-from typing import Any
+from typing import Any, Callable
 
 
 _INSTALLED = False
@@ -200,20 +200,37 @@ def _trusted_raw_reference_positions(workspace) -> tuple[list[int], list[int]]:
 
 
 def _identity_check_anchors(workspace) -> tuple[list, list[int]]:
-    """Return immutable MAIN plus only trusted whole-face reference anchors.
+    """Return immutable MAIN plus trusted immutable references by original source id.
 
-    The final firewall therefore never becomes vacuous when there are zero trusted
-    references. MAIN is always same-person evidence; a severely damaged MAIN may make
-    the check conservative, but that is preferable to silently accepting an unknown
-    identity. Trusted references can still rescue damage-induced MAIN/SFace mismatch.
+    Runtime references may be reordered or cleaned after preflight. Final identity
+    evidence therefore resolves every trusted source back into the immutable input
+    store rather than indexing the current runtime list. MAIN is always present, so
+    zero trusted references can never turn the final firewall into a vacuous PASS.
     """
     from app.immutable_input_store import ensure_immutable_input_store
 
     store = ensure_immutable_input_store(workspace)
+    _positions, sources = _trusted_raw_reference_positions(workspace)
+    valid_sources = [source for source in sources if 1 <= source <= len(store.references)]
+    anchors = [store.copy_main(), *[store.copy_reference(source - 1) for source in valid_sources]]
+    return anchors, valid_sources
+
+
+def _run_identity_check_with_trusted_anchors(
+    identity_handler: Callable,
+    workspace,
+    block,
+    parameters: dict[str, Any],
+):
+    """Run an identity handler transactionally against immutable trusted anchors."""
     original_references = list(workspace.references)
-    positions, sources = _trusted_raw_reference_positions(workspace)
-    anchors = [store.copy_main(), *[original_references[index] for index in positions]]
-    return anchors, sources
+    anchors, sources = _identity_check_anchors(workspace)
+    workspace.references = anchors
+    try:
+        result = identity_handler(block, parameters)
+    finally:
+        workspace.references = original_references
+    return result, sources, len(original_references)
 
 
 def _install_v2_same_canvas_override() -> None:
@@ -272,20 +289,19 @@ def _install_handler_bridge() -> None:
             @wraps(identity)
             def trusted_identity_check(block, parameters):
                 workspace = executor.workspace
-                original_references = list(workspace.references)
-                anchors, sources = _identity_check_anchors(workspace)
-                workspace.references = anchors
-                try:
-                    result = identity(block, parameters)
-                finally:
-                    workspace.references = original_references
+                result, sources, raw_count = _run_identity_check_with_trusted_anchors(
+                    identity,
+                    workspace,
+                    block,
+                    parameters,
+                )
                 details = dict(result.details)
                 details["identity_anchor_policy"] = POLICY_NAME
                 details["identity_includes_immutable_main_anchor"] = True
                 details["identity_trusted_original_source_indices"] = sources
-                details["identity_raw_reference_count"] = len(original_references)
+                details["identity_raw_reference_count"] = raw_count
                 details["identity_trusted_reference_count"] = len(sources)
-                details["identity_excluded_untrusted_reference_count"] = len(original_references) - len(sources)
+                details["identity_excluded_untrusted_reference_count"] = raw_count - len(sources)
                 return ExecutionResult(result.block, result.image, details)
 
             trusted_identity_check._cfs_v4_identity_anchor = True  # type: ignore[attr-defined]
