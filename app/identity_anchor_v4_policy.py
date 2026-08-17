@@ -12,8 +12,6 @@ was previously discarded by the preflight-only firewall.
 from functools import wraps
 from typing import Any
 
-import numpy as np
-
 
 _INSTALLED = False
 POLICY_NAME = "main-bridged-identity-anchor-v4"
@@ -201,6 +199,23 @@ def _trusted_raw_reference_positions(workspace) -> tuple[list[int], list[int]]:
     return positions, sources
 
 
+def _identity_check_anchors(workspace) -> tuple[list, list[int]]:
+    """Return immutable MAIN plus only trusted whole-face reference anchors.
+
+    The final firewall therefore never becomes vacuous when there are zero trusted
+    references. MAIN is always same-person evidence; a severely damaged MAIN may make
+    the check conservative, but that is preferable to silently accepting an unknown
+    identity. Trusted references can still rescue damage-induced MAIN/SFace mismatch.
+    """
+    from app.immutable_input_store import ensure_immutable_input_store
+
+    store = ensure_immutable_input_store(workspace)
+    original_references = list(workspace.references)
+    positions, sources = _trusted_raw_reference_positions(workspace)
+    anchors = [store.copy_main(), *[original_references[index] for index in positions]]
+    return anchors, sources
+
+
 def _install_v2_same_canvas_override() -> None:
     import app.face_domain_guard_v2_policy as v2
 
@@ -258,18 +273,19 @@ def _install_handler_bridge() -> None:
             def trusted_identity_check(block, parameters):
                 workspace = executor.workspace
                 original_references = list(workspace.references)
-                positions, sources = _trusted_raw_reference_positions(workspace)
-                workspace.references = [original_references[index] for index in positions]
+                anchors, sources = _identity_check_anchors(workspace)
+                workspace.references = anchors
                 try:
                     result = identity(block, parameters)
                 finally:
                     workspace.references = original_references
                 details = dict(result.details)
                 details["identity_anchor_policy"] = POLICY_NAME
+                details["identity_includes_immutable_main_anchor"] = True
                 details["identity_trusted_original_source_indices"] = sources
                 details["identity_raw_reference_count"] = len(original_references)
-                details["identity_trusted_reference_count"] = len(positions)
-                details["identity_excluded_untrusted_reference_count"] = len(original_references) - len(positions)
+                details["identity_trusted_reference_count"] = len(sources)
+                details["identity_excluded_untrusted_reference_count"] = len(original_references) - len(sources)
                 return ExecutionResult(result.block, result.image, details)
 
             trusted_identity_check._cfs_v4_identity_anchor = True  # type: ignore[attr-defined]
