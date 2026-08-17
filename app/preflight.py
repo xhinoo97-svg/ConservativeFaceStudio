@@ -144,6 +144,15 @@ def _deblur_all(images: list[np.ndarray], model_path: Path | None, hardware_poli
     return output, applied
 
 
+def _empty_identity_similarity_payload() -> dict[str, Any]:
+    return {
+        "source_indices": [],
+        "matrix": [],
+        "minimum": float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine),
+        "source": "preflight_existing_sface_embeddings",
+    }
+
+
 def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Path]) -> PreflightResult:
     """Analyze every photo while keeping imported image #1 as the target canvas.
 
@@ -181,6 +190,7 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
         workspace.metadata["preflight_recommended_front_source_index"] = 0
         workspace.metadata["preflight_original_occlusion_masks"] = original_occlusion
         workspace.metadata["preflight_detail_reliability_maps"] = original_reliability
+        workspace.metadata["preflight_identity_similarity"] = _empty_identity_similarity_payload()
         return PreflightResult(0, (), deblurred_count, 1, "YuNet/SFace non disponibili: MAIN #1 mantenuta come target")
 
     target = str(hardware_policy.get("dnn_target", "cpu")).lower()
@@ -199,6 +209,7 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
     accepted: set[int] = {0}
     cluster_size = 1
     component_by_source: dict[int, int] = {}
+    similarity_payload = _empty_identity_similarity_payload()
 
     if valid_indices:
         size = len(valid_indices)
@@ -210,6 +221,12 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
                 denom = float(np.linalg.norm(ea) * np.linalg.norm(eb))
                 value = float(np.dot(ea, eb) / denom) if denom > 1e-12 else -1.0
                 sim[a, b] = sim[b, a] = value
+        similarity_payload = {
+            "source_indices": [int(value) for value in valid_indices],
+            "matrix": [[float(value) for value in row] for row in sim.tolist()],
+            "minimum": float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine),
+            "source": "preflight_existing_sface_embeddings",
+        }
         local_component = _pick_identity_component(sim)
         accepted = {valid_indices[i] for i in local_component}
         cluster_size = len(accepted)
@@ -257,6 +274,7 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
         None if item is None else tuple(int(value) for value in item.bbox)
         for item in observations
     ]
+    workspace.metadata["preflight_identity_similarity"] = similarity_payload
 
     pose_engine = HeadPoseEngine(pose_raw) if pose_raw is not None and Path(pose_raw).is_file() else None
     candidates: list[PreflightCandidate] = []
