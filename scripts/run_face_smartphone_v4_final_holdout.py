@@ -27,6 +27,7 @@ from remotezip import RemoteZip
 from scripts import discover_face_smartphone_v4_sources as source_discovery
 from scripts import freeze_face_smartphone_v4_final_holdout as final_freeze
 from scripts import run_face_smartphone_baseline as core
+from scripts.face_smartphone_abstention import apply_predeclared_abstentions
 
 CANDIDATE_ID = "face-domain-guard-v4"
 BENCHMARK_ID = "cfs-face-smartphone-v4-final-holdout"
@@ -178,6 +179,7 @@ def run(
     candidate = _verify_candidate_freeze(candidate_freeze)
     authority = _verify_execution_authority(execution_authority, candidate_freeze, candidate)
 
+    cases_payload = final_freeze.build_cases()
     original_freeze = core.freeze
     core.freeze = final_freeze
     try:
@@ -195,6 +197,7 @@ def run(
     finally:
         core.freeze = original_freeze
 
+    apply_predeclared_abstentions(report, list(cases_payload["cases"]))
     report["production_sha"] = _current_head()
     report["split"] = "final_holdout"
     report["holdout_used_for_tuning"] = False
