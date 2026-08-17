@@ -1,0 +1,421 @@
+name: V4 Final Certification
+
+on:
+  push:
+    branches:
+      - hotfix/real-world-restoration-v1.1
+    paths:
+      - release/v4-certification-request.json
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: v4-final-certification
+  cancel-in-progress: false
+
+jobs:
+  certify-once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      QT_QPA_PLATFORM: offscreen
+      REQUEST_PATH: release/v4-certification-request.json
+      CONSUMPTION_PATH: benchmarks/face-smartphone-v4-final-holdout/CONSUMED.json
+      CANDIDATE_ID: face-domain-guard-v4
+      BENCHMARK_ID: cfs-face-smartphone-v4-final-holdout
+
+    steps:
+      - name: Checkout certification request commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate one-shot request and unconsumed V4
+        id: request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$REQUEST_PATH"
+          test ! -e "$CONSUMPTION_PATH"
+
+          candidate_sha="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('release/v4-certification-request.json').read_text(encoding='utf-8'))
+          value = str(payload.get('candidate_commit_sha', '')).strip()
+          if len(value) != 40:
+              raise SystemExit('candidate_commit_sha must be a full 40-character SHA')
+          print(value)
+          PY
+          )"
+          request_parent="$(git rev-parse HEAD^)"
+          test "$request_parent" = "$candidate_sha" || {
+            echo "Certification request must be the single commit immediately after the candidate: $request_parent != $candidate_sha"
+            exit 1
+          }
+          git cat-file -e "${candidate_sha}^{commit}"
+
+          mapfile -t changed < <(git diff --name-only "$candidate_sha"..HEAD)
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = "$REQUEST_PATH"
+
+          echo "candidate_sha=$candidate_sha" >> "$GITHUB_OUTPUT"
+          cp "$REQUEST_PATH" "$RUNNER_TEMP/v4-certification-request.json"
+
+      - name: Checkout exact candidate SHA detached
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach '${{ steps.request.outputs.candidate_sha }}'
+          test "$(git rev-parse HEAD)" = '${{ steps.request.outputs.candidate_sha }}'
+          test ! -e "$CONSUMPTION_PATH"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Verify immutable V4 freeze before candidate evaluation
+        run: |
+          python scripts/freeze_face_smartphone_v4_final_holdout.py --verify
+          git diff --exit-code -- benchmarks/face-smartphone-v4-final-holdout
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('benchmarks/face-smartphone-v4-final-holdout')
+          sources = json.loads((root / 'sources.json').read_text(encoding='utf-8'))
+          contract = json.loads((root / 'contract.json').read_text(encoding='utf-8'))
+          freeze = json.loads((root / 'freeze.json').read_text(encoding='utf-8'))
+          assert len(sources['sources']) == 20
+          assert len({item['identity_key'] for item in sources['identity_registry']}) == 20
+          assert sum(item['subject_domain'] == 'female' for item in sources['sources']) == 19
+          assert contract['frozen_guardrails']['sface_same_identity_minimum'] == 0.363
+          assert contract['frozen_guardrails']['outside_region_mae_max'] == 8.0
+          assert contract['frozen_guardrails']['wrong_person_final_pixels_max'] == 0
+          assert freeze['frozen_before_candidate_modification'] is True
+          assert freeze['production_pipeline_changed_by_freeze'] is False
+          print('V4 immutable freeze verification: PASS')
+          PY
+
+      - name: Targeted identity, provenance, MAIN and partial-reference regressions
+        run: |
+          python -m pytest -q \
+            tests/test_reliability_aware_identity.py \
+            tests/test_face_domain_guard_v2_policy.py \
+            tests/test_pretrained_face_resilience_regressions.py \
+            tests/test_partial_reference_stage_gates.py \
+            tests/test_preflight_main_contract.py \
+            tests/test_nine_reference_support.py \
+            tests/test_immutable_input_and_provenance_firewall.py \
+            tests/test_provenance_source_mapping.py \
+            tests/test_guardrail_workspace_rollback.py
+
+      - name: Full pytest
+        run: python -m pytest -q
+
+      - name: Resolve successful Windows model-pack run for exact candidate SHA
+        id: windows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ steps.request.outputs.candidate_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 3600 ))
+          run_id=""
+          status=""
+          conclusion=""
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            line="$(
+              gh api \
+                -H 'Accept: application/vnd.github+json' \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/windows-build.yml/runs?event=pull_request&head_sha=${EXPECTED_HEAD}&per_page=20" \
+                --jq '.workflow_runs | sort_by(.created_at) | reverse | .[0] | select(. != null) | [.id, .status, (.conclusion // "pending"), .head_sha] | @tsv' \
+                2>/dev/null || true
+            )"
+            if [ -n "$line" ]; then
+              IFS=$'\t' read -r run_id status conclusion resolved_head <<< "$line"
+              test "$resolved_head" = "$EXPECTED_HEAD"
+              echo "Windows candidate run=$run_id status=$status conclusion=${conclusion:-pending}"
+              if [ "$status" = completed ]; then
+                test "$conclusion" = success
+                break
+              fi
+            fi
+            sleep 60
+          done
+          test -n "$run_id"
+          test "$status" = completed
+          test "$conclusion" = success
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact-candidate verified production model pack
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf .same-head-local-models .same-head-release-metadata
+          gh run download '${{ steps.windows.outputs.run_id }}' \
+            --repo "$GITHUB_REPOSITORY" \
+            --name ConservativeFaceStudio-Production-Model-Updates \
+            --dir .same-head-local-models
+          gh run download '${{ steps.windows.outputs.run_id }}' \
+            --repo "$GITHUB_REPOSITORY" \
+            --name ConservativeFaceStudio-Release-Metadata \
+            --dir .same-head-release-metadata
+          mkdir -p models
+          cp -R .same-head-local-models/. models/
+          test -f .same-head-release-metadata/models/model-registry.json
+          cp .same-head-release-metadata/models/model-registry.json models/model-registry.json
+
+      - name: Verify frozen local model pack and CPU runtime
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from app.model_registry import sha256_path
+          from app.production_models import resolve_local_production_models
+          required = {
+              'opencv_yunet', 'opencv_sface', 'opencv_nafnet_deblur',
+              'face_parsing_resnet18_onnx', 'head_pose_mobilenetv2_onnx',
+              'opencv_lama_inpaint',
+          }
+          bundle = resolve_local_production_models('.', '.')
+          assert bundle.face_ready and bundle.standard_ready and bundle.inpaint_ready, bundle.errors
+          assert not bundle.errors, bundle.errors
+          payload = json.loads(Path('models/model-registry.json').read_text(encoding='utf-8'))
+          entries = {str(item.get('key')): item for item in payload.get('models', []) if isinstance(item, dict)}
+          for key in sorted(required):
+              item = entries[key]
+              path = Path(str(item['path']))
+              digest = sha256_path(path).lower()
+              expected = str(item.get('sha256_expected', '')).lower()
+              recorded = str(item.get('sha256_local', '')).lower()
+              assert item.get('installed') is True
+              assert item.get('checksum_ok') is True
+              assert len(expected) == 64
+              assert digest == expected == recorded
+          print('Candidate model pack SHA-256: PASS')
+          PY
+          python scripts/smoke_production_models.py --only face
+          python scripts/smoke_production_models.py --only nafnet
+          python scripts/smoke_production_models.py --only parsing
+          python scripts/smoke_production_models.py --only headpose
+          python scripts/smoke_lama_runtime.py
+
+      - name: Prefetch frozen calibration sources with 429-only backoff
+        run: |
+          python - <<'PY'
+          import time
+          from pathlib import Path
+          from urllib.error import HTTPError
+          from scripts.run_face_smartphone_baseline import acquire_sources
+          cache = Path('.benchmark-cache/face-smartphone-v1')
+          delays = (0, 30, 90, 180)
+          for attempt, delay in enumerate(delays, start=1):
+              if delay:
+                  time.sleep(delay)
+              try:
+                  sources = acquire_sources(cache, offline=False)
+              except HTTPError as exc:
+                  if exc.code != 429 or attempt == len(delays):
+                      raise
+                  continue
+              print(f'Verified {len(sources)} calibration source files')
+              break
+          PY
+
+      - name: Run frozen 60-case calibration for V4 candidate
+        run: |
+          python scripts/run_face_smartphone_baseline.py \
+            --output face-smartphone-v4-calibration \
+            --cache .benchmark-cache/face-smartphone-v1 \
+            --model-root . \
+            --split calibration \
+            --candidate-id "$CANDIDATE_ID" \
+            --offline-sources \
+            --fail-on-errors
+
+      - name: Enforce 60/60 calibration admission
+        run: |
+          python scripts/validate_face_smartphone_release_gate.py \
+            face-smartphone-v4-calibration/baseline.json \
+            --expected-count 60 \
+            --expected-benchmark cfs-face-smartphone-v1 \
+            --expected-split calibration \
+            --expected-candidate "$CANDIDATE_ID" \
+            --output face-smartphone-v4-calibration/gate.json
+
+      - name: Freeze exact candidate after calibration and before V4
+        run: |
+          python scripts/freeze_face_domain_guard_v4_candidate.py \
+            --calibration-gate face-smartphone-v4-calibration/gate.json \
+            --model-root . \
+            --output face-domain-guard-v4-candidate-freeze.json
+
+      - name: Build one-shot execution authority
+        id: authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import secrets
+
+          candidate_freeze = Path('face-domain-guard-v4-candidate-freeze.json')
+          candidate_sha = os.environ['CANDIDATE_SHA']
+          payload = {
+              'schema_version': 1,
+              'state': 'STARTED',
+              'benchmark_id': os.environ['BENCHMARK_ID'],
+              'candidate_id': os.environ['CANDIDATE_ID'],
+              'candidate_commit_sha': candidate_sha,
+              'candidate_freeze_sha256': hashlib.sha256(candidate_freeze.read_bytes()).hexdigest(),
+              'workflow_run_id': os.environ['GITHUB_RUN_ID'],
+              'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'request_commit_sha': os.environ['REQUEST_SHA'],
+              'execution_nonce': secrets.token_hex(32),
+          }
+          Path(os.environ['RUNNER_TEMP'], 'v4-execution-authority.json').write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          print(json.dumps({k: payload[k] for k in ('state','candidate_commit_sha','workflow_run_id')}, sort_keys=True))
+          PY
+        env:
+          CANDIDATE_SHA: ${{ steps.request.outputs.candidate_sha }}
+          REQUEST_SHA: ${{ github.sha }}
+
+      - name: Persist V4 consumption marker before first holdout case
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          authority="$RUNNER_TEMP/v4-execution-authority.json"
+          test -f "$authority"
+          if gh api "/repos/${GITHUB_REPOSITORY}/contents/${CONSUMPTION_PATH}?ref=${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo 'V4 already has a persistent consumption marker; refusing any execution.'
+            exit 1
+          fi
+          content="$(base64 -w0 "$authority")"
+          gh api --method PUT \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/contents/${CONSUMPTION_PATH}" \
+            -f message="Mark V4 final holdout consumed before execution" \
+            -f content="$content" \
+            -f branch="$GITHUB_REF_NAME" >/dev/null
+          echo 'Persistent V4 STARTED marker committed before execution.'
+
+      - name: Execute V4 final holdout exactly once
+        id: v4run
+        continue-on-error: true
+        run: |
+          python scripts/run_face_smartphone_v4_final_holdout.py \
+            --output face-smartphone-v4-final-holdout-result \
+            --cache .benchmark-cache/face-smartphone-v4-final-holdout \
+            --model-root . \
+            --candidate-freeze face-domain-guard-v4-candidate-freeze.json \
+            --execution-authority "$RUNNER_TEMP/v4-execution-authority.json"
+
+      - name: Enforce 40/40 V4 final-holdout admission
+        id: v4gate
+        if: steps.v4run.outcome == 'success'
+        continue-on-error: true
+        run: |
+          python scripts/validate_face_smartphone_release_gate.py \
+            face-smartphone-v4-final-holdout-result/baseline.json \
+            --expected-count 40 \
+            --expected-benchmark "$BENCHMARK_ID" \
+            --expected-split final_holdout \
+            --expected-candidate "$CANDIDATE_ID" \
+            --output face-smartphone-v4-final-holdout-result/gate.json
+
+      - name: Upload immutable V4 certification evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: v4-final-certification-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            models/model-registry.json
+            face-smartphone-v4-calibration/baseline.json
+            face-smartphone-v4-calibration/gate.json
+            face-domain-guard-v4-candidate-freeze.json
+            face-smartphone-v4-final-holdout-result/baseline.json
+            face-smartphone-v4-final-holdout-result/gate.json
+            face-smartphone-v4-final-holdout-result/cases/**/input.png
+            face-smartphone-v4-final-holdout-result/cases/**/clean.png
+            face-smartphone-v4-final-holdout-result/cases/**/damage_mask.png
+            face-smartphone-v4-final-holdout-result/cases/**/output.png
+            face-smartphone-v4-final-holdout-result/cases/**/blocks.zip
+            face-smartphone-v4-final-holdout-result/cases/**/final_provenance.json
+            ${{ runner.temp }}/v4-execution-authority.json
+
+      - name: Persist final consumed disposition
+        if: always() && steps.authority.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V4_RUN_OUTCOME: ${{ steps.v4run.outcome }}
+          V4_GATE_OUTCOME: ${{ steps.v4gate.outcome }}
+          CANDIDATE_SHA: ${{ steps.request.outputs.candidate_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          authority = json.loads(Path(os.environ['RUNNER_TEMP'], 'v4-execution-authority.json').read_text(encoding='utf-8'))
+          passed = os.environ.get('V4_RUN_OUTCOME') == 'success' and os.environ.get('V4_GATE_OUTCOME') == 'success'
+          authority['state'] = 'CONSUMED_PASS' if passed else 'CONSUMED_FAIL'
+          authority['v4_run_outcome'] = os.environ.get('V4_RUN_OUTCOME') or 'not_run'
+          authority['v4_gate_outcome'] = os.environ.get('V4_GATE_OUTCOME') or 'not_run'
+          authority['candidate_commit_sha'] = os.environ['CANDIDATE_SHA']
+          result = Path('face-smartphone-v4-final-holdout-result/baseline.json')
+          if result.is_file():
+              import hashlib
+              authority['baseline_sha256'] = hashlib.sha256(result.read_bytes()).hexdigest()
+          gate = Path('face-smartphone-v4-final-holdout-result/gate.json')
+          if gate.is_file():
+              import hashlib
+              authority['gate_sha256'] = hashlib.sha256(gate.read_bytes()).hexdigest()
+          Path(os.environ['RUNNER_TEMP'], 'v4-consumed-final.json').write_text(
+              json.dumps(authority, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+
+          metadata="$(gh api "/repos/${GITHUB_REPOSITORY}/contents/${CONSUMPTION_PATH}?ref=${GITHUB_REF_NAME}")"
+          sha="$(printf '%s' "$metadata" | python -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+          content="$(base64 -w0 "$RUNNER_TEMP/v4-consumed-final.json")"
+          gh api --method PUT \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/contents/${CONSUMPTION_PATH}" \
+            -f message="Record final V4 one-shot disposition" \
+            -f content="$content" \
+            -f sha="$sha" \
+            -f branch="$GITHUB_REF_NAME" >/dev/null
+
+      - name: Final certification disposition
+        if: always()
+        env:
+          V4_RUN_OUTCOME: ${{ steps.v4run.outcome }}
+          V4_GATE_OUTCOME: ${{ steps.v4gate.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$V4_RUN_OUTCOME" = success
+          test "$V4_GATE_OUTCOME" = success
+          echo 'V4 FINAL CERTIFICATION: PASS'
