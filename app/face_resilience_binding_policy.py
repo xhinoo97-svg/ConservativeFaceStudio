@@ -6,7 +6,10 @@ from __future__ import annotations
 Install the final face-domain guard before importing the automatic runner so both
 bindings include the per-source identity firewall without a second recognition pass.
 The V2 binding also makes a verified reference-guided damage consensus authoritative
-before later INPAINT target discovery can broaden the repair domain again.
+before later INPAINT target discovery can broaden the repair domain again. V4 then
+adds a fail-closed MAIN bridge: a pixel-verified same-canvas donor may override its
+own preflight rejection and may extend trust only through its already frozen SFace
+component. Reference-only agreement never becomes identity authority.
 """
 
 _INSTALLED = False
@@ -19,9 +22,11 @@ def install_face_resilience_binding_policy() -> None:
 
     from app.reference_guided_seed_authority_policy import install_reference_guided_seed_authority_policy
     from app.face_domain_guard_v2_policy import install_face_domain_guard_v2_policy
+    from app.identity_anchor_v4_policy import install_identity_anchor_v4_policy
 
     install_reference_guided_seed_authority_policy()
     install_face_domain_guard_v2_policy()
+    install_identity_anchor_v4_policy()
 
     import app.automatic as automatic
     import app.preflight as preflight
