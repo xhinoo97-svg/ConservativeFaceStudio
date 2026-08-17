@@ -1,0 +1,29 @@
+name: Research face restorer adapter
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - app/resource_budget.py
+      - app/face_restorer_adapter.py
+      - tests/test_face_restorer_adapter.py
+      - .github/workflows/research-face-restorer-adapter.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adapter-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install narrow dependencies
+        run: python -m pip install 'numpy>=1.26,<3' pytest
+      - name: Test one-heavy-model lifecycle
+        run: python -m pytest -q tests/test_face_restorer_adapter.py
