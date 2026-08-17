@@ -22,11 +22,11 @@ def test_shared_background_cannot_become_identity_bridge_when_face_region_differ
     main = np.full((96, 96, 3), 120, dtype=np.uint8)
     other = main.copy()
     bbox = (40, 40, 16, 16)
-    main[40:56, 40:56] = (55, 75, 95)
-    other[40:56, 40:56] = (185, 165, 145)
+    # Similar grayscale luminance, clearly different chroma. A whole-canvas test can
+    # be dominated by the identical background while the face-local LAB test cannot.
+    main[40:56, 40:56] = (200, 100, 50)
+    other[40:56, 40:56] = (20, 120, 70)
 
-    # The face occupies <10% of the canvas, so a whole-canvas percentile can be
-    # dominated by the identical background. The face-local identity gate must fail.
     assert primary_anchor._same_canvas_match(main, other) is True
     assert primary_anchor._face_local_same_canvas_identity_match(main, other, bbox) is False
 
