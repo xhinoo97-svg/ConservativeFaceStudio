@@ -20,6 +20,7 @@ def test_v4_protocol_python_files_compile() -> None:
         "scripts/run_face_smartphone_v4_final_holdout.py",
         "scripts/verify_v4_freeze_history.py",
         "scripts/verify_same_head_windows_product.py",
+        "scripts/verify_same_head_female_domain.py",
         "app/identity_anchor_v4_policy.py",
         "app/identity_anchor_v4_hardening.py",
     ):
@@ -90,23 +91,29 @@ def test_same_head_windows_and_female_must_pass_before_v4_is_consumed() -> None:
     workflow = _text(".github/workflows/v4-final-certification.yml")
     windows = workflow.index("Resolve successful Windows product run for exact candidate SHA")
     female = workflow.index("Resolve successful same-HEAD female-domain benchmark")
+    female_report = workflow.index("Restore and verify exact-candidate female-domain report")
     calibration = workflow.index("Run frozen 60-case calibration for V4 candidate")
     consume = workflow.index("Persist V4 consumption marker before first holdout case")
     assert windows < calibration < consume
-    assert female < calibration < consume
+    assert female < female_report < calibration < consume
     assert "windows-build.yml/runs?event=pull_request&head_sha=${EXPECTED_HEAD}" in workflow
     assert "female-domain-benchmark.yml/runs?event=pull_request&head_sha=${EXPECTED_HEAD}" in workflow
     assert "id: windows" in workflow[windows:female]
-    assert "id: female" in workflow[female:calibration]
+    assert "id: female" in workflow[female:female_report]
+    report_section = workflow[female_report:calibration]
+    assert "ConservativeFaceStudio-Female-Domain-Report" in report_section
+    assert "python scripts/verify_same_head_female_domain.py" in report_section
 
 
-def test_one_shot_authority_records_exact_prerequisite_run_ids() -> None:
+def test_one_shot_authority_records_prerequisite_run_ids_and_report_hashes() -> None:
     workflow = _text(".github/workflows/v4-final-certification.yml")
     authority = workflow.index("Build one-shot execution authority")
     consume = workflow.index("Persist V4 consumption marker before first holdout case")
     section = workflow[authority:consume]
     assert "'windows_product_run_id': os.environ['WINDOWS_RUN_ID']" in section
     assert "'female_domain_run_id': os.environ['FEMALE_RUN_ID']" in section
+    assert "'windows_validation_summary_sha256': hashlib.sha256(windows_summary.read_bytes()).hexdigest()" in section
+    assert "'female_domain_report_sha256': hashlib.sha256(female_report.read_bytes()).hexdigest()" in section
     assert "WINDOWS_RUN_ID: ${{ steps.windows.outputs.run_id }}" in section
     assert "FEMALE_RUN_ID: ${{ steps.female.outputs.run_id }}" in section
 
@@ -133,7 +140,9 @@ def test_v4_identity_and_provenance_regressions_are_targeted_before_full_pytest(
         "tests/test_v4_release_protocol_static.py",
         "tests/test_v4_controlface_source_parser.py",
         "tests/test_v4_freeze_history.py",
+        "tests/test_v4_execution_authority.py",
         "tests/test_same_head_windows_product.py",
+        "tests/test_same_head_female_domain.py",
         "tests/test_windows_exact_head_protocol.py",
         "tests/test_female_domain_observed.py",
     ):
