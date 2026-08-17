@@ -31,10 +31,6 @@ from app.resource_budget import (
 def load_model(root: Path, checkpoint: Path, source_sha: str):
     import torch
 
-    # The official CodeFormer source snapshot imports basicsr.version from
-    # basicsr/__init__.py but does not ship that generated file.  Provide only the
-    # two metadata attributes required by that import.  This does not alter model
-    # code or claim an upstream package version.
     version_module = types.ModuleType('basicsr.version')
     version_module.__version__ = '0+official-source-snapshot'
     version_module.__gitsha__ = str(source_sha)[:12]
@@ -69,6 +65,21 @@ def infer(net, aligned_bgr: np.ndarray, w: float) -> np.ndarray:
     output = output.squeeze(0).detach().cpu().float().clamp(-1.0, 1.0)
     output = ((output + 1.0) * 0.5 * 255.0).round().to(torch.uint8).numpy().transpose(1, 2, 0)
     return np.ascontiguousarray(output[:, :, ::-1])
+
+
+def write_comparison(path: Path, clean: np.ndarray, degraded: np.ndarray, restored: np.ndarray) -> None:
+    panels: list[np.ndarray] = []
+    for label, image in (
+        ('CLEAN GT', clean),
+        ('DEGRADED MAIN', degraded),
+        ('CODEFORMER w=0.5', restored),
+    ):
+        panel = image.copy()
+        cv2.rectangle(panel, (0, 0), (512, 42), (0, 0, 0), -1)
+        cv2.putText(panel, label, (12, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.72, (255, 255, 255), 2, cv2.LINE_AA)
+        panels.append(panel)
+    if not cv2.imwrite(str(path), np.hstack(panels)):
+        raise RuntimeError('Failed to save CodeFormer comparison sheet')
 
 
 def main() -> int:
@@ -115,8 +126,6 @@ def main() -> int:
     cv2.imwrite(str(args.output / 'clean_aligned.png'), clean_aligned)
     cv2.imwrite(str(args.output / 'degraded_aligned.png'), degraded_aligned)
 
-    # Fail before load if even a conservative four-times-checkpoint reservation
-    # would cross the 80% physical-RAM ceiling.
     assert_memory_within_budget(
         budget,
         stage='codeformer_preload',
@@ -144,7 +153,7 @@ def main() -> int:
 
     restored_path = args.output / 'restored_codeformer_w05.png'
     cv2.imwrite(str(restored_path), restored)
-    common.write_comparison(args.output / 'comparison.png', clean_aligned, degraded_aligned, restored)
+    write_comparison(args.output / 'comparison.png', clean_aligned, degraded_aligned, restored)
 
     clean_obs = engine.analyze(clean_aligned)
     degraded_obs = engine.analyze(degraded_aligned)
@@ -156,7 +165,7 @@ def main() -> int:
     identity_pass = identity_restored >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
 
     report = {
-        'experiment': 'codeformer_vertical_slice_v2_resource_capped',
+        'experiment': 'codeformer_vertical_slice_v3_resource_capped_truthful_label',
         'qualification_scope': 'development_host_cpu_only',
         'production_qualified': False,
         'production_blockers': [
@@ -222,6 +231,7 @@ def main() -> int:
             'restored': restored_path.name,
             'restored_sha256': common.sha256_path(restored_path),
             'comparison': 'comparison.png',
+            'comparison_restored_label': 'CODEFORMER w=0.5',
         },
         'host': {
             'platform': platform.platform(),
