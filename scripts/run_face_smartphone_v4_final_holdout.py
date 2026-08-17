@@ -9,6 +9,7 @@ consumes V4 and cannot be retried as certification.
 """
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -154,7 +155,9 @@ def run(
     report["candidate_freeze_sha256"] = core._sha256(candidate_freeze)
     report["execution_authority_sha256"] = core._sha256(execution_authority)
     report["workflow_run_id"] = str(authority["workflow_run_id"])
-    report["execution_nonce_sha256"] = core._sha256_bytes(str(authority["execution_nonce"]).encode("utf-8")) if hasattr(core, "_sha256_bytes") else None
+    report["execution_nonce_sha256"] = hashlib.sha256(
+        str(authority["execution_nonce"]).encode("utf-8")
+    ).hexdigest()
     (output / "baseline.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
