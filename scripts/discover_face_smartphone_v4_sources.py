@@ -44,10 +44,13 @@ ARCHIVE_URL = (
 DATASET_PAGE = f"https://huggingface.co/datasets/{DATASET_REPOSITORY}"
 LICENSE_NAME = "CC BY 4.0"
 LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/"
-USER_AGENT = "ConservativeFaceStudio-V4Freeze/2.1 (benchmark provenance)"
+USER_AGENT = "ConservativeFaceStudio-V4Freeze/2.2 (benchmark provenance)"
 RACES = ("African", "Asian", "Caucasian", "Indian")
 FEMALE_RACE_QUOTAS = {"African": 5, "Asian": 5, "Caucasian": 5, "Indian": 4}
-_IMAGE_RE = re.compile(r"^r(?P<race>[0-3])_g(?P<gender>[01])_a\d+_o(?P<orientation>\d+)_c[^/]+\.png$", re.I)
+_FILENAME_RACE_RE = re.compile(r"(?:^|_)r(?P<race>[0-3])(?:_|$)", re.I)
+_FILENAME_GENDER_RE = re.compile(r"(?:^|_)g(?P<gender>[01])(?:_|$)", re.I)
+_FILENAME_ORIENTATION_RE = re.compile(r"(?:^|_)o(?P<orientation>-?\d+(?:\.\d+)?)(?:_|$)", re.I)
+_RACE_BY_LOWER = {race.casefold(): race for race in RACES}
 
 
 def _canonical_json(payload: Any) -> bytes:
@@ -132,6 +135,13 @@ def _largest_face_bbox(image_bytes: bytes) -> tuple[list[float], list[int]] | No
 
 
 def _parse_member(name: str) -> dict[str, Any] | None:
+    """Parse identity metadata from the documented ControlFace10K hierarchy.
+
+    The hierarchy is authoritative: race / gender / ... / identity-{uuid}. Filename
+    attributes are only cross-checks when present because archive revisions may use
+    additional age/orientation spellings while retaining the same documented folder
+    contract.
+    """
     path = PurePosixPath(name)
     if path.suffix.lower() != ".png":
         return None
@@ -144,28 +154,35 @@ def _parse_member(name: str) -> dict[str, Any] | None:
     if gender_pos == 0:
         return None
     gender = lower[gender_pos]
-    race = parts[gender_pos - 1]
-    if race not in RACES:
+    race = _RACE_BY_LOWER.get(lower[gender_pos - 1])
+    if race is None:
         return None
-    identity_parts = [part for part in parts if part.startswith("identity-")]
+
+    identity_parts = [parts[i] for i, value in enumerate(lower) if value.startswith("identity-")]
     if len(identity_parts) != 1:
         return None
     identity = identity_parts[0]
-    match = _IMAGE_RE.match(path.name)
-    if match is None:
-        return None
-    encoded_gender = "female" if match.group("gender") == "0" else "male"
-    if encoded_gender != gender:
-        raise RuntimeError(f"ControlFace10K gender path/filename mismatch: {name}")
-    encoded_race = RACES[int(match.group("race"))]
-    if encoded_race != race:
-        raise RuntimeError(f"ControlFace10K race path/filename mismatch: {name}")
+
+    filename = path.stem
+    gender_match = _FILENAME_GENDER_RE.search(filename)
+    if gender_match is not None:
+        encoded_gender = "female" if gender_match.group("gender") == "0" else "male"
+        if encoded_gender != gender:
+            raise RuntimeError(f"ControlFace10K gender path/filename mismatch: {name}")
+    race_match = _FILENAME_RACE_RE.search(filename)
+    if race_match is not None:
+        encoded_race = RACES[int(race_match.group("race"))]
+        if encoded_race != race:
+            raise RuntimeError(f"ControlFace10K race path/filename mismatch: {name}")
+    orientation_match = _FILENAME_ORIENTATION_RE.search(filename)
+    orientation = float(orientation_match.group("orientation")) if orientation_match is not None else float("inf")
+
     return {
         "member": name,
         "race": race,
         "gender": gender,
         "identity": identity,
-        "orientation": int(match.group("orientation")),
+        "orientation": orientation,
     }
 
 
@@ -335,7 +352,7 @@ def discover_sources() -> dict[str, Any]:
         "dataset_license": LICENSE_NAME,
         "dataset_page": DATASET_PAGE,
         "dataset_revision": DATASET_REVISION,
-        "discovery_algorithm": "discover_face_smartphone_v4_sources.py:controlface10k-v2.1",
+        "discovery_algorithm": "discover_face_smartphone_v4_sources.py:controlface10k-v2.2",
         "download_date_utc": "2026-08-17",
         "identity_disjointness": (
             "ControlFace10K explicit synthetic identity UUIDs are unique within V4; source SHA-256 and locators "
