@@ -108,7 +108,26 @@ def _observed_component_scenario(clean: np.ndarray, fallback: Scenario) -> Scena
 
 
 def _observed_make_scenarios(clean: np.ndarray, *, seed: int = 20260808, profile: str = "full") -> tuple[Scenario, ...]:
-    scenarios = list(_BASE_MAKE_SCENARIOS(clean, seed=seed, profile=profile))
+    # Keep the production CI profile at exactly five cases per portrait (60-80
+    # portraits => 300-400 cases), but alternate the severe low-quality single-image
+    # case between heavy Gaussian blur and mosaic. This gives broad coverage without
+    # increasing workflow time and directly exercises the V3 failure family.
+    if profile == "quick":
+        full = list(_BASE_MAKE_SCENARIOS(clean, seed=seed, profile="full"))
+        alternating = "mosaic_single" if int(seed) % 2 else "gaussian_heavy_single"
+        chosen = {
+            alternating,
+            "opaque_sticker_single",
+            "opaque_sticker_full_reference",
+            "scribble_two_partial",
+            "component_only_references",
+        }
+        scenarios = [item for item in full if item.name in chosen]
+        if len(scenarios) != 5:
+            raise RuntimeError(f"Female-domain quick scenario drift: expected 5, got {len(scenarios)}")
+    else:
+        scenarios = list(_BASE_MAKE_SCENARIOS(clean, seed=seed, profile=profile))
+
     for index, scenario in enumerate(scenarios):
         if scenario.name == "component_only_references":
             scenarios[index] = _observed_component_scenario(clean, scenario)
