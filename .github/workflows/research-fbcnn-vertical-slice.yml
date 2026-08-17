@@ -1,0 +1,142 @@
+name: Research FBCNN JPEG specialist vertical slice
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - research/run_fbcnn_vertical_slice.py
+      - .github/workflows/research-fbcnn-vertical-slice.yml
+      - app/resource_budget.py
+      - app/core_models.py
+      - app/model_registry.py
+      - app/opencv_zoo_face.py
+      - app/face_analysis.py
+      - app/pretrained_values.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-fbcnn-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-cpu-jpeg-specialist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      FBCNN_SOURCE_SHA: 54d1831927506b3247e2d4d245abb4f4dab1a1cd
+      FBCNN_WEIGHT_URL: https://github.com/jiaxi-jiang/FBCNN/releases/download/v1.0/fbcnn_color.pth
+      DEV_SOURCE_URL: https://upload.wikimedia.org/wikipedia/commons/7/79/A_lady_at_front_day.jpg
+      DEV_SOURCE_SHA256: 6853c64a4a74a09481ef260ff953562ac65628e39d56cb30d58e7035125c7e0a
+
+    steps:
+      - name: Checkout research branch commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install isolated CPU runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'torch==2.1.2+cpu' 'torchvision==0.16.2+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install \
+            'numpy>=1.26,<2' \
+            'opencv-python>=4.10,<5' \
+            'onnxruntime>=1.20,<2' \
+            'Pillow>=10,<12' \
+            'psutil>=5.9,<8'
+          python - <<'PY'
+          import cv2, numpy, onnxruntime, torch, torchvision
+          print({
+              'torch': torch.__version__,
+              'torchvision': torchvision.__version__,
+              'opencv': cv2.__version__,
+              'numpy': numpy.__version__,
+              'onnxruntime': onnxruntime.__version__,
+              'cuda': torch.cuda.is_available(),
+          })
+          assert not torch.cuda.is_available()
+          PY
+
+      - name: Fetch exact official FBCNN source
+        run: |
+          set -euo pipefail
+          rm -rf .research/FBCNN
+          git clone --filter=blob:none https://github.com/jiaxi-jiang/FBCNN.git .research/FBCNN
+          git -C .research/FBCNN checkout --detach "$FBCNN_SOURCE_SHA"
+          test "$(git -C .research/FBCNN rev-parse HEAD)" = "$FBCNN_SOURCE_SHA"
+
+      - name: Download official FBCNN color checkpoint
+        run: |
+          set -euo pipefail
+          mkdir -p .research/weights
+          tmp=.research/weights/fbcnn_color.pth.part
+          dst=.research/weights/fbcnn_color.pth
+          rm -f "$tmp" "$dst"
+          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 600 "$FBCNN_WEIGHT_URL" -o "$tmp"
+          test -s "$tmp"
+          test "$(stat -c%s "$tmp")" -eq 287755111
+          mv "$tmp" "$dst"
+          sha256sum "$dst" | tee .research/fbcnn-checkpoint-sha256.txt
+
+      - name: Download development source and verify hash
+        run: |
+          set -euo pipefail
+          mkdir -p .research/input
+          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 180 "$DEV_SOURCE_URL" -o .research/input/A_lady_at_front_day.jpg
+          test "$(sha256sum .research/input/A_lady_at_front_day.jpg | awk '{print $1}')" = "$DEV_SOURCE_SHA256"
+
+      - name: Execute real FBCNN CPU JPEG specialist slice
+        run: |
+          set -euo pipefail
+          python research/run_fbcnn_vertical_slice.py \
+            --input .research/input/A_lady_at_front_day.jpg \
+            --expected-input-sha256 "$DEV_SOURCE_SHA256" \
+            --fbcnn-root .research/FBCNN \
+            --checkpoint .research/weights/fbcnn_color.pth \
+            --source-sha "$FBCNN_SOURCE_SHA" \
+            --jpeg-quality 20 \
+            --threads 4 \
+            --output research-results/fbcnn-color-q20-v1
+
+      - name: Verify evidence bundle
+        run: |
+          set -euo pipefail
+          test -s research-results/fbcnn-color-q20-v1/report.json
+          test -s research-results/fbcnn-color-q20-v1/restored_fbcnn_color.png
+          test -s research-results/fbcnn-color-q20-v1/comparison.png
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path('research-results/fbcnn-color-q20-v1/report.json').read_text())
+          assert r['source']['final_holdout_used'] is False
+          assert r['source']['degradation'] == 'single_jpeg'
+          assert r['source']['jpeg_quality'] == 20
+          assert r['model']['device'] == 'cpu'
+          assert r['resource_budget']['max_total_pc_fraction'] == 0.80
+          assert r['resource_budget']['max_parallel_heavy_models'] == 1
+          assert r['metrics']['sface_identity_gate_pass'] is True
+          assert r['production_qualified'] is False
+          print(json.dumps(r, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload real FBCNN evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: fbcnn-color-q20-real-cpu-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            research-results/fbcnn-color-q20-v1/**
+            .research/fbcnn-checkpoint-sha256.txt
