@@ -35,7 +35,11 @@ jobs:
       - name: Install benchmark dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install 'numpy>=1.26,<3' 'opencv-python-headless>=4.10,<5'
+          python -m pip install \
+            'numpy>=1.26,<3' \
+            'opencv-python-headless>=4.10,<5' \
+            'remotezip==0.12.3' \
+            'requests>=2.31,<3'
 
       - name: Validate freeze tooling syntax
         run: |
@@ -49,7 +53,7 @@ jobs:
           test ! -e benchmarks/face-smartphone-v4-final-holdout/cases.json
           test ! -e benchmarks/face-smartphone-v4-final-holdout/sources.json
 
-      - name: Discover independent V4 sources
+      - name: Discover independent ControlFace10K V4 sources
         run: python scripts/discover_face_smartphone_v4_sources.py
 
       - name: Freeze V4 without executing it
@@ -72,7 +76,11 @@ jobs:
           assert len(sources['sources']) == 20
           assert len(sources['identity_registry']) == 20
           assert len({x['identity_key'] for x in sources['identity_registry']}) == 20
+          assert len({x['clean_source_sha256'] for x in sources['sources']}) == 20
           assert sum(x['subject_domain'] == 'female' for x in sources['sources']) == 19
+          assert sources['dataset_license'] == 'CC BY 4.0'
+          assert sources['dataset_revision'] == 'a03589de1a9e028b2d16fa1eb0e019a6930e817c'
+          assert all(x.get('archive_member') for x in sources['sources'])
           assert len(cases['cases']) == 40
           assert contract['frozen_guardrails']['sface_same_identity_minimum'] == 0.363
           assert contract['frozen_guardrails']['outside_region_mae_max'] == 8.0
