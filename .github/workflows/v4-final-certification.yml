@@ -88,6 +88,7 @@ jobs:
       - name: Verify immutable V4 freeze before candidate evaluation
         run: |
           python scripts/freeze_face_smartphone_v4_final_holdout.py --verify
+          python scripts/verify_v4_freeze_history.py
           git diff --exit-code -- benchmarks/face-smartphone-v4-final-holdout
           python - <<'PY'
           import json
@@ -112,6 +113,7 @@ jobs:
           python -m pytest -q \
             tests/test_identity_anchor_v4_policy.py \
             tests/test_identity_anchor_v4_fail_closed.py \
+            tests/test_identity_anchor_v4_face_local.py \
             tests/test_face_smartphone_abstention.py \
             tests/test_reliability_aware_identity.py \
             tests/test_face_domain_guard_v2_policy.py \
@@ -125,12 +127,15 @@ jobs:
             tests/test_release_gate_wrong_person_provenance.py \
             tests/test_v4_release_protocol_static.py \
             tests/test_v4_controlface_source_parser.py \
+            tests/test_v4_freeze_history.py \
+            tests/test_same_head_windows_product.py \
+            tests/test_windows_exact_head_protocol.py \
             tests/test_female_domain_observed.py
 
       - name: Full pytest
         run: python -m pytest -q
 
-      - name: Resolve successful Windows model-pack run for exact candidate SHA
+      - name: Resolve successful Windows product run for exact candidate SHA
         id: windows
         env:
           GH_TOKEN: ${{ github.token }}
@@ -166,6 +171,42 @@ jobs:
           test "$conclusion" = success
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve successful same-HEAD female-domain benchmark
+        id: female
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ steps.request.outputs.candidate_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 3600 ))
+          run_id=""
+          status=""
+          conclusion=""
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            line="$(
+              gh api \
+                -H 'Accept: application/vnd.github+json' \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/female-domain-benchmark.yml/runs?event=pull_request&head_sha=${EXPECTED_HEAD}&per_page=20" \
+                --jq '.workflow_runs | sort_by(.created_at) | reverse | .[0] | select(. != null) | [.id, .status, (.conclusion // "pending"), .head_sha] | @tsv' \
+                2>/dev/null || true
+            )"
+            if [ -n "$line" ]; then
+              IFS=$'\t' read -r run_id status conclusion resolved_head <<< "$line"
+              test "$resolved_head" = "$EXPECTED_HEAD"
+              echo "Female-domain candidate run=$run_id status=$status conclusion=${conclusion:-pending}"
+              if [ "$status" = completed ]; then
+                test "$conclusion" = success
+                break
+              fi
+            fi
+            sleep 60
+          done
+          test -n "$run_id"
+          test "$status" = completed
+          test "$conclusion" = success
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
       - name: Restore exact-candidate verified production model pack
         env:
           GH_TOKEN: ${{ github.token }}
@@ -183,7 +224,9 @@ jobs:
           mkdir -p models
           cp -R .same-head-local-models/. models/
           test -f .same-head-release-metadata/models/model-registry.json
+          test -f .same-head-release-metadata/validation-summary.json
           cp .same-head-release-metadata/models/model-registry.json models/model-registry.json
+          python scripts/verify_same_head_windows_product.py
 
       - name: Verify frozen local model pack and CPU runtime
         run: |
@@ -281,12 +324,14 @@ jobs:
           candidate_freeze = Path('face-domain-guard-v4-candidate-freeze.json')
           candidate_sha = os.environ['CANDIDATE_SHA']
           payload = {
-              'schema_version': 1,
+              'schema_version': 2,
               'state': 'STARTED',
               'benchmark_id': os.environ['BENCHMARK_ID'],
               'candidate_id': os.environ['CANDIDATE_ID'],
               'candidate_commit_sha': candidate_sha,
               'candidate_freeze_sha256': hashlib.sha256(candidate_freeze.read_bytes()).hexdigest(),
+              'windows_product_run_id': os.environ['WINDOWS_RUN_ID'],
+              'female_domain_run_id': os.environ['FEMALE_RUN_ID'],
               'workflow_run_id': os.environ['GITHUB_RUN_ID'],
               'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
               'request_commit_sha': os.environ['REQUEST_SHA'],
@@ -295,10 +340,12 @@ jobs:
           Path(os.environ['RUNNER_TEMP'], 'v4-execution-authority.json').write_text(
               json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8'
           )
-          print(json.dumps({k: payload[k] for k in ('state','candidate_commit_sha','workflow_run_id')}, sort_keys=True))
+          print(json.dumps({k: payload[k] for k in ('state','candidate_commit_sha','windows_product_run_id','female_domain_run_id','workflow_run_id')}, sort_keys=True))
           PY
         env:
           CANDIDATE_SHA: ${{ steps.request.outputs.candidate_sha }}
+          WINDOWS_RUN_ID: ${{ steps.windows.outputs.run_id }}
+          FEMALE_RUN_ID: ${{ steps.female.outputs.run_id }}
           REQUEST_SHA: ${{ github.sha }}
 
       - name: Persist V4 consumption marker before first holdout case
@@ -355,6 +402,7 @@ jobs:
           if-no-files-found: warn
           path: |
             models/model-registry.json
+            .same-head-release-metadata/validation-summary.json
             face-smartphone-v4-calibration/baseline.json
             face-smartphone-v4-calibration/gate.json
             face-domain-guard-v4-candidate-freeze.json
