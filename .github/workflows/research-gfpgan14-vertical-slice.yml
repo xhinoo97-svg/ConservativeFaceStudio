@@ -6,6 +6,7 @@ on:
       - research/paper-quality-local-v2
     paths:
       - research/run_gfpgan14_vertical_slice.py
+      - research/run_gfpgan14_vertical_slice_exact.py
       - .github/workflows/research-gfpgan14-vertical-slice.yml
       - app/core_models.py
       - app/model_registry.py
@@ -62,14 +63,7 @@ jobs:
           python -m pip install 'basicsr==1.4.2' 'facexlib==0.3.0'
           python - <<'PY'
           import cv2, numpy, onnxruntime, psutil, torch, torchvision
-          print({
-              'torch': torch.__version__,
-              'torchvision': torchvision.__version__,
-              'opencv': cv2.__version__,
-              'onnxruntime': onnxruntime.__version__,
-              'numpy': numpy.__version__,
-              'cuda_available': torch.cuda.is_available(),
-          })
+          print({'torch': torch.__version__, 'torchvision': torchvision.__version__, 'opencv': cv2.__version__, 'onnxruntime': onnxruntime.__version__, 'numpy': numpy.__version__, 'cuda_available': torch.cuda.is_available()})
           assert not torch.cuda.is_available()
           PY
 
@@ -90,8 +84,7 @@ jobs:
           tmp=.research/weights/GFPGANv1.4.pth.part
           dst=.research/weights/GFPGANv1.4.pth
           rm -f "$tmp" "$dst"
-          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 600 \
-            "$GFPGAN_WEIGHT_URL" -o "$tmp"
+          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 600 "$GFPGAN_WEIGHT_URL" -o "$tmp"
           test -s "$tmp"
           bytes="$(stat -c%s "$tmp")"
           test "$bytes" -eq 348632874
@@ -102,15 +95,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .research/input
-          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 180 \
-            "$DEV_SOURCE_URL" -o .research/input/A_lady_at_front_day.jpg
+          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 180 "$DEV_SOURCE_URL" -o .research/input/A_lady_at_front_day.jpg
           actual="$(sha256sum .research/input/A_lady_at_front_day.jpg | awk '{print $1}')"
           test "$actual" = "$DEV_SOURCE_SHA256"
 
       - name: Execute real GFPGAN v1.4 CPU vertical slice
         run: |
           set -euo pipefail
-          python research/run_gfpgan14_vertical_slice.py \
+          python research/run_gfpgan14_vertical_slice_exact.py \
             --input .research/input/A_lady_at_front_day.jpg \
             --expected-input-sha256 "$DEV_SOURCE_SHA256" \
             --checkpoint .research/weights/GFPGANv1.4.pth \
