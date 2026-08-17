@@ -145,6 +145,16 @@ def _verify_execution_authority(path: Path, candidate_freeze: Path, candidate: d
         raise RuntimeError("V4 execution authority does not match candidate freeze")
     if authority.get("candidate_freeze_sha256") != core._sha256(candidate_freeze):
         raise RuntimeError("V4 execution authority candidate-freeze checksum mismatch")
+
+    windows_run_id = str(authority.get("windows_product_run_id", "")).strip()
+    female_run_id = str(authority.get("female_domain_run_id", "")).strip()
+    if not windows_run_id:
+        raise RuntimeError("V4 execution authority is missing exact-SHA Windows product run id")
+    if not female_run_id:
+        raise RuntimeError("V4 execution authority is missing exact-SHA female-domain run id")
+    if not windows_run_id.isdigit() or not female_run_id.isdigit():
+        raise RuntimeError("V4 prerequisite workflow run ids must be numeric")
+
     nonce = str(authority.get("execution_nonce", "")).strip()
     if len(nonce) < 16:
         raise RuntimeError("V4 execution authority is missing a one-shot nonce")
@@ -204,6 +214,8 @@ def run(
     report["final_holdout_one_shot_protocol"] = True
     report["candidate_freeze_sha256"] = core._sha256(candidate_freeze)
     report["execution_authority_sha256"] = core._sha256(execution_authority)
+    report["windows_product_run_id"] = str(authority["windows_product_run_id"])
+    report["female_domain_run_id"] = str(authority["female_domain_run_id"])
     report["workflow_run_id"] = str(authority["workflow_run_id"])
     report["execution_nonce_sha256"] = hashlib.sha256(
         str(authority["execution_nonce"]).encode("utf-8")
