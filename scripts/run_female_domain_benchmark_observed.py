@@ -21,9 +21,6 @@ from scripts.face_smartphone_abstention import is_identity_safety_failure
 from scripts.run_female_domain_benchmark_resilient import _resilient_urlopen
 
 
-# Curated from public biographical metadata only. The list intentionally spans
-# contemporary/vintage sources and different public portrait contexts. No image
-# classifier is used to infer gender, age, skin tone, makeup, or morphology.
 CURATED_FEMALE_DOMAIN = (
     benchmark.CuratedPortrait("eileen_collins", "Eileen Collins", "Eileen Collins NASA portrait", "adult woman; contemporary institutional portrait"),
     benchmark.CuratedPortrait("mae_jemison", "Mae Jemison", "Mae Jemison NASA portrait", "adult woman; contemporary institutional portrait"),
@@ -64,6 +61,7 @@ CURATED_FEMALE_DOMAIN = (
 
 _BASE_MAKE_SCENARIOS = benchmark.make_scenarios
 _BASE_RUN_DOMAIN_BENCHMARK = benchmark.run_domain_benchmark
+_FEMALE_SAFE_IDENTITY_ABSTENTION_SCENARIOS = {"opaque_sticker_single"}
 try:
     _LANDMARK_BACKEND = choose_backend(prefer_embeddings=False)
 except Exception:
@@ -132,7 +130,10 @@ def _observed_make_scenarios(clean: np.ndarray, *, seed: int = 20260808, profile
 
 
 def _is_identity_guardrail_abstention(row: dict) -> bool:
-    return is_identity_safety_failure(row.get("error"))
+    return bool(
+        str(row.get("scenario", "")) in _FEMALE_SAFE_IDENTITY_ABSTENTION_SCENARIOS
+        and is_identity_safety_failure(row.get("error"))
+    )
 
 
 def _postprocess_guardrail_abstentions(report: dict, output: Path) -> dict:
@@ -142,7 +143,7 @@ def _postprocess_guardrail_abstentions(report: dict, output: Path) -> dict:
             continue
         message = str(row.pop("error"))
         row["abstained"] = True
-        row["abstention_reason"] = "identity_guardrail"
+        row["abstention_reason"] = "identity_guardrail_low_evidence"
         row["abstention_detail"] = message
         row["target95_applicable"] = False
         row["target95_passed"] = None
