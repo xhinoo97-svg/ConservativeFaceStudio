@@ -18,7 +18,10 @@ def test_v4_protocol_python_files_compile() -> None:
         "scripts/face_smartphone_abstention.py",
         "scripts/run_face_smartphone_v4_calibration.py",
         "scripts/run_face_smartphone_v4_final_holdout.py",
+        "scripts/verify_v4_freeze_history.py",
+        "scripts/verify_same_head_windows_product.py",
         "app/identity_anchor_v4_policy.py",
+        "app/identity_anchor_v4_hardening.py",
     ):
         source = _text(relative)
         compile(source, str(ROOT / relative), "exec")
@@ -83,6 +86,39 @@ def test_v4_final_workflow_recalibrates_with_same_abstention_aware_runner() -> N
     assert calibration < consume
 
 
+def test_same_head_windows_and_female_must_pass_before_v4_is_consumed() -> None:
+    workflow = _text(".github/workflows/v4-final-certification.yml")
+    windows = workflow.index("Resolve successful Windows product run for exact candidate SHA")
+    female = workflow.index("Resolve successful same-HEAD female-domain benchmark")
+    calibration = workflow.index("Run frozen 60-case calibration for V4 candidate")
+    consume = workflow.index("Persist V4 consumption marker before first holdout case")
+    assert windows < calibration < consume
+    assert female < calibration < consume
+    assert "windows-build.yml/runs?event=pull_request&head_sha=${EXPECTED_HEAD}" in workflow
+    assert "female-domain-benchmark.yml/runs?event=pull_request&head_sha=${EXPECTED_HEAD}" in workflow
+    assert "id: windows" in workflow[windows:female]
+    assert "id: female" in workflow[female:calibration]
+
+
+def test_one_shot_authority_records_exact_prerequisite_run_ids() -> None:
+    workflow = _text(".github/workflows/v4-final-certification.yml")
+    authority = workflow.index("Build one-shot execution authority")
+    consume = workflow.index("Persist V4 consumption marker before first holdout case")
+    section = workflow[authority:consume]
+    assert "'windows_product_run_id': os.environ['WINDOWS_RUN_ID']" in section
+    assert "'female_domain_run_id': os.environ['FEMALE_RUN_ID']" in section
+    assert "WINDOWS_RUN_ID: ${{ steps.windows.outputs.run_id }}" in section
+    assert "FEMALE_RUN_ID: ${{ steps.female.outputs.run_id }}" in section
+
+
+def test_v4_freeze_history_is_checked_before_candidate_evaluation() -> None:
+    workflow = _text(".github/workflows/v4-final-certification.yml")
+    verify = workflow.index("Verify immutable V4 freeze before candidate evaluation")
+    targeted = workflow.index("Targeted identity, provenance, MAIN and partial-reference regressions")
+    section = workflow[verify:targeted]
+    assert "python scripts/verify_v4_freeze_history.py" in section
+
+
 def test_v4_identity_and_provenance_regressions_are_targeted_before_full_pytest() -> None:
     workflow = _text(".github/workflows/v4-final-certification.yml")
     targeted = workflow.index("Targeted identity, provenance, MAIN and partial-reference regressions")
@@ -91,10 +127,14 @@ def test_v4_identity_and_provenance_regressions_are_targeted_before_full_pytest(
     for required in (
         "tests/test_identity_anchor_v4_policy.py",
         "tests/test_identity_anchor_v4_fail_closed.py",
+        "tests/test_identity_anchor_v4_face_local.py",
         "tests/test_face_smartphone_abstention.py",
         "tests/test_release_gate_wrong_person_provenance.py",
         "tests/test_v4_release_protocol_static.py",
         "tests/test_v4_controlface_source_parser.py",
+        "tests/test_v4_freeze_history.py",
+        "tests/test_same_head_windows_product.py",
+        "tests/test_windows_exact_head_protocol.py",
         "tests/test_female_domain_observed.py",
     ):
         assert required in section
