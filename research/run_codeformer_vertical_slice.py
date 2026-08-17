@@ -6,6 +6,7 @@ import json
 import platform
 import sys
 import time
+import types
 from pathlib import Path
 
 import cv2
@@ -19,10 +20,26 @@ from app.core_models import ensure_core_pretrained_models
 from app.face_analysis import cosine_similarity
 from app.opencv_zoo_face import OpenCVZooFaceEngine
 from app.pretrained_values import FACE_MODEL_DEFAULTS
+from app.resource_budget import (
+    apply_resource_budget,
+    assert_memory_within_budget,
+    detect_resource_budget,
+    resource_snapshot,
+)
 
 
-def load_model(root: Path, checkpoint: Path):
+def load_model(root: Path, checkpoint: Path, source_sha: str):
     import torch
+
+    # The official CodeFormer source snapshot imports basicsr.version from
+    # basicsr/__init__.py but does not ship that generated file.  Provide only the
+    # two metadata attributes required by that import.  This does not alter model
+    # code or claim an upstream package version.
+    version_module = types.ModuleType('basicsr.version')
+    version_module.__version__ = '0+official-source-snapshot'
+    version_module.__gitsha__ = str(source_sha)[:12]
+    sys.modules.setdefault('basicsr.version', version_module)
+
     sys.path.insert(0, str(root))
     from basicsr.archs.codeformer_arch import CodeFormer
 
@@ -43,6 +60,7 @@ def load_model(root: Path, checkpoint: Path):
 
 def infer(net, aligned_bgr: np.ndarray, w: float) -> np.ndarray:
     import torch
+
     rgb = aligned_bgr[:, :, ::-1].astype(np.float32) / 255.0
     tensor = torch.from_numpy(np.ascontiguousarray(rgb.transpose(2, 0, 1))).unsqueeze(0)
     tensor = (tensor - 0.5) / 0.5
@@ -65,12 +83,17 @@ def main() -> int:
     parser.add_argument('--threads', type=int, default=4)
     args = parser.parse_args()
 
+    budget = detect_resource_budget(0.80)
+    apply_resource_budget(budget)
+
     import torch
-    torch.set_num_threads(max(1, int(args.threads)))
+    effective_threads = max(1, min(int(args.threads), int(budget.allowed_processors)))
+    torch.set_num_threads(effective_threads)
     try:
         torch.set_num_interop_threads(1)
     except RuntimeError:
         pass
+    cv2.setNumThreads(effective_threads)
 
     input_sha = common.sha256_path(args.input)
     if input_sha.lower() != args.expected_input_sha256.lower():
@@ -92,18 +115,32 @@ def main() -> int:
     cv2.imwrite(str(args.output / 'clean_aligned.png'), clean_aligned)
     cv2.imwrite(str(args.output / 'degraded_aligned.png'), degraded_aligned)
 
+    # Fail before load if even a conservative four-times-checkpoint reservation
+    # would cross the 80% physical-RAM ceiling.
+    assert_memory_within_budget(
+        budget,
+        stage='codeformer_preload',
+        reserve_bytes=int(args.checkpoint.stat().st_size) * 4,
+    )
+    resource_before_load = resource_snapshot(budget)
+
     baseline = common._rss_mb()
     load_start = time.perf_counter()
     with common.PeakRSSSampler() as load_sampler:
-        net = load_model(args.codeformer_root, args.checkpoint)
+        net = load_model(args.codeformer_root, args.checkpoint, args.source_sha)
     load_seconds = time.perf_counter() - load_start
     after_load = common._rss_mb()
+    assert_memory_within_budget(budget, stage='codeformer_postload')
+    resource_after_load = resource_snapshot(budget)
 
     _ = infer(net, degraded_aligned, args.fidelity_weight)
+    assert_memory_within_budget(budget, stage='codeformer_post_warmup')
     infer_start = time.perf_counter()
     with common.PeakRSSSampler() as infer_sampler:
         restored = infer(net, degraded_aligned, args.fidelity_weight)
     infer_seconds = time.perf_counter() - infer_start
+    assert_memory_within_budget(budget, stage='codeformer_post_inference')
+    resource_after_inference = resource_snapshot(budget)
 
     restored_path = args.output / 'restored_codeformer_w05.png'
     cv2.imwrite(str(restored_path), restored)
@@ -119,7 +156,7 @@ def main() -> int:
     identity_pass = identity_restored >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
 
     report = {
-        'experiment': 'codeformer_vertical_slice_v1',
+        'experiment': 'codeformer_vertical_slice_v2_resource_capped',
         'qualification_scope': 'development_host_cpu_only',
         'production_qualified': False,
         'production_blockers': [
@@ -145,7 +182,15 @@ def main() -> int:
             'fidelity_weight': float(args.fidelity_weight),
             'device': 'cpu',
             'torch_version': torch.__version__,
-            'threads': int(args.threads),
+            'requested_threads': int(args.threads),
+            'effective_threads': int(effective_threads),
+        },
+        'resource_budget': {
+            'max_total_pc_fraction': 0.80,
+            'max_parallel_heavy_models': 1,
+            'before_load': resource_before_load,
+            'after_load': resource_after_load,
+            'after_inference': resource_after_inference,
         },
         'face_pipeline': {
             'detector': 'OpenCV Zoo YuNet',
@@ -189,11 +234,16 @@ def main() -> int:
     }
     del net
     gc.collect()
+    assert_memory_within_budget(budget, stage='codeformer_post_unload')
     report['rss_mb']['post_unload_gc'] = common._rss_mb()
+    report['resource_budget']['post_unload'] = resource_snapshot(budget)
     (args.output / 'report.json').write_text(json.dumps(report, indent=2, sort_keys=True), encoding='utf-8')
 
     if not identity_pass:
-        raise RuntimeError(f'CodeFormer identity gate failed: {identity_restored:.6f} < {FACE_MODEL_DEFAULTS.sface_same_identity_cosine:.6f}')
+        raise RuntimeError(
+            f'CodeFormer identity gate failed: {identity_restored:.6f} < '
+            f'{FACE_MODEL_DEFAULTS.sface_same_identity_cosine:.6f}'
+        )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
