@@ -25,8 +25,6 @@ from scripts.run_face_smartphone_baseline import production_model_paths, _sha256
 from scripts.verify_v4_freeze_history import verify as verify_v4_freeze_history
 
 CANDIDATE_ID = "face-domain-guard-v4"
-# Pre-V4 production baseline. Later benchmark/workflow-only commits do not weaken
-# this requirement because only the app/ diff is hashed below.
 BASE_SHA = "3f7f461826af72870357c1822c1b81629121171e"
 
 
@@ -107,10 +105,11 @@ def build(calibration_gate: Path, model_root: Path) -> dict[str, Any]:
         "candidate_changed_app_files": changed_app_files,
         "candidate_configuration": {
             "identity_firewall_threshold": 0.363,
-            "identity_anchor_policy": "immutable-main-plus-direct-main-bridged-trusted-references",
+            "identity_anchor_policy": "immutable-main-plus-main-bridged-trusted-references",
             "same_canvas_rule": "whole-canvas-match-plus-inner-face-peripheral-identity-proof; direct-sface-edge-only",
-            "reference_only_cluster_rule": "single-link-component-is-ranking-only; never-identity-authority; no-transitive-trust",
-            "direct_sface_matrix_rule": "reuse-preflight-existing-sface-pairwise-matrix; no-second-biometric-inference",
+            "reference_only_cluster_rule": "never-identity-authority-without-main-or-same-canvas-bridge",
+            "single_link_component_rule": "ranking-only; never-identity-authority; no-transitive-trust",
+            "direct_sface_matrix_rule": "reuse-preflight-existing-sface-pairwise-matrix; fixed-authority-direct-edges-only; no-second-biometric-inference",
             "identity_rejected_rule": "never-observed-donor-unless-exact-face-local-same-canvas-verified-or-direct-authority-edge",
             "final_identity_anchor_rule": "immutable-main-always-present; untrusted-raw-references-excluded",
             "no_identity_score_rule": "fail-closed; never max-empty-default-pass; proxy-not-v4-authority",
