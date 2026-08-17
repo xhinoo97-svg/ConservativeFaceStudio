@@ -11,7 +11,14 @@ import scripts.verify_same_head_female_domain as verifier
 HEAD = "a" * 40
 
 
-def _write_report(root: Path, *, source_head: str = HEAD, portraits: int = 60, errors: int = 0) -> Path:
+def _write_report(
+    root: Path,
+    *,
+    source_head: str = HEAD,
+    portraits: int = 60,
+    errors: int = 0,
+    completed_restorations: int | None = None,
+) -> Path:
     path = root / "female-domain-benchmark" / "female-domain-benchmark.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     cases = []
@@ -31,7 +38,10 @@ def _write_report(root: Path, *, source_head: str = HEAD, portraits: int = 60, e
         "portrait_count": portraits,
         "minimum_required_portraits": 60,
         "quick_profile_cases_per_portrait": 5,
-        "summary": {"completed_cases": portraits * 5, "error_cases": errors},
+        "summary": {
+            "completed_cases": portraits * 5 if completed_restorations is None else completed_restorations,
+            "error_cases": errors,
+        },
         "cases": cases,
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -43,8 +53,17 @@ def test_same_head_female_domain_accepts_300_case_floor(tmp_path: Path, monkeypa
     monkeypatch.setattr(verifier, "_head", lambda: HEAD)
     result = verifier.verify(report)
     assert result["portrait_count"] == 60
-    assert result["completed_cases"] == 300
+    assert result["executed_cases"] == 300
+    assert result["completed_restorations"] == 300
     assert set(result["scenario_coverage"]) == {"gaussian_heavy_single", "mosaic_single"}
+
+
+def test_safe_abstentions_still_count_as_executed_cases(tmp_path: Path, monkeypatch) -> None:
+    report = _write_report(tmp_path, completed_restorations=294)
+    monkeypatch.setattr(verifier, "_head", lambda: HEAD)
+    result = verifier.verify(report)
+    assert result["executed_cases"] == 300
+    assert result["completed_restorations"] == 294
 
 
 def test_same_head_female_domain_rejects_wrong_sha(tmp_path: Path, monkeypatch) -> None:
