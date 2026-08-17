@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-"""Fail-closed hardening for the V4 MAIN-bridged identity policy."""
+"""Fail-closed hardening for the V4 MAIN-bridged identity policy.
+
+The preflight identity component is useful for ranking, but it is single-link: A-B and
+B-C can form one component even when A-C is below the SFace threshold. V4 identity
+authority therefore never propagates transitively through that component. It uses only
+direct SFace edges already computed during preflight, anchored to MAIN source 0 or to
+an independently face-local same-canvas bridge source.
+"""
 
 from functools import wraps
+from typing import Any
 
 _INSTALLED = False
 
@@ -31,6 +39,169 @@ def _face_local_identity_bridge_sources(workspace) -> set[int]:
         if source > 0:
             result.add(source)
     return result
+
+
+def _preflight_direct_sface_edges(workspace) -> tuple[dict[int, int], list[list[float]], float] | None:
+    """Parse the already-computed preflight SFace matrix; never run another model."""
+    from app.pretrained_values import FACE_MODEL_DEFAULTS
+
+    payload = workspace.metadata.get("preflight_identity_similarity")
+    if not isinstance(payload, dict):
+        return None
+    raw_sources = payload.get("source_indices")
+    raw_matrix = payload.get("matrix")
+    if not isinstance(raw_sources, list) or not isinstance(raw_matrix, list):
+        return None
+    try:
+        sources = [int(value) for value in raw_sources]
+    except (TypeError, ValueError):
+        return None
+    if not sources or len(set(sources)) != len(sources) or len(raw_matrix) != len(sources):
+        return None
+
+    matrix: list[list[float]] = []
+    try:
+        for row in raw_matrix:
+            if not isinstance(row, list) or len(row) != len(sources):
+                return None
+            matrix.append([float(value) for value in row])
+        recorded_minimum = float(payload.get("minimum", FACE_MODEL_DEFAULTS.sface_same_identity_cosine))
+    except (TypeError, ValueError):
+        return None
+    minimum = max(float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine), recorded_minimum)
+    positions = {source: index for index, source in enumerate(sources)}
+    return positions, matrix, minimum
+
+
+def _direct_identity_authority(workspace) -> dict[int, tuple[int, ...]]:
+    """Return target source -> fixed authority anchors with a direct SFace edge.
+
+    Authorities are fixed before traversal: MAIN (if it has an embedding) plus exact
+    face-local same-canvas bridge sources. Newly trusted references never become new
+    anchors, which prevents single-link/transitive identity propagation.
+    """
+    parsed = _preflight_direct_sface_edges(workspace)
+    if parsed is None:
+        workspace.metadata["identity_direct_sface_matrix_valid"] = False
+        workspace.metadata["identity_direct_sface_authority"] = {}
+        return {}
+    positions, matrix, minimum = parsed
+    same_canvas = _face_local_identity_bridge_sources(workspace)
+    anchors = ({0} if 0 in positions else set()) | {source for source in same_canvas if source in positions}
+    authority: dict[int, tuple[int, ...]] = {}
+    for source, source_position in positions.items():
+        if source <= 0:
+            continue
+        linked: list[int] = []
+        for anchor in sorted(anchors):
+            if anchor == source:
+                continue
+            value = matrix[source_position][positions[anchor]]
+            if value >= minimum:
+                linked.append(anchor)
+        if linked:
+            authority[source] = tuple(linked)
+
+    workspace.metadata["identity_direct_sface_matrix_valid"] = True
+    workspace.metadata["identity_direct_sface_threshold"] = float(minimum)
+    workspace.metadata["identity_direct_sface_fixed_anchor_original_source_indices"] = sorted(anchors)
+    workspace.metadata["identity_direct_sface_authority"] = {
+        str(source): list(anchors_for_source)
+        for source, anchors_for_source in sorted(authority.items())
+    }
+    return authority
+
+
+def _harden_bridge_result(
+    workspace,
+    original_bridge,
+) -> tuple[list[bool], list[str], set[int]]:
+    count = len(workspace.references)
+    before_flags_raw = workspace.metadata.get("reference_identity_verified")
+    before_flags = (
+        [bool(value) for value in before_flags_raw]
+        if isinstance(before_flags_raw, list) and len(before_flags_raw) == count
+        else [False] * count
+    )
+    before_reasons_raw = workspace.metadata.get("reference_identity_reasons")
+    before_reasons = (
+        [str(value) for value in before_reasons_raw]
+        if isinstance(before_reasons_raw, list) and len(before_reasons_raw) == count
+        else ["direct_sface" if value else "rejected" for value in before_flags]
+    )
+
+    flags, reasons, _trusted = original_bridge(workspace)
+    authority = _direct_identity_authority(workspace)
+    same_canvas = _face_local_identity_bridge_sources(workspace)
+    order = workspace.metadata.get("runtime_source_order")
+    if not isinstance(order, list) or len(order) != count + 1:
+        order = list(range(count + 1))
+
+    for index in range(count):
+        try:
+            source = int(order[index + 1])
+        except (TypeError, ValueError, IndexError):
+            flags[index] = False
+            reasons[index] = "rejected_invalid_source_mapping"
+            continue
+
+        if source in same_canvas and flags[index]:
+            reasons[index] = "verified_face_local_same_canvas_main_bridge"
+            continue
+        if before_flags[index]:
+            flags[index] = True
+            reasons[index] = before_reasons[index] or "direct_sface"
+            continue
+        linked = authority.get(source, ())
+        if linked:
+            flags[index] = True
+            if 0 in linked:
+                reasons[index] = "direct_main_sface_bridge"
+            else:
+                reasons[index] = "same_canvas_direct_sface_bridge"
+            continue
+        if reasons[index] == "same_canvas_bridged_cross_reference_cluster" or flags[index]:
+            flags[index] = False
+            reasons[index] = "rejected_transitive_component_only"
+
+    trusted = {
+        int(order[index + 1])
+        for index, flag in enumerate(flags)
+        if flag and index + 1 < len(order)
+    }
+    workspace.metadata["reference_identity_verified"] = flags
+    workspace.metadata["reference_identity_reasons"] = reasons
+    workspace.metadata["identity_trusted_original_source_indices"] = sorted(trusted)
+    workspace.metadata["identity_transitive_component_authority_disabled"] = True
+    return flags, reasons, trusted
+
+
+def _harden_trusted_sources(workspace, reference_count: int, original_trusted) -> set[int]:
+    flags = workspace.metadata.get("reference_identity_verified")
+    scores = workspace.metadata.get("reference_identity_scores")
+    if isinstance(flags, list) and len(flags) == reference_count:
+        # Once LANDMARKS has produced the hardened flags, reuse that exact decision.
+        score_values = scores if isinstance(scores, list) and len(scores) == reference_count else [None] * reference_count
+        order = workspace.metadata.get("runtime_source_order")
+        if not isinstance(order, list) or len(order) != reference_count + 1:
+            order = list(range(reference_count + 1))
+        return {
+            int(order[index + 1])
+            for index, flag in enumerate(flags)
+            if bool(flag) and score_values[index] is not None and index + 1 < len(order)
+        }
+
+    # Before LANDMARKS, allow only fixed direct SFace edges plus an exact face-local
+    # same-canvas source that itself had a preflight embedding. No component-wide trust.
+    authority = _direct_identity_authority(workspace)
+    parsed = _preflight_direct_sface_edges(workspace)
+    positions = parsed[0] if parsed is not None else {}
+    same_canvas = _face_local_identity_bridge_sources(workspace)
+    trusted = {source for source in authority if source > 0}
+    trusted.update(source for source in same_canvas if source in positions)
+    workspace.metadata["identity_transitive_component_authority_disabled"] = True
+    workspace.metadata["identity_pre_landmarks_direct_trusted_original_source_indices"] = sorted(trusted)
+    return trusted
 
 
 def _require_real_sface_result(result) -> None:
@@ -70,6 +241,24 @@ def install_identity_anchor_v4_hardening() -> None:
 
         face_local_same_canvas._cfs_v4_face_local_hardened = True  # type: ignore[attr-defined]
         policy._same_canvas_original_sources = face_local_same_canvas
+
+    original_bridge = policy._bridge_reference_identity
+    if not getattr(original_bridge, "_cfs_v4_direct_edge_hardened", False):
+        @wraps(original_bridge)
+        def direct_edge_bridge(workspace):
+            return _harden_bridge_result(workspace, original_bridge)
+
+        direct_edge_bridge._cfs_v4_direct_edge_hardened = True  # type: ignore[attr-defined]
+        policy._bridge_reference_identity = direct_edge_bridge
+
+    original_trusted = policy._trusted_identity_source_indices
+    if not getattr(original_trusted, "_cfs_v4_direct_edge_hardened", False):
+        @wraps(original_trusted)
+        def direct_edge_trusted(workspace, reference_count: int):
+            return _harden_trusted_sources(workspace, reference_count, original_trusted)
+
+        direct_edge_trusted._cfs_v4_direct_edge_hardened = True  # type: ignore[attr-defined]
+        policy._trusted_identity_source_indices = direct_edge_trusted
 
     original_require = policy._require_identity_result_evidence
     if not getattr(original_require, "_cfs_v4_real_sface_hardened", False):
