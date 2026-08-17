@@ -1,0 +1,146 @@
+name: Research GFPGAN v1.4 vertical slice
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - research/run_gfpgan14_vertical_slice.py
+      - .github/workflows/research-gfpgan14-vertical-slice.yml
+      - app/core_models.py
+      - app/model_registry.py
+      - app/opencv_zoo_face.py
+      - app/face_analysis.py
+      - app/pretrained_values.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-gfpgan-v1-4-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-cpu-vertical-slice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      GFPGAN_SOURCE_SHA: 7552a7791caad982045a7bbe5634bbf1cd5c8679
+      GFPGAN_WEIGHT_URL: https://github.com/TencentARC/GFPGAN/releases/download/v1.3.4/GFPGANv1.4.pth
+      DEV_SOURCE_URL: https://upload.wikimedia.org/wikipedia/commons/7/79/A_lady_at_front_day.jpg
+      DEV_SOURCE_SHA256: 6853c64a4a74a09481ef260ff953562ac65628e39d56cb30d58e7035125c7e0a
+
+    steps:
+      - name: Checkout research branch commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install isolated compatible research dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'numpy>=1.26,<2' \
+            'opencv-python>=4.10,<5' \
+            'onnxruntime>=1.20,<2' \
+            'psutil>=5.9,<8' \
+            'scipy>=1.10,<2' \
+            'pyyaml>=6,<7' \
+            'lmdb>=1.4,<2' \
+            'tqdm>=4.64,<5' \
+            'yapf>=0.40,<1'
+          python -m pip install 'torch==2.1.2+cpu' 'torchvision==0.16.2+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'basicsr==1.4.2' 'facexlib==0.3.0'
+          python - <<'PY'
+          import cv2, numpy, onnxruntime, psutil, torch, torchvision
+          print({
+              'torch': torch.__version__,
+              'torchvision': torchvision.__version__,
+              'opencv': cv2.__version__,
+              'onnxruntime': onnxruntime.__version__,
+              'numpy': numpy.__version__,
+              'cuda_available': torch.cuda.is_available(),
+          })
+          assert not torch.cuda.is_available()
+          PY
+
+      - name: Fetch exact official GFPGAN source commit
+        run: |
+          set -euo pipefail
+          rm -rf .research/GFPGAN
+          git clone --filter=blob:none https://github.com/TencentARC/GFPGAN.git .research/GFPGAN
+          git -C .research/GFPGAN checkout --detach "$GFPGAN_SOURCE_SHA"
+          actual="$(git -C .research/GFPGAN rev-parse HEAD)"
+          test "$actual" = "$GFPGAN_SOURCE_SHA"
+          python -m pip install --no-deps -e .research/GFPGAN
+
+      - name: Download official GFPGAN v1.4 checkpoint
+        run: |
+          set -euo pipefail
+          mkdir -p .research/weights
+          tmp=.research/weights/GFPGANv1.4.pth.part
+          dst=.research/weights/GFPGANv1.4.pth
+          rm -f "$tmp" "$dst"
+          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 600 \
+            "$GFPGAN_WEIGHT_URL" -o "$tmp"
+          test -s "$tmp"
+          bytes="$(stat -c%s "$tmp")"
+          test "$bytes" -eq 348632874
+          mv "$tmp" "$dst"
+          sha256sum "$dst" | tee .research/gfpgan14-checkpoint-sha256.txt
+
+      - name: Download same V1 development source and verify hash
+        run: |
+          set -euo pipefail
+          mkdir -p .research/input
+          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 180 \
+            "$DEV_SOURCE_URL" -o .research/input/A_lady_at_front_day.jpg
+          actual="$(sha256sum .research/input/A_lady_at_front_day.jpg | awk '{print $1}')"
+          test "$actual" = "$DEV_SOURCE_SHA256"
+
+      - name: Execute real GFPGAN v1.4 CPU vertical slice
+        run: |
+          set -euo pipefail
+          python research/run_gfpgan14_vertical_slice.py \
+            --input .research/input/A_lady_at_front_day.jpg \
+            --expected-input-sha256 "$DEV_SOURCE_SHA256" \
+            --checkpoint .research/weights/GFPGANv1.4.pth \
+            --source-sha "$GFPGAN_SOURCE_SHA" \
+            --threads 4 \
+            --output research-results/gfpgan-v1-4-v1
+
+      - name: Verify evidence bundle
+        run: |
+          set -euo pipefail
+          test -s research-results/gfpgan-v1-4-v1/report.json
+          test -s research-results/gfpgan-v1-4-v1/restored_gfpgan_v1_4.png
+          test -s research-results/gfpgan-v1-4-v1/comparison.png
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('research-results/gfpgan-v1-4-v1/report.json').read_text())
+          assert report['source']['final_holdout_used'] is False
+          assert report['model']['device'] == 'cpu'
+          assert report['metrics']['sface_identity_gate_pass'] is True
+          assert report['production_qualified'] is False
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload real vertical-slice evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: gfpgan-v1-4-real-cpu-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            research-results/gfpgan-v1-4-v1/**
+            .research/gfpgan14-checkpoint-sha256.txt
