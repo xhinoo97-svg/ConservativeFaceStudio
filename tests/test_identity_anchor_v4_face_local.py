@@ -70,3 +70,11 @@ def test_v4_final_identity_rejects_proxy_even_with_nonempty_scores() -> None:
 
     sface = SimpleNamespace(details={"engine": "opencv-zoo-sface-cpu", "scores": [0.40]})
     _require_real_sface_result(sface)
+
+
+def test_v4_final_identity_rejects_missing_or_empty_sface_evidence() -> None:
+    with pytest.raises(BlockExecutionError, match="evidenza strutturata"):
+        _require_real_sface_result(SimpleNamespace(details=None))
+
+    with pytest.raises(BlockExecutionError, match="senza confronti SFace"):
+        _require_real_sface_result(SimpleNamespace(details={"engine": "opencv-zoo-sface-cpu", "scores": []}))
