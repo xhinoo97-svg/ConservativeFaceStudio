@@ -28,6 +28,8 @@ from scripts import discover_face_smartphone_v4_sources as source_discovery
 from scripts import freeze_face_smartphone_v4_final_holdout as final_freeze
 from scripts import run_face_smartphone_baseline as core
 from scripts.face_smartphone_abstention import apply_predeclared_abstentions
+from scripts.verify_same_head_female_domain import DEFAULT_REPORT as FEMALE_REPORT, verify as verify_female_domain
+from scripts.verify_same_head_windows_product import DEFAULT_METADATA_ROOT as WINDOWS_METADATA_ROOT, verify as verify_windows_product
 
 CANDIDATE_ID = "face-domain-guard-v4"
 BENCHMARK_ID = "cfs-face-smartphone-v4-final-holdout"
@@ -131,6 +133,11 @@ def _verify_candidate_freeze(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _valid_sha256(value: Any) -> bool:
+    text = str(value or "").lower()
+    return len(text) == 64 and all(char in "0123456789abcdef" for char in text)
+
+
 def _verify_execution_authority(path: Path, candidate_freeze: Path, candidate: dict[str, Any]) -> dict[str, Any]:
     authority = json.loads(path.read_text(encoding="utf-8"))
     if authority.get("state") != "STARTED":
@@ -154,6 +161,10 @@ def _verify_execution_authority(path: Path, candidate_freeze: Path, candidate: d
         raise RuntimeError("V4 execution authority is missing exact-SHA female-domain run id")
     if not windows_run_id.isdigit() or not female_run_id.isdigit():
         raise RuntimeError("V4 prerequisite workflow run ids must be numeric")
+    if not _valid_sha256(authority.get("windows_validation_summary_sha256")):
+        raise RuntimeError("V4 execution authority is missing Windows validation-summary SHA-256")
+    if not _valid_sha256(authority.get("female_domain_report_sha256")):
+        raise RuntimeError("V4 execution authority is missing female-domain report SHA-256")
 
     nonce = str(authority.get("execution_nonce", "")).strip()
     if len(nonce) < 16:
@@ -162,6 +173,19 @@ def _verify_execution_authority(path: Path, candidate_freeze: Path, candidate: d
     if not run_id:
         raise RuntimeError("V4 execution authority is missing workflow_run_id")
     return authority
+
+
+def _verify_prerequisite_evidence(authority: dict[str, Any]) -> tuple[dict, dict]:
+    windows = verify_windows_product()
+    female = verify_female_domain()
+    windows_summary = WINDOWS_METADATA_ROOT / "validation-summary.json"
+    if not windows_summary.is_file():
+        raise RuntimeError("Windows validation-summary evidence disappeared before V4 execution")
+    if core._sha256(windows_summary) != str(authority["windows_validation_summary_sha256"]).lower():
+        raise RuntimeError("Windows validation-summary changed after V4 authority was built")
+    if core._sha256(FEMALE_REPORT) != str(authority["female_domain_report_sha256"]).lower():
+        raise RuntimeError("Female-domain report changed after V4 authority was built")
+    return windows, female
 
 
 def _verify_source_dimensions(source_paths: dict[str, Path]) -> None:
@@ -188,6 +212,7 @@ def run(
 ) -> dict[str, Any]:
     candidate = _verify_candidate_freeze(candidate_freeze)
     authority = _verify_execution_authority(execution_authority, candidate_freeze, candidate)
+    windows_product, female_domain = _verify_prerequisite_evidence(authority)
 
     cases_payload = final_freeze.build_cases()
     original_freeze = core.freeze
@@ -214,6 +239,8 @@ def run(
     report["final_holdout_one_shot_protocol"] = True
     report["candidate_freeze_sha256"] = core._sha256(candidate_freeze)
     report["execution_authority_sha256"] = core._sha256(execution_authority)
+    report["same_head_windows_product"] = windows_product
+    report["same_head_female_domain"] = female_domain
     report["windows_product_run_id"] = str(authority["windows_product_run_id"])
     report["female_domain_run_id"] = str(authority["female_domain_run_id"])
     report["workflow_run_id"] = str(authority["workflow_run_id"])
