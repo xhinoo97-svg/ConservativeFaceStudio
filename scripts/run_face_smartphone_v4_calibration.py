@@ -5,8 +5,8 @@ from __future__ import annotations
 The underlying materialization/evaluation code is unchanged. Only failures already
 predeclared by the frozen manifest as LOW_EVIDENCE_ABSTAIN may be reclassified as a
 safe abstention, and only for known identity-safety guardrail messages. V4 admission
-is also bound to the same Git SHA whose Windows installer and portable package have
-already passed the offline product validation workflow.
+is bound to the same Git SHA whose Windows product and female-domain benchmark have
+already passed their prerequisite workflows.
 """
 
 import argparse
@@ -20,6 +20,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
 
 from scripts import run_face_smartphone_baseline as core
 from scripts.face_smartphone_abstention import apply_predeclared_abstentions
+from scripts.verify_same_head_female_domain import verify as verify_female_domain
 from scripts.verify_same_head_windows_product import verify as verify_windows_product
 
 
@@ -28,6 +29,7 @@ CANDIDATE_ID = "face-domain-guard-v4"
 
 def run(output: Path, *, cache: Path, model_root: Path, offline_sources: bool = True) -> dict:
     windows_product = verify_windows_product()
+    female_domain = verify_female_domain()
     report = core.run_baseline(
         output,
         cache=cache,
@@ -40,6 +42,7 @@ def run(output: Path, *, cache: Path, model_root: Path, offline_sources: bool = 
     cases_payload = core.freeze.build_cases()
     apply_predeclared_abstentions(report, list(cases_payload["cases"]))
     report["same_head_windows_product"] = windows_product
+    report["same_head_female_domain"] = female_domain
     (output / "baseline.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
