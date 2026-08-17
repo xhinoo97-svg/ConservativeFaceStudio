@@ -32,3 +32,13 @@ def test_female_domain_is_pinned_to_same_exact_pr_head() -> None:
     assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
     assert "Verify exact candidate checkout" in workflow
     assert "git rev-parse HEAD" in workflow
+
+
+def test_release_quality_calibration_is_pinned_to_same_exact_pr_head() -> None:
+    workflow = _workflow("release-quality-v2.yml")
+    assert "CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
+    assert "ref: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
+    assert "Verify exact candidate checkout" in workflow
+    assert 'actual="$(git rev-parse HEAD)"' in workflow
+    assert 'test "$actual" = "$CANDIDATE_SHA"' in workflow
+    assert "python scripts/verify_same_head_windows_product.py" in workflow
