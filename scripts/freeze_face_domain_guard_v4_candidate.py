@@ -70,8 +70,12 @@ def build(calibration_gate: Path, model_root: Path) -> dict[str, Any]:
     if gate.get("candidate_id") != CANDIDATE_ID or gate.get("accepted") is not True:
         raise RuntimeError("Calibration gate has not admitted face-domain-guard-v4")
     summary = gate.get("summary", {})
-    if summary.get("hard_guardrail_passes") != 60:
-        raise RuntimeError("Calibration gate is not 60/60")
+    if summary.get("admitted_cases") != 60:
+        raise RuntimeError("Calibration gate does not admit all 60 frozen cases")
+    if int(summary.get("restoration_passes", 0)) + int(summary.get("safe_predeclared_abstentions", 0)) != 60:
+        raise RuntimeError("Calibration admission is not exactly restoration PASS plus safe predeclared ABSTAIN")
+    if summary.get("unexpected_abstention_cases") != 0 or summary.get("error_cases") != 0:
+        raise RuntimeError("Calibration contains an unexpected abstention or runtime error")
     if summary.get("wrong_person_final_pixels") != 0:
         raise RuntimeError("Calibration contains wrong-person final pixels")
     if summary.get("provenance_invalid_cases") != 0:
@@ -91,7 +95,7 @@ def build(calibration_gate: Path, model_root: Path) -> dict[str, Any]:
     models = production_model_paths(model_root)
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "candidate_id": CANDIDATE_ID,
         "candidate_commit_sha": head,
         "candidate_tree_sha": tree,
@@ -104,11 +108,24 @@ def build(calibration_gate: Path, model_root: Path) -> dict[str, Any]:
             "reference_only_cluster_rule": "never-identity-authority-without-main-or-same-canvas-bridge",
             "identity_rejected_rule": "never-observed-donor-unless-exact-same-canvas-verified",
             "final_identity_anchor_rule": "immutable-main-always-present; untrusted-raw-references-excluded",
+            "no_identity_score_rule": "fail-closed; never max-empty-default-pass",
             "main_geometry_rule": "immutable-target-canvas",
             "wrong_person_final_pixels_max": 0,
             "target95_policy": "REPORT_ONLY",
+            "abstention_policy": "frozen-predeclared-low-evidence-only; no-output; not-a-restoration-pass",
         },
         "calibration_gate_sha256": _file_sha(calibration_gate),
+        "calibration_summary": {
+            key: summary.get(key)
+            for key in (
+                "admitted_cases",
+                "restoration_passes",
+                "safe_predeclared_abstentions",
+                "unexpected_abstention_cases",
+                "wrong_person_final_pixels",
+                "provenance_invalid_cases",
+            )
+        },
         "model_sha256": {key: _sha256(path) for key, path in models.items()},
         "final_holdout_freeze": holdout_freeze,
         "final_holdout_files": holdout_files,
