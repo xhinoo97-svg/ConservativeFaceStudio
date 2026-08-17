@@ -10,6 +10,7 @@ an independently face-local same-canvas bridge source.
 """
 
 from functools import wraps
+import math
 
 _INSTALLED = False
 
@@ -47,6 +48,8 @@ def _preflight_direct_sface_edges(workspace) -> tuple[dict[int, int], list[list[
     payload = workspace.metadata.get("preflight_identity_similarity")
     if not isinstance(payload, dict):
         return None
+    if payload.get("source") != "preflight_existing_sface_embeddings":
+        return None
     raw_sources = payload.get("source_indices")
     raw_matrix = payload.get("matrix")
     if not isinstance(raw_sources, list) or not isinstance(raw_matrix, list):
@@ -55,7 +58,13 @@ def _preflight_direct_sface_edges(workspace) -> tuple[dict[int, int], list[list[
         sources = [int(value) for value in raw_sources]
     except (TypeError, ValueError):
         return None
-    if not sources or len(set(sources)) != len(sources) or len(raw_matrix) != len(sources):
+    max_source = len(workspace.references)
+    if (
+        not sources
+        or len(set(sources)) != len(sources)
+        or len(raw_matrix) != len(sources)
+        or any(source < 0 or source > max_source for source in sources)
+    ):
         return None
 
     matrix: list[list[float]] = []
@@ -63,10 +72,23 @@ def _preflight_direct_sface_edges(workspace) -> tuple[dict[int, int], list[list[
         for row in raw_matrix:
             if not isinstance(row, list) or len(row) != len(sources):
                 return None
-            matrix.append([float(value) for value in row])
+            values = [float(value) for value in row]
+            if any(not math.isfinite(value) or value < -1.001 or value > 1.001 for value in values):
+                return None
+            matrix.append(values)
         recorded_minimum = float(payload.get("minimum", FACE_MODEL_DEFAULTS.sface_same_identity_cosine))
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(recorded_minimum) or recorded_minimum < -1.0 or recorded_minimum > 1.0:
+        return None
+
+    for index in range(len(sources)):
+        if abs(matrix[index][index] - 1.0) > 1e-5:
+            return None
+        for other in range(index + 1, len(sources)):
+            if abs(matrix[index][other] - matrix[other][index]) > 1e-5:
+                return None
+
     minimum = max(float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine), recorded_minimum)
     positions = {source: index for index, source in enumerate(sources)}
     return positions, matrix, minimum
@@ -147,8 +169,6 @@ def _harden_bridge_result(
         if source in same_canvas and flags[index]:
             reasons[index] = "verified_face_local_same_canvas_main_bridge"
             continue
-        # The legacy handler can pre-promote a whole single-link component. Preserve
-        # only evidence explicitly labelled as a direct MAIN-vs-reference SFace pass.
         if before_flags[index] and before_reasons[index] == "direct_sface":
             flags[index] = True
             reasons[index] = "direct_sface"
