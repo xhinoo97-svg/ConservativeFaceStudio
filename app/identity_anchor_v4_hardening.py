@@ -10,7 +10,6 @@ an independently face-local same-canvas bridge source.
 """
 
 from functools import wraps
-from typing import Any
 
 _INSTALLED = False
 
@@ -148,9 +147,11 @@ def _harden_bridge_result(
         if source in same_canvas and flags[index]:
             reasons[index] = "verified_face_local_same_canvas_main_bridge"
             continue
-        if before_flags[index]:
+        # The legacy handler can pre-promote a whole single-link component. Preserve
+        # only evidence explicitly labelled as a direct MAIN-vs-reference SFace pass.
+        if before_flags[index] and before_reasons[index] == "direct_sface":
             flags[index] = True
-            reasons[index] = before_reasons[index] or "direct_sface"
+            reasons[index] = "direct_sface"
             continue
         linked = authority.get(source, ())
         if linked:
@@ -160,7 +161,10 @@ def _harden_bridge_result(
             else:
                 reasons[index] = "same_canvas_direct_sface_bridge"
             continue
-        if reasons[index] == "same_canvas_bridged_cross_reference_cluster" or flags[index]:
+        if flags[index] or before_flags[index] or reasons[index] in {
+            "same_canvas_bridged_cross_reference_cluster",
+            "main_bridged_cross_reference_cluster",
+        }:
             flags[index] = False
             reasons[index] = "rejected_transitive_component_only"
 
@@ -180,7 +184,6 @@ def _harden_trusted_sources(workspace, reference_count: int, original_trusted) -
     flags = workspace.metadata.get("reference_identity_verified")
     scores = workspace.metadata.get("reference_identity_scores")
     if isinstance(flags, list) and len(flags) == reference_count:
-        # Once LANDMARKS has produced the hardened flags, reuse that exact decision.
         score_values = scores if isinstance(scores, list) and len(scores) == reference_count else [None] * reference_count
         order = workspace.metadata.get("runtime_source_order")
         if not isinstance(order, list) or len(order) != reference_count + 1:
@@ -191,8 +194,6 @@ def _harden_trusted_sources(workspace, reference_count: int, original_trusted) -
             if bool(flag) and score_values[index] is not None and index + 1 < len(order)
         }
 
-    # Before LANDMARKS, allow only fixed direct SFace edges plus an exact face-local
-    # same-canvas source that itself had a preflight embedding. No component-wide trust.
     authority = _direct_identity_authority(workspace)
     parsed = _preflight_direct_sface_edges(workspace)
     positions = parsed[0] if parsed is not None else {}
