@@ -21,10 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout exact branch
+      - name: Checkout triggering commit
         uses: actions/checkout@v4
         with:
-          ref: hotfix/real-world-restoration-v1.1
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -83,7 +83,7 @@ jobs:
           print('V4 contract invariants: PASS')
           PY
 
-      - name: Commit immutable V4 manifests
+      - name: Commit immutable V4 manifests locally
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
@@ -94,4 +94,38 @@ jobs:
                   benchmarks/face-smartphone-v4-final-holdout/freeze.json
           git diff --cached --quiet && { echo 'No V4 freeze files generated'; exit 1; }
           git commit -m 'Freeze independent V4 final holdout'
-          git push origin HEAD:hotfix/real-world-restoration-v1.1
+
+      - name: Rebase only across non-production non-freeze branch advances
+        shell: bash
+        env:
+          FREEZE_BASE_SHA: ${{ github.sha }}
+          TARGET_BRANCH: hotfix/real-world-restoration-v1.1
+        run: |
+          set -euo pipefail
+          git fetch origin "$TARGET_BRANCH"
+          remote_head="$(git rev-parse "origin/$TARGET_BRANCH")"
+          if [ "$remote_head" != "$FREEZE_BASE_SHA" ]; then
+            protected_paths=(
+              app
+              scripts/discover_face_smartphone_v4_sources.py
+              scripts/freeze_face_smartphone_v4_final_holdout.py
+              benchmarks/face-smartphone-v1/sources.json
+              benchmarks/face-smartphone-v2-final-holdout/sources.json
+              benchmarks/face-smartphone-v3-final-holdout/sources.json
+            )
+            if ! git diff --quiet "$FREEZE_BASE_SHA..$remote_head" -- "${protected_paths[@]}"; then
+              echo 'Protected production/freeze inputs changed while V4 was being frozen; refusing rebase.'
+              git diff --name-only "$FREEZE_BASE_SHA..$remote_head" -- "${protected_paths[@]}"
+              exit 1
+            fi
+            git rebase "origin/$TARGET_BRANCH"
+          fi
+
+      - name: Reverify freeze after any safe rebase
+        run: |
+          python scripts/freeze_face_smartphone_v4_final_holdout.py --verify
+          git diff --exit-code -- benchmarks/face-smartphone-v4-final-holdout
+
+      - name: Push immutable V4 manifests
+        shell: bash
+        run: git push origin HEAD:hotfix/real-world-restoration-v1.1
