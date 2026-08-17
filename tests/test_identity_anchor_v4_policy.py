@@ -3,16 +3,19 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from app.identity_anchor_v4_policy import (
     POLICY_NAME,
     _bridge_reference_identity,
     _effective_identity_eligibility,
     _identity_check_anchors,
+    _run_identity_check_with_trusted_anchors,
     _same_canvas_original_sources,
     _trusted_identity_source_indices,
     _trusted_raw_reference_positions,
 )
+from app.immutable_input_store import ensure_immutable_input_store
 
 
 def _candidate(source: int, accepted: bool, embedding: bool = True) -> dict:
@@ -210,6 +213,90 @@ def test_final_identity_firewall_adds_only_trusted_refs_after_immutable_main() -
     assert np.array_equal(anchors[0], workspace.primary)
     assert np.array_equal(anchors[1], workspace.references[0])
     assert np.array_equal(anchors[2], workspace.references[1])
+
+
+def test_final_identity_anchors_resolve_original_sources_after_runtime_reordering() -> None:
+    workspace = _workspace(
+        accepted=set(),
+        same_canvas=None,
+        scores=[0.4, None, None],
+        flags=[True, False, False],
+    )
+    original_refs = [item.copy() for item in workspace.references]
+    ensure_immutable_input_store(workspace)
+
+    # Runtime order is now: original source 3, then 1, then 2. The verified flag at
+    # runtime position 0 therefore means original source 3, not immutable ref slot 0.
+    workspace.references = [original_refs[2].copy(), original_refs[0].copy(), original_refs[1].copy()]
+    workspace.metadata["runtime_source_order"] = [0, 3, 1, 2]
+
+    anchors, sources = _identity_check_anchors(workspace)
+
+    assert sources == [3]
+    assert len(anchors) == 2
+    assert np.array_equal(anchors[1], original_refs[2])
+    assert not np.array_equal(anchors[1], workspace.references[1])
+
+
+def test_identity_wrapper_sees_only_immutable_main_and_trusted_refs_then_restores_runtime_refs() -> None:
+    workspace = _workspace(
+        accepted={1, 2},
+        same_canvas=[2],
+        scores=[0.20, 0.18, -0.25],
+        flags=[False, False, False],
+    )
+    ensure_immutable_input_store(workspace)
+    _bridge_reference_identity(workspace)
+    runtime_refs = list(workspace.references)
+    seen: list[list[np.ndarray]] = []
+
+    def fake_handler(block, parameters):
+        seen.append([item.copy() for item in workspace.references])
+        return {"block": block, "parameters": dict(parameters)}
+
+    result, sources, raw_count = _run_identity_check_with_trusted_anchors(
+        fake_handler,
+        workspace,
+        "identity",
+        {"minimum": 0.363},
+    )
+
+    assert result["block"] == "identity"
+    assert sources == [1, 2]
+    assert raw_count == 3
+    assert len(seen) == 1
+    assert len(seen[0]) == 3
+    assert np.array_equal(seen[0][0], workspace.primary)
+    assert np.array_equal(seen[0][1], runtime_refs[0])
+    assert np.array_equal(seen[0][2], runtime_refs[1])
+    assert len(workspace.references) == 3
+    assert all(current is original for current, original in zip(workspace.references, runtime_refs))
+
+
+def test_identity_wrapper_restores_runtime_refs_when_identity_handler_raises() -> None:
+    workspace = _workspace(
+        accepted={1},
+        same_canvas=None,
+        scores=[0.50, -0.20, None],
+        flags=[True, False, False],
+    )
+    ensure_immutable_input_store(workspace)
+    runtime_refs = list(workspace.references)
+
+    def failing_handler(block, parameters):
+        assert len(workspace.references) == 2  # immutable MAIN + source 1
+        raise RuntimeError("forced identity failure")
+
+    with pytest.raises(RuntimeError, match="forced identity failure"):
+        _run_identity_check_with_trusted_anchors(
+            failing_handler,
+            workspace,
+            "identity",
+            {},
+        )
+
+    assert len(workspace.references) == 3
+    assert all(current is original for current, original in zip(workspace.references, runtime_refs))
 
 
 def test_existing_direct_sface_flags_are_preserved_without_same_canvas() -> None:
