@@ -34,20 +34,23 @@ def _face_local_identity_bridge_sources(workspace) -> set[int]:
 
 
 def _require_real_sface_result(result) -> None:
-    details = getattr(result, "details", None)
-    if not isinstance(details, dict):
-        return
-    scores = details.get("scores")
-    if not isinstance(scores, list) or not scores:
-        return
-    engine = str(details.get("engine", "")).lower()
-    if "sface" in engine:
-        return
     from app.execution import BlockExecutionError
 
-    raise BlockExecutionError(
-        "Controllo identità senza confronto SFace reale: il fallback proxy non è autorità V4"
-    )
+    details = getattr(result, "details", None)
+    if not isinstance(details, dict):
+        raise BlockExecutionError(
+            "Controllo identità V4 senza evidenza strutturata SFace"
+        )
+    scores = details.get("scores")
+    if not isinstance(scores, list) or not scores:
+        raise BlockExecutionError(
+            "Controllo identità V4 senza confronti SFace utilizzabili"
+        )
+    engine = str(details.get("engine", "")).lower()
+    if "sface" not in engine:
+        raise BlockExecutionError(
+            "Controllo identità senza confronto SFace reale: il fallback proxy non è autorità V4"
+        )
 
 
 def install_identity_anchor_v4_hardening() -> None:
