@@ -15,6 +15,9 @@ import numpy as np
 _IDENTITY_ABSTENTION_MARKERS = (
     "controllo identità sface sotto soglia:",
     "controllo identità senza anchor biometrico utilizzabile:",
+    "controllo identità v4 senza evidenza strutturata sface",
+    "controllo identità v4 senza confronti sface utilizzabili",
+    "controllo identità senza confronto sface reale:",
     "verifica identità non superata",
     "reference rifiutata dal firewall identità",
 )
