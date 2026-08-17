@@ -112,6 +112,7 @@ jobs:
           python -m pytest -q \
             tests/test_identity_anchor_v4_policy.py \
             tests/test_identity_anchor_v4_fail_closed.py \
+            tests/test_face_smartphone_abstention.py \
             tests/test_reliability_aware_identity.py \
             tests/test_face_domain_guard_v2_policy.py \
             tests/test_pretrained_face_resilience_regressions.py \
@@ -123,7 +124,8 @@ jobs:
             tests/test_guardrail_workspace_rollback.py \
             tests/test_release_gate_wrong_person_provenance.py \
             tests/test_v4_release_protocol_static.py \
-            tests/test_v4_controlface_source_parser.py
+            tests/test_v4_controlface_source_parser.py \
+            tests/test_female_domain_observed.py
 
       - name: Full pytest
         run: python -m pytest -q
@@ -242,16 +244,12 @@ jobs:
 
       - name: Run frozen 60-case calibration for V4 candidate
         run: |
-          python scripts/run_face_smartphone_baseline.py \
+          python scripts/run_face_smartphone_v4_calibration.py \
             --output face-smartphone-v4-calibration \
             --cache .benchmark-cache/face-smartphone-v1 \
-            --model-root . \
-            --split calibration \
-            --candidate-id "$CANDIDATE_ID" \
-            --offline-sources \
-            --fail-on-errors
+            --model-root .
 
-      - name: Enforce 60/60 calibration admission
+      - name: Enforce 60-case calibration admission
         run: |
           python scripts/validate_face_smartphone_release_gate.py \
             face-smartphone-v4-calibration/baseline.json \
@@ -336,7 +334,7 @@ jobs:
             --candidate-freeze face-domain-guard-v4-candidate-freeze.json \
             --execution-authority "$RUNNER_TEMP/v4-execution-authority.json"
 
-      - name: Enforce 40/40 V4 final-holdout admission
+      - name: Enforce 40-case V4 final admission
         id: v4gate
         if: steps.v4run.outcome == 'success'
         continue-on-error: true
