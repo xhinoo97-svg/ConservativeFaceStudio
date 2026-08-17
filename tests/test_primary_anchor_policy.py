@@ -16,6 +16,10 @@ def _face() -> np.ndarray:
     return image
 
 
+def _face_bboxes() -> list[tuple[int, int, int, int]]:
+    return [(22, 14, 84, 104), (22, 14, 84, 104)]
+
+
 def test_restores_imported_primary_when_preflight_selected_clean_same_canvas_reference() -> None:
     clean = _face()
     damaged = clean.copy()
@@ -24,6 +28,7 @@ def test_restores_imported_primary_when_preflight_selected_clean_same_canvas_ref
     workspace = Workspace(primary=clean.copy(), references=[damaged.copy()])
     workspace.metadata["runtime_source_order"] = [1, 0]
     workspace.metadata["selected_primary_original_source_index"] = 1
+    workspace.metadata["preflight_face_bboxes"] = _face_bboxes()
     workspace.metadata["preflight_original_occlusion_masks"] = [
         np.zeros((128, 128), dtype=np.uint8),
         np.zeros((128, 128), dtype=np.uint8),
@@ -40,7 +45,10 @@ def test_restores_imported_primary_when_preflight_selected_clean_same_canvas_ref
     assert workspace.metadata["selected_primary_original_source_index"] == 0
     assert np.array_equal(workspace.primary, damaged)
     assert np.array_equal(workspace.references[0], clean)
-    assert workspace.metadata["same_canvas_primary_anchor"]["matched_original_reference_indices"] == [1]
+    evidence = workspace.metadata["same_canvas_primary_anchor"]
+    assert evidence["matched_original_reference_indices"] == [1]
+    assert evidence["identity_bridge_original_reference_indices"] == [1]
+    assert evidence["identity_bridge_requires_face_local_observed_agreement"] is True
 
 
 def test_does_not_reanchor_unrelated_same_size_reference() -> None:
@@ -53,6 +61,7 @@ def test_does_not_reanchor_unrelated_same_size_reference() -> None:
     workspace = Workspace(primary=unrelated.copy(), references=[damaged.copy()])
     workspace.metadata["runtime_source_order"] = [1, 0]
     workspace.metadata["selected_primary_original_source_index"] = 1
+    workspace.metadata["preflight_face_bboxes"] = _face_bboxes()
 
     decision = restore_imported_primary_for_same_canvas(workspace, [damaged, unrelated])
 
@@ -68,6 +77,7 @@ def test_keeps_imported_primary_and_records_same_canvas_when_already_runtime_pri
     workspace = Workspace(primary=damaged.copy(), references=[clean.copy()])
     workspace.metadata["runtime_source_order"] = [0, 1]
     workspace.metadata["selected_primary_original_source_index"] = 0
+    workspace.metadata["preflight_face_bboxes"] = _face_bboxes()
 
     decision = restore_imported_primary_for_same_canvas(workspace, [damaged, clean])
 
@@ -78,3 +88,4 @@ def test_keeps_imported_primary_and_records_same_canvas_when_already_runtime_pri
     evidence = workspace.metadata["same_canvas_primary_anchor"]
     assert evidence["applied"] is False
     assert evidence["matched_original_reference_indices"] == [1]
+    assert evidence["identity_bridge_original_reference_indices"] == [1]
