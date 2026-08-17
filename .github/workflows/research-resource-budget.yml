@@ -1,0 +1,42 @@
+name: Research resource budget
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - app/resource_budget.py
+      - tests/test_resource_budget.py
+      - .github/workflows/research-resource-budget.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resource-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install narrow test dependencies
+        run: python -m pip install pytest
+      - name: Run resource-budget regressions
+        run: python -m pytest -q tests/test_resource_budget.py
+      - name: Smoke apply 80 percent policy
+        run: |
+          python - <<'PY'
+          from app.resource_budget import apply_resource_budget, detect_resource_budget, resource_snapshot
+          b = detect_resource_budget(0.80)
+          apply_resource_budget(b)
+          s = resource_snapshot(b)
+          print(s)
+          assert b.max_fraction == 0.80
+          assert b.max_parallel_heavy_models == 1
+          assert b.allowed_processors <= max(1, int(b.logical_processors * 0.80))
+          if b.total_ram_bytes is not None:
+              assert b.process_ram_limit_bytes == int(b.total_ram_bytes * 0.80)
+          PY
