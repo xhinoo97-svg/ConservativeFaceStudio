@@ -6,6 +6,8 @@ on:
       - hotfix/real-world-restoration-v1.1
     paths:
       - .github/workflows/freeze-v4-final-holdout.yml
+      - scripts/discover_face_smartphone_v4_sources.py
+      - scripts/freeze_face_smartphone_v4_final_holdout.py
   workflow_dispatch:
 
 permissions:
