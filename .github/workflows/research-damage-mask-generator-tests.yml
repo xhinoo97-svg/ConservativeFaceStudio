@@ -1,0 +1,28 @@
+name: Research damage mask generator tests
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - research/damage_mask_dataset.py
+      - tests/test_damage_mask_dataset.py
+      - .github/workflows/research-damage-mask-generator-tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-mask-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install narrow dependencies
+        run: python -m pip install 'numpy>=1.26,<3' 'opencv-python>=4.10,<5' pytest
+      - name: Verify deterministic exact corruption authority
+        run: python -m pytest -q tests/test_damage_mask_dataset.py
