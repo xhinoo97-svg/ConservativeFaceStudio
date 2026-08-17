@@ -61,7 +61,7 @@ def _acquire_frozen_v4_sources(cache: Path) -> dict[str, Path]:
                 source_discovery.ARCHIVE_URL,
                 session=session,
                 timeout=120,
-                support_suffix_range=False,
+                support_suffix_range=True,
                 initial_buffer_size=2 * 1024 * 1024,
             ) as remote:
                 available = {info.filename for info in remote.infolist()}
