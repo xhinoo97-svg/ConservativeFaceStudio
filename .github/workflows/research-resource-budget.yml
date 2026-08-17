@@ -29,10 +29,19 @@ jobs:
       - name: Smoke apply 80 percent policy
         run: |
           python - <<'PY'
-          from app.resource_budget import apply_resource_budget, detect_resource_budget, resource_snapshot
-          b = detect_resource_budget(0.80)
-          apply_resource_budget(b)
-          s = resource_snapshot(b)
+          import importlib.util
+          import sys
+          from pathlib import Path
+
+          p = Path('app/resource_budget.py').resolve()
+          spec = importlib.util.spec_from_file_location('cfs_resource_budget_smoke', p)
+          assert spec is not None and spec.loader is not None
+          m = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = m
+          spec.loader.exec_module(m)
+          b = m.detect_resource_budget(0.80)
+          m.apply_resource_budget(b)
+          s = m.resource_snapshot(b)
           print(s)
           assert b.max_fraction == 0.80
           assert b.max_parallel_heavy_models == 1
