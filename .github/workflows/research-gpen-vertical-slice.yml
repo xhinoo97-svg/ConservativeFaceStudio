@@ -51,15 +51,17 @@ jobs:
           python -m pip install \
             'numpy>=1.26,<3' \
             'opencv-python>=4.10,<5' \
+            'onnxruntime>=1.20,<2' \
             'psutil>=5.9,<8' \
             'scikit-image>=0.22,<1'
           python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           python - <<'PY'
-          import cv2, numpy, psutil, torch, torchvision
+          import cv2, numpy, onnxruntime, psutil, torch, torchvision
           print({
               'torch': torch.__version__,
               'torchvision': torchvision.__version__,
               'opencv': cv2.__version__,
+              'onnxruntime': onnxruntime.__version__,
               'numpy': numpy.__version__,
               'psutil': psutil.__version__,
               'cuda_available': torch.cuda.is_available(),
