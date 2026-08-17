@@ -21,9 +21,20 @@ jobs:
     env:
       PYTHONPATH: ${{ github.workspace }}
       QT_QPA_PLATFORM: offscreen
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact candidate checkout
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          $expected = $env:CANDIDATE_SHA.Trim().ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Windows build checkout mismatch: $actual != $expected" }
+          Write-Host "Exact candidate SHA: $actual"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -248,7 +259,7 @@ jobs:
       - name: Generate product-completion validation summary
         shell: pwsh
         run: |
-          python scripts/generate_validation_summary.py --root . --head $env:GITHUB_SHA --installer dist-installer/ConservativeFaceStudio-Setup-x64.exe --portable ConservativeFaceStudio-Windows-x64.zip --output validation-summary.json
+          python scripts/generate_validation_summary.py --root . --head $env:CANDIDATE_SHA --installer dist-installer/ConservativeFaceStudio-Setup-x64.exe --portable ConservativeFaceStudio-Windows-x64.zip --output validation-summary.json
 
       - name: Upload one-click Windows installer
         uses: actions/upload-artifact@v4
