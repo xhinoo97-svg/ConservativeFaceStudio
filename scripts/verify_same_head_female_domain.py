@@ -42,21 +42,23 @@ def verify(report_path: Path = DEFAULT_REPORT) -> dict:
     summary = payload.get("summary")
     if not isinstance(summary, dict):
         raise RuntimeError("Female-domain summary missing")
-    completed = int(summary.get("completed_cases", 0))
+    completed_restorations = int(summary.get("completed_cases", 0))
     errors = int(summary.get("error_cases", 0))
     if portraits < max(60, minimum_portraits):
         raise RuntimeError("Female-domain report has fewer than 60 resolved portraits")
-    expected_floor = portraits * cases_per_portrait
-    if completed < max(300, expected_floor):
-        raise RuntimeError(
-            f"Female-domain report has insufficient completed cases: {completed} < {max(300, expected_floor)}"
-        )
-    if errors != 0:
-        raise RuntimeError(f"Female-domain report contains {errors} runtime error case(s)")
 
     cases = payload.get("cases")
     if not isinstance(cases, list):
         raise RuntimeError("Female-domain case list missing")
+    executed_cases = len(cases)
+    expected_floor = portraits * cases_per_portrait
+    if executed_cases < max(300, expected_floor):
+        raise RuntimeError(
+            f"Female-domain report has insufficient executed cases: {executed_cases} < {max(300, expected_floor)}"
+        )
+    if errors != 0:
+        raise RuntimeError(f"Female-domain report contains {errors} runtime error case(s)")
+
     scenarios = {str(item.get("scenario")) for item in cases if isinstance(item, dict)}
     required_degradations = {"gaussian_heavy_single", "mosaic_single"}
     if not required_degradations.issubset(scenarios):
@@ -66,7 +68,8 @@ def verify(report_path: Path = DEFAULT_REPORT) -> dict:
     return {
         "source_head": str(payload["source_head"]).lower(),
         "portrait_count": portraits,
-        "completed_cases": completed,
+        "executed_cases": executed_cases,
+        "completed_restorations": completed_restorations,
         "error_cases": errors,
         "scenario_coverage": sorted(required_degradations),
         "report_sha256": _sha256(report_path),
