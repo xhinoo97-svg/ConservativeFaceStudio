@@ -97,3 +97,35 @@ def test_identity_guardrail_is_recorded_as_abstention_not_runtime_error(tmp_path
     assert report["summary"]["identity_guardrail_abstention_count"] == 1
     assert report["summary"]["error_cases"] == 1
     assert report["cases"][1]["error"] == "unexpected runtime failure"
+
+
+def test_v4_fail_closed_identity_message_is_same_safety_abstention(tmp_path: Path):
+    report = {
+        "cases": [{
+            "portrait": "example",
+            "scenario": "mosaic_single",
+            "error": "Controllo identità senza confronto SFace reale: il fallback proxy non è autorità V4",
+        }],
+        "summary": {"error_cases": 1},
+    }
+    observed._postprocess_guardrail_abstentions(report, tmp_path)
+    row = report["cases"][0]
+    assert row["abstained"] is True
+    assert row["abstention_reason"] == "identity_guardrail"
+    assert "error" not in row
+    assert report["summary"]["error_cases"] == 0
+
+
+def test_unrelated_female_domain_runtime_error_never_becomes_abstention(tmp_path: Path):
+    report = {
+        "cases": [{
+            "portrait": "example",
+            "scenario": "mosaic_single",
+            "error": "unexpected tensor shape",
+        }],
+        "summary": {"error_cases": 1},
+    }
+    observed._postprocess_guardrail_abstentions(report, tmp_path)
+    assert report["cases"][0]["error"] == "unexpected tensor shape"
+    assert report["summary"]["identity_guardrail_abstention_count"] == 0
+    assert report["summary"]["error_cases"] == 1
