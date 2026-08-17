@@ -1,0 +1,133 @@
+name: Research DamageMaskNet vertical slice
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - research/damage_mask_dataset.py
+      - research/damage_mask_net.py
+      - research/train_damage_mask_net.py
+      - .github/workflows/research-damage-mask-net.yml
+      - app/resource_budget.py
+      - benchmarks/face-smartphone-v1/sources.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-damage-mask-net-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  train-export-evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/research
+
+    steps:
+      - name: Checkout research branch commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install isolated CPU training runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'torch==2.1.2+cpu' 'torchvision==0.16.2+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install \
+            'numpy>=1.26,<2' \
+            'opencv-python>=4.10,<5' \
+            'onnx>=1.16,<2' \
+            'onnxruntime>=1.20,<2' \
+            'psutil>=5.9,<8' \
+            'Pillow>=10,<12'
+          python - <<'PY'
+          import cv2, numpy, onnx, onnxruntime, torch
+          print({
+              'torch': torch.__version__,
+              'opencv': cv2.__version__,
+              'numpy': numpy.__version__,
+              'onnx': onnx.__version__,
+              'onnxruntime': onnxruntime.__version__,
+              'cuda': torch.cuda.is_available(),
+          })
+          assert not torch.cuda.is_available()
+          PY
+
+      - name: Download only legacy V1 development sources with exact hashes
+        run: |
+          set -euo pipefail
+          mkdir -p .research/damage-mask-sources
+          python - <<'PY'
+          import hashlib
+          import json
+          import urllib.request
+          from pathlib import Path
+
+          manifest = json.loads(Path('benchmarks/face-smartphone-v1/sources.json').read_text())
+          target = Path('.research/damage-mask-sources')
+          for row in manifest['sources']:
+              dst = target / row['filename']
+              with urllib.request.urlopen(row['download_url'], timeout=120) as response:
+                  data = response.read()
+              digest = hashlib.sha256(data).hexdigest()
+              if digest.lower() != row['clean_source_sha256'].lower():
+                  raise SystemExit(f"hash mismatch {row['source_id']}: {digest}")
+              dst.write_bytes(data)
+              print(row['source_id'], len(data), digest)
+          PY
+
+      - name: Train small U-Net and export ONNX under 80 percent budget
+        run: |
+          set -euo pipefail
+          python research/train_damage_mask_net.py \
+            --manifest benchmarks/face-smartphone-v1/sources.json \
+            --source-dir .research/damage-mask-sources \
+            --output research-results/damage-mask-net-unet-v1 \
+            --face-size 192 \
+            --epochs 6 \
+            --batch-size 8 \
+            --train-repetitions 6 \
+            --val-repetitions 3 \
+            --base-channels 12 \
+            --seed 240817
+
+      - name: Verify evidence contract
+        run: |
+          set -euo pipefail
+          test -s research-results/damage-mask-net-unet-v1/report.json
+          test -s research-results/damage-mask-net-unet-v1/damage_mask_unet_dev.pth
+          test -s research-results/damage-mask-net-unet-v1/damage_mask_unet_dev.onnx
+          test -s research-results/damage-mask-net-unet-v1/validation_example.png
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path('research-results/damage-mask-net-unet-v1/report.json').read_text())
+          assert r['data']['identity_disjoint'] is True
+          assert r['data']['exact_synthetic_masks'] is True
+          assert r['data']['final_holdout_used'] is False
+          assert r['production_qualified'] is False
+          assert r['runtime']['resource_budget']['max_fraction'] == 0.80
+          assert r['runtime']['resource_budget']['max_parallel_heavy_models'] == 1
+          assert r['onnx_parity']['argmax_segmentation_equal'] is True
+          assert r['onnx_parity']['max_abs_logit_difference'] < 1e-3
+          print(json.dumps(r, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload DamageMaskNet development evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: damage-mask-net-unet-dev-${{ github.run_number }}
+          if-no-files-found: warn
+          path: research-results/damage-mask-net-unet-v1/**
