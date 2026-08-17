@@ -35,7 +35,7 @@ jobs:
       - name: Install benchmark dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install 'numpy>=1.26,<3' 'opencv-python-headless>=4.10,<6'
+          python -m pip install 'numpy>=1.26,<3' 'opencv-python-headless>=4.10,<5'
 
       - name: Refuse pre-existing V4 freeze
         shell: bash
@@ -63,7 +63,7 @@ jobs:
           freeze = json.loads((root / 'freeze.json').read_text(encoding='utf-8'))
           assert len(sources['sources']) == 20
           assert len(sources['identity_registry']) == 20
-          assert len({x['identity_key'] for x in sources['identity_registry']}) == 20
+          assert len({x['identity_key'] for x in sources['identity_registry']) == 20
           assert sum(x['subject_domain'] == 'female' for x in sources['sources']) == 19
           assert len(cases['cases']) == 40
           assert contract['frozen_guardrails']['sface_same_identity_minimum'] == 0.363
