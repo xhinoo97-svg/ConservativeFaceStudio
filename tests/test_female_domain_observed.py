@@ -47,6 +47,31 @@ def test_component_damage_is_exact_union_of_observed_partial_references(monkeypa
     assert np.array_equal(scenario.primary[~damage], clean[~damage])
 
 
+def test_quick_profile_stays_five_cases_and_alternates_blur_with_mosaic(monkeypatch):
+    monkeypatch.setattr(observed, "_LANDMARK_BACKEND", None)
+    clean = np.full((256, 256, 3), 127, dtype=np.uint8)
+
+    odd = observed._observed_make_scenarios(clean, seed=20260809, profile="quick")
+    even = observed._observed_make_scenarios(clean, seed=20260810, profile="quick")
+    odd_names = {item.name for item in odd}
+    even_names = {item.name for item in even}
+
+    assert len(odd) == 5
+    assert len(even) == 5
+    assert "mosaic_single" in odd_names
+    assert "gaussian_heavy_single" not in odd_names
+    assert "gaussian_heavy_single" in even_names
+    assert "mosaic_single" not in even_names
+    common = {
+        "opaque_sticker_single",
+        "opaque_sticker_full_reference",
+        "scribble_two_partial",
+        "component_only_references",
+    }
+    assert common.issubset(odd_names)
+    assert common.issubset(even_names)
+
+
 def test_identity_guardrail_is_recorded_as_abstention_not_runtime_error(tmp_path: Path):
     report = {
         "cases": [
