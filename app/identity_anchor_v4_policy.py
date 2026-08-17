@@ -216,6 +216,20 @@ def _identity_check_anchors(workspace) -> tuple[list, list[int]]:
     return anchors, valid_sources
 
 
+def _require_identity_result_evidence(result) -> None:
+    """Reject the historical `max([], default=1.0)` identity false positive."""
+    details = getattr(result, "details", None)
+    if not isinstance(details, dict):
+        return
+    scores = details.get("scores")
+    if isinstance(scores, list) and not scores:
+        from app.execution import BlockExecutionError
+
+        raise BlockExecutionError(
+            "Controllo identità senza anchor biometrico utilizzabile: nessun confronto SFace/proxy disponibile"
+        )
+
+
 def _run_identity_check_with_trusted_anchors(
     identity_handler: Callable,
     workspace,
@@ -230,6 +244,7 @@ def _run_identity_check_with_trusted_anchors(
         result = identity_handler(block, parameters)
     finally:
         workspace.references = original_references
+    _require_identity_result_evidence(result)
     return result, sources, len(original_references)
 
 
