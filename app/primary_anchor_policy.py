@@ -59,39 +59,62 @@ def _same_canvas_match(primary: np.ndarray, reference: np.ndarray) -> bool:
     return True
 
 
+def _face_peripheral_band(
+    shape: tuple[int, int],
+    bbox: tuple[int, int, int, int] | None,
+) -> np.ndarray | None:
+    """Return an inner-face perimeter band, excluding the usually damaged centre."""
+    if bbox is None:
+        return None
+    try:
+        x, y, w, h = (int(value) for value in bbox)
+    except (TypeError, ValueError):
+        return None
+    if w <= 8 or h <= 8:
+        return None
+
+    height, width = shape
+    x0 = max(0, x)
+    y0 = max(0, y)
+    x1 = min(width, x + w)
+    y1 = min(height, y + h)
+    if x1 - x0 <= 8 or y1 - y0 <= 8:
+        return None
+
+    outer = np.zeros((height, width), dtype=np.uint8)
+    cv2.rectangle(outer, (x0, y0), (x1 - 1, y1 - 1), 255, -1)
+
+    inset_x = max(3, int(round((x1 - x0) * 0.24)))
+    inset_y = max(3, int(round((y1 - y0) * 0.24)))
+    inner_x0 = min(x1, x0 + inset_x)
+    inner_y0 = min(y1, y0 + inset_y)
+    inner_x1 = max(x0, x1 - inset_x)
+    inner_y1 = max(y0, y1 - inset_y)
+    if inner_x1 > inner_x0 and inner_y1 > inner_y0:
+        cv2.rectangle(outer, (inner_x0, inner_y0), (inner_x1 - 1, inner_y1 - 1), 0, -1)
+    return outer > 0
+
+
 def _face_local_same_canvas_identity_match(
     primary: np.ndarray,
     reference: np.ndarray,
     bbox: tuple[int, int, int, int] | None,
 ) -> bool:
-    """Require observed same-canvas agreement inside the MAIN face box.
+    """Require observed agreement on the peripheral band inside the MAIN face bbox.
 
-    Whole-canvas equality is useful for local repair, but a shared/static background
-    must never become identity authority. This second gate reuses the same photometric
-    and gradient limits as `_same_canvas_match`, restricted to observed face pixels.
+    Whole-canvas agreement is useful for local repair, but a shared/static background
+    must never become identity authority. The centre of the face is intentionally
+    excluded because censor blur/mosaic/stickers usually occupy eyes-nose-mouth. The
+    remaining forehead/temple/cheek/jaw perimeter is still person-specific evidence.
     """
-    if bbox is None or primary.shape != reference.shape or primary.ndim != 3:
+    if primary.shape != reference.shape or primary.ndim != 3 or primary.shape[2] != 3:
         return False
-    try:
-        x, y, w, h = (int(value) for value in bbox)
-    except (TypeError, ValueError):
+    region = _face_peripheral_band(primary.shape[:2], bbox)
+    if region is None:
         return False
-    if w <= 0 or h <= 0:
-        return False
-
-    height, width = primary.shape[:2]
-    margin_x = max(2, int(round(w * 0.12)))
-    margin_y = max(2, int(round(h * 0.12)))
-    x0 = max(0, x - margin_x)
-    y0 = max(0, y - margin_y)
-    x1 = min(width, x + w + margin_x)
-    y1 = min(height, y + h + margin_y)
-    if x1 <= x0 or y1 <= y0:
-        return False
-
-    region = np.zeros((height, width), dtype=bool)
-    region[y0:y1, x0:x1] = True
     region_pixels = int(np.count_nonzero(region))
+    if region_pixels < 64:
+        return False
 
     primary_occ = detect_occlusion_candidates(primary)
     reference_occ = detect_occlusion_candidates(reference)
@@ -105,11 +128,11 @@ def _face_local_same_canvas_identity_match(
     observed_u8 = observed.astype(np.uint8) * 255
     observed_u8 = cv2.erode(
         observed_u8,
-        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
         iterations=1,
     )
     comparable = observed_u8 > 0
-    if int(np.count_nonzero(comparable)) < max(96, int(round(region_pixels * 0.15))):
+    if int(np.count_nonzero(comparable)) < max(64, int(round(region_pixels * 0.20))):
         return False
 
     base_lab = cv2.cvtColor(primary, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
@@ -127,7 +150,7 @@ def _face_local_same_canvas_identity_match(
     base_grad = cv2.magnitude(base_gx, base_gy)
     ref_grad = cv2.magnitude(ref_gx, ref_gy)
     edges = comparable & ((base_grad >= 12.0) | (ref_grad >= 12.0))
-    if int(np.count_nonzero(edges)) >= 32:
+    if int(np.count_nonzero(edges)) >= 24:
         edge_delta = np.abs(base_grad[edges] - ref_grad[edges])
         if float(np.median(edge_delta)) > 8.0 or float(np.percentile(edge_delta, 90.0)) > 42.0:
             return False
@@ -142,31 +165,30 @@ def _record_same_canvas_evidence(
     identity_bridge_matches: list[int],
     applied: bool,
     imported_primary: np.ndarray | None = None,
+    primary_occlusion_seed_present: bool,
 ) -> None:
     workspace.metadata["same_canvas_primary_anchor"] = {
         "applied": bool(applied),
         "matched_original_reference_indices": [int(value) for value in matches],
         "identity_bridge_original_reference_indices": [int(value) for value in identity_bridge_matches],
         "identity_bridge_requires_face_local_observed_agreement": True,
+        "identity_bridge_region": "inner_face_peripheral_band_v1",
+        "primary_occlusion_seed_present": bool(primary_occlusion_seed_present),
         "preflight_selected_source_index": int(selected),
         "restored_source_index": 0,
     }
-    # Keep exactly one frozen imported target for later same-canvas difference maps.
-    # This avoids comparing clean donors with an already deblurred/enhanced runtime
-    # primary, which otherwise creates false whole-face differences.
     if isinstance(imported_primary, np.ndarray) and imported_primary.size:
         workspace.metadata["same_canvas_imported_primary"] = imported_primary.copy()
 
 
 def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarray]) -> PrimaryAnchorDecision:
-    """Keep imported target semantics and persist verified same-canvas donor evidence."""
+    """Keep imported target semantics and persist same-canvas evidence independently of damage type."""
     selected = int(workspace.metadata.get("selected_primary_original_source_index", 0))
     if len(originals) < 2:
         return PrimaryAnchorDecision(False, "no_references", 0, selected)
 
     primary_occ = detect_occlusion_candidates(originals[0])
-    if int(np.count_nonzero(primary_occ)) == 0:
-        return PrimaryAnchorDecision(False, "primary_has_no_damage_seed", 0, selected)
+    has_occlusion_seed = bool(np.count_nonzero(primary_occ))
 
     matches = [
         index
@@ -174,7 +196,8 @@ def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarr
         if _same_canvas_match(originals[0], reference)
     ]
     if not matches:
-        return PrimaryAnchorDecision(False, "already_primary_or_no_same_canvas_match", 0, selected)
+        reason = "already_primary_or_no_same_canvas_match" if has_occlusion_seed else "no_same_canvas_match_without_occlusion_seed"
+        return PrimaryAnchorDecision(False, reason, 0, selected)
 
     bboxes = workspace.metadata.get("preflight_face_bboxes")
     primary_bbox = None
@@ -196,8 +219,10 @@ def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarr
             identity_bridge_matches=identity_matches,
             applied=False,
             imported_primary=originals[0],
+            primary_occlusion_seed_present=has_occlusion_seed,
         )
-        return PrimaryAnchorDecision(False, "already_primary_same_canvas_verified", len(matches), selected)
+        reason = "already_primary_same_canvas_verified" if has_occlusion_seed else "already_primary_same_canvas_verified_without_occlusion_seed"
+        return PrimaryAnchorDecision(False, reason, len(matches), selected)
 
     runtime = [workspace.primary, *workspace.references]
     order_raw = workspace.metadata.get("runtime_source_order")
@@ -209,6 +234,7 @@ def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarr
             identity_bridge_matches=identity_matches,
             applied=False,
             imported_primary=originals[0],
+            primary_occlusion_seed_present=has_occlusion_seed,
         )
         return PrimaryAnchorDecision(False, "missing_runtime_source_order", len(matches), selected)
     order = [int(value) for value in order_raw]
@@ -222,6 +248,7 @@ def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarr
             identity_bridge_matches=identity_matches,
             applied=False,
             imported_primary=originals[0],
+            primary_occlusion_seed_present=has_occlusion_seed,
         )
         return PrimaryAnchorDecision(False, "imported_primary_missing_from_runtime", len(matches), selected)
 
@@ -245,5 +272,6 @@ def restore_imported_primary_for_same_canvas(workspace, originals: list[np.ndarr
         identity_bridge_matches=identity_matches,
         applied=True,
         imported_primary=originals[0],
+        primary_occlusion_seed_present=has_occlusion_seed,
     )
     return PrimaryAnchorDecision(True, "verified_same_canvas_donor_semantics", len(matches), selected)
