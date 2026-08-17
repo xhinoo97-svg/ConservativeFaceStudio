@@ -197,29 +197,40 @@ def _harden_bridge_result(
     workspace.metadata["reference_identity_reasons"] = reasons
     workspace.metadata["identity_trusted_original_source_indices"] = sorted(trusted)
     workspace.metadata["identity_transitive_component_authority_disabled"] = True
+    workspace.metadata["identity_v4_flags_hardened"] = True
     return flags, reasons, trusted
 
 
 def _harden_trusted_sources(workspace, reference_count: int, original_trusted) -> set[int]:
     flags = workspace.metadata.get("reference_identity_verified")
+    reasons = workspace.metadata.get("reference_identity_reasons")
     scores = workspace.metadata.get("reference_identity_scores")
-    if isinstance(flags, list) and len(flags) == reference_count:
-        score_values = scores if isinstance(scores, list) and len(scores) == reference_count else [None] * reference_count
-        order = workspace.metadata.get("runtime_source_order")
-        if not isinstance(order, list) or len(order) != reference_count + 1:
-            order = list(range(reference_count + 1))
-        return {
-            int(order[index + 1])
-            for index, flag in enumerate(flags)
-            if bool(flag) and score_values[index] is not None and index + 1 < len(order)
-        }
+    order = workspace.metadata.get("runtime_source_order")
+    if not isinstance(order, list) or len(order) != reference_count + 1:
+        order = list(range(reference_count + 1))
 
+    score_values = scores if isinstance(scores, list) and len(scores) == reference_count else [None] * reference_count
+    reason_values = reasons if isinstance(reasons, list) and len(reasons) == reference_count else ["rejected"] * reference_count
+    hardened = workspace.metadata.get("identity_v4_flags_hardened") is True
+
+    trusted: set[int] = set()
+    if isinstance(flags, list) and len(flags) == reference_count:
+        for index, flag in enumerate(flags):
+            if not bool(flag) or score_values[index] is None or index + 1 >= len(order):
+                continue
+            source = int(order[index + 1])
+            if hardened or str(reason_values[index]) == "direct_sface":
+                trusted.add(source)
+
+    # Defense in depth for consumers that call this helper before LANDMARKS has run
+    # the V4 bridge: re-derive only fixed direct authority, never component-wide trust.
     authority = _direct_identity_authority(workspace)
     parsed = _preflight_direct_sface_edges(workspace)
     positions = parsed[0] if parsed is not None else {}
     same_canvas = _face_local_identity_bridge_sources(workspace)
-    trusted = {source for source in authority if source > 0}
+    trusted.update(source for source in authority if source > 0)
     trusted.update(source for source in same_canvas if source in positions)
+
     workspace.metadata["identity_transitive_component_authority_disabled"] = True
     workspace.metadata["identity_pre_landmarks_direct_trusted_original_source_indices"] = sorted(trusted)
     return trusted
