@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from app.identity_anchor_v4_hardening import _direct_identity_authority
 from app.identity_anchor_v4_policy import (
     POLICY_NAME,
     _bridge_reference_identity,
@@ -18,11 +19,23 @@ from app.identity_anchor_v4_policy import (
 from app.immutable_input_store import ensure_immutable_input_store
 
 
+THRESHOLD = 0.363
+
+
 def _candidate(source: int, accepted: bool, embedding: bool = True) -> dict:
     return {
         "source_index": source,
         "accepted_identity": accepted,
         "identity_embedding_available": embedding,
+    }
+
+
+def _matrix_payload(sources: list[int], matrix: list[list[float]]) -> dict:
+    return {
+        "source_indices": list(sources),
+        "matrix": [list(row) for row in matrix],
+        "minimum": THRESHOLD,
+        "source": "preflight_existing_sface_embeddings",
     }
 
 
@@ -32,6 +45,7 @@ def _workspace(
     same_canvas: list[int] | None,
     scores: list[float | None] | None = None,
     flags: list[bool] | None = None,
+    similarity: dict | None = None,
 ):
     count = 3
     primary = np.full((8, 8, 3), 77, dtype=np.uint8)
@@ -44,12 +58,17 @@ def _workspace(
             _candidate(2, 2 in accepted),
             _candidate(3, 3 in accepted),
         ],
+        "preflight_identity_similarity": similarity
+        if similarity is not None
+        else _matrix_payload([], []),
     }
     if same_canvas is not None:
         metadata["same_canvas_primary_anchor"] = {
-            # `False` is a valid verified state when MAIN was already source 0.
             "applied": False,
-            "matched_original_reference_indices": same_canvas,
+            "matched_original_reference_indices": list(same_canvas),
+            "identity_bridge_original_reference_indices": list(same_canvas),
+            "identity_bridge_requires_face_local_observed_agreement": True,
+            "identity_bridge_region": "inner_face_peripheral_band_v1",
             "restored_source_index": 0,
         }
     if scores is not None:
@@ -65,22 +84,59 @@ def test_same_canvas_evidence_remains_valid_when_main_was_already_source_zero() 
     assert _same_canvas_original_sources(workspace) == {2}
 
 
-def test_same_canvas_source_inside_preflight_cluster_bridges_only_that_cluster() -> None:
+def test_same_canvas_source_extends_trust_only_over_direct_sface_edge() -> None:
     workspace = _workspace(
         accepted={1, 2},
         same_canvas=[2],
         scores=[0.10, 0.12, -0.20],
         flags=[False, False, False],
+        similarity=_matrix_payload(
+            [1, 2, 3],
+            [
+                [1.0, 0.50, 0.10],
+                [0.50, 1.0, 0.10],
+                [0.10, 0.10, 1.0],
+            ],
+        ),
     )
 
     flags, reasons, trusted = _bridge_reference_identity(workspace)
 
     assert flags == [True, True, False]
-    assert reasons[0] == "same_canvas_bridged_cross_reference_cluster"
-    assert reasons[1] == "verified_same_canvas_main_bridge"
+    assert reasons[0] == "same_canvas_direct_sface_bridge"
+    assert reasons[1] == "verified_face_local_same_canvas_main_bridge"
     assert reasons[2] == "rejected"
     assert trusted == {1, 2}
     assert workspace.metadata["identity_anchor_policy"] == POLICY_NAME
+    assert workspace.metadata["identity_transitive_component_authority_disabled"] is True
+
+
+def test_single_link_chain_cannot_transitively_extend_identity_authority() -> None:
+    workspace = _workspace(
+        accepted={1, 2, 3},
+        same_canvas=[1],
+        scores=[0.10, 0.11, 0.12],
+        flags=[False, False, False],
+        similarity=_matrix_payload(
+            [1, 2, 3],
+            [
+                [1.0, 0.50, 0.20],  # bridge 1 -> 2 PASS, bridge 1 -> 3 FAIL
+                [0.50, 1.0, 0.50],  # 2 -> 3 PASS would join the single-link component
+                [0.20, 0.50, 1.0],
+            ],
+        ),
+    )
+
+    authority = _direct_identity_authority(workspace)
+    assert authority == {2: (1,)}
+
+    flags, reasons, trusted = _bridge_reference_identity(workspace)
+    assert flags == [True, True, False]
+    assert reasons[0] == "verified_face_local_same_canvas_main_bridge"
+    assert reasons[1] == "same_canvas_direct_sface_bridge"
+    assert reasons[2] == "rejected_transitive_component_only"
+    assert trusted == {1, 2}
+    assert 3 not in trusted
 
 
 def test_same_canvas_source_outside_selected_cluster_does_not_promote_reference_only_cluster() -> None:
@@ -89,12 +145,20 @@ def test_same_canvas_source_outside_selected_cluster_does_not_promote_reference_
         same_canvas=[3],
         scores=[0.10, 0.12, -0.20],
         flags=[False, False, False],
+        similarity=_matrix_payload(
+            [1, 2, 3],
+            [
+                [1.0, 0.50, 0.10],
+                [0.50, 1.0, 0.10],
+                [0.10, 0.10, 1.0],
+            ],
+        ),
     )
 
     flags, reasons, trusted = _bridge_reference_identity(workspace)
 
     assert flags == [False, False, True]
-    assert reasons == ["rejected", "rejected", "verified_same_canvas_main_bridge"]
+    assert reasons == ["rejected", "rejected", "verified_face_local_same_canvas_main_bridge"]
     assert trusted == {3}
 
 
@@ -104,6 +168,14 @@ def test_reference_only_cluster_without_main_bridge_is_never_promoted() -> None:
         same_canvas=None,
         scores=[0.10, 0.12, 0.11],
         flags=[False, False, False],
+        similarity=_matrix_payload(
+            [1, 2, 3],
+            [
+                [1.0, 0.50, 0.20],
+                [0.50, 1.0, 0.50],
+                [0.20, 0.50, 1.0],
+            ],
+        ),
     )
 
     flags, reasons, trusted = _bridge_reference_identity(workspace)
@@ -119,6 +191,14 @@ def test_partial_same_canvas_sheet_never_becomes_global_identity_anchor() -> Non
         same_canvas=[2],
         scores=[0.15, None, -0.10],
         flags=[False, False, False],
+        similarity=_matrix_payload(
+            [1, 2, 3],
+            [
+                [1.0, 0.50, 0.10],
+                [0.50, 1.0, 0.10],
+                [0.10, 0.10, 1.0],
+            ],
+        ),
     )
 
     flags, _, _ = _bridge_reference_identity(workspace)
@@ -129,7 +209,7 @@ def test_partial_same_canvas_sheet_never_becomes_global_identity_anchor() -> Non
     assert 2 not in trusted
 
 
-def test_v2_firewall_override_is_exact_source_only() -> None:
+def test_v2_firewall_override_is_exact_face_local_source_only() -> None:
     workspace = _workspace(accepted={1}, same_canvas=[2])
     eligibility = {1: "IDENTITY_ACCEPTED", 2: "IDENTITY_REJECTED", 3: "IDENTITY_REJECTED"}
 
@@ -147,19 +227,51 @@ def test_v2_firewall_override_is_exact_source_only() -> None:
     assert workspace.metadata["identity_firewall_same_canvas_override_original_source_indices"] == [2]
 
 
-def test_pre_landmarks_global_anchors_require_main_or_same_canvas_bridge() -> None:
-    reference_only = _workspace(accepted={1, 2}, same_canvas=None)
+def test_pre_landmarks_global_anchors_require_direct_main_or_same_canvas_edge() -> None:
+    reference_only = _workspace(
+        accepted={1, 2},
+        same_canvas=None,
+        similarity=_matrix_payload(
+            [1, 2],
+            [[1.0, 0.50], [0.50, 1.0]],
+        ),
+    )
     assert _trusted_identity_source_indices(reference_only, 3) == set()
 
-    bridged = _workspace(accepted={1, 2}, same_canvas=[2])
+    bridged = _workspace(
+        accepted={1, 2},
+        same_canvas=[2],
+        similarity=_matrix_payload(
+            [1, 2],
+            [[1.0, 0.50], [0.50, 1.0]],
+        ),
+    )
     assert _trusted_identity_source_indices(bridged, 3) == {1, 2}
 
+    main_direct = _workspace(
+        accepted={0, 1},
+        same_canvas=None,
+        similarity=_matrix_payload(
+            [0, 1, 2],
+            [
+                [1.0, 0.50, 0.10],
+                [0.50, 1.0, 0.50],
+                [0.10, 0.50, 1.0],
+            ],
+        ),
+    )
+    assert _trusted_identity_source_indices(main_direct, 3) == {1}
 
-def test_exact_same_canvas_rejected_from_cluster_is_global_only_with_embedding() -> None:
-    workspace = _workspace(accepted={1, 2}, same_canvas=[3])
+
+def test_exact_same_canvas_global_anchor_requires_preflight_embedding_matrix_presence() -> None:
+    workspace = _workspace(
+        accepted={1, 2},
+        same_canvas=[3],
+        similarity=_matrix_payload([1, 2, 3], [[1.0, 0.5, 0.1], [0.5, 1.0, 0.1], [0.1, 0.1, 1.0]]),
+    )
     assert _trusted_identity_source_indices(workspace, 3) == {3}
 
-    workspace.metadata["preflight_candidates"][3]["identity_embedding_available"] = False
+    workspace.metadata["preflight_identity_similarity"] = _matrix_payload([1, 2], [[1.0, 0.5], [0.5, 1.0]])
     assert _trusted_identity_source_indices(workspace, 3) == set()
 
 
@@ -169,6 +281,10 @@ def test_final_identity_check_positions_exclude_wrong_person_raw_reference() -> 
         same_canvas=[2],
         scores=[0.20, 0.18, -0.25],
         flags=[False, False, False],
+        similarity=_matrix_payload(
+            [1, 2, 3],
+            [[1.0, 0.50, 0.10], [0.50, 1.0, 0.10], [0.10, 0.10, 1.0]],
+        ),
     )
     _bridge_reference_identity(workspace)
 
@@ -197,12 +313,16 @@ def test_final_identity_firewall_always_keeps_immutable_main_anchor() -> None:
     assert np.array_equal(workspace.metadata["_immutable_input_store"].main, original_main)
 
 
-def test_final_identity_firewall_adds_only_trusted_refs_after_immutable_main() -> None:
+def test_final_identity_firewall_adds_only_directly_trusted_refs_after_immutable_main() -> None:
     workspace = _workspace(
         accepted={1, 2},
         same_canvas=[2],
         scores=[0.20, 0.18, -0.25],
         flags=[False, False, False],
+        similarity=_matrix_payload(
+            [1, 2, 3],
+            [[1.0, 0.50, 0.10], [0.50, 1.0, 0.10], [0.10, 0.10, 1.0]],
+        ),
     )
     _bridge_reference_identity(workspace)
 
@@ -225,8 +345,6 @@ def test_final_identity_anchors_resolve_original_sources_after_runtime_reorderin
     original_refs = [item.copy() for item in workspace.references]
     ensure_immutable_input_store(workspace)
 
-    # Runtime order is now: original source 3, then 1, then 2. The verified flag at
-    # runtime position 0 therefore means original source 3, not immutable ref slot 0.
     workspace.references = [original_refs[2].copy(), original_refs[0].copy(), original_refs[1].copy()]
     workspace.metadata["runtime_source_order"] = [0, 3, 1, 2]
 
@@ -244,6 +362,10 @@ def test_identity_wrapper_sees_only_immutable_main_and_trusted_refs_then_restore
         same_canvas=[2],
         scores=[0.20, 0.18, -0.25],
         flags=[False, False, False],
+        similarity=_matrix_payload(
+            [1, 2, 3],
+            [[1.0, 0.50, 0.10], [0.50, 1.0, 0.10], [0.10, 0.10, 1.0]],
+        ),
     )
     ensure_immutable_input_store(workspace)
     _bridge_reference_identity(workspace)
@@ -252,7 +374,11 @@ def test_identity_wrapper_sees_only_immutable_main_and_trusted_refs_then_restore
 
     def fake_handler(block, parameters):
         seen.append([item.copy() for item in workspace.references])
-        return {"block": block, "parameters": dict(parameters)}
+        return SimpleNamespace(
+            block=block,
+            image=workspace.primary.copy(),
+            details={"engine": "opencv-zoo-sface-cpu", "scores": [0.50], "minimum": 0.363},
+        )
 
     result, sources, raw_count = _run_identity_check_with_trusted_anchors(
         fake_handler,
@@ -261,7 +387,7 @@ def test_identity_wrapper_sees_only_immutable_main_and_trusted_refs_then_restore
         {"minimum": 0.363},
     )
 
-    assert result["block"] == "identity"
+    assert result.block == "identity"
     assert sources == [1, 2]
     assert raw_count == 3
     assert len(seen) == 1
