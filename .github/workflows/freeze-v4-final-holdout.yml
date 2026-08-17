@@ -1,0 +1,85 @@
+name: Freeze V4 Final Holdout
+
+on:
+  push:
+    branches:
+      - hotfix/real-world-restoration-v1.1
+    paths:
+      - .github/workflows/freeze-v4-final-holdout.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  freeze-v4:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: hotfix/real-world-restoration-v1.1
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install benchmark dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy>=1.26,<3' 'opencv-python-headless>=4.10,<6'
+
+      - name: Refuse pre-existing V4 freeze
+        shell: bash
+        run: |
+          test ! -e benchmarks/face-smartphone-v4-final-holdout/freeze.json
+          test ! -e benchmarks/face-smartphone-v4-final-holdout/cases.json
+          test ! -e benchmarks/face-smartphone-v4-final-holdout/sources.json
+
+      - name: Discover independent sources and freeze V4 once
+        run: python scripts/freeze_face_smartphone_v4_final_holdout.py --discover-sources
+
+      - name: Verify deterministic freeze
+        run: python scripts/freeze_face_smartphone_v4_final_holdout.py --verify
+
+      - name: Check V4 contract invariants
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('benchmarks/face-smartphone-v4-final-holdout')
+          sources = json.loads((root / 'sources.json').read_text(encoding='utf-8'))
+          cases = json.loads((root / 'cases.json').read_text(encoding='utf-8'))
+          contract = json.loads((root / 'contract.json').read_text(encoding='utf-8'))
+          freeze = json.loads((root / 'freeze.json').read_text(encoding='utf-8'))
+          assert len(sources['sources']) == 20
+          assert len(sources['identity_registry']) == 20
+          assert len({x['identity_key'] for x in sources['identity_registry']}) == 20
+          assert sum(x['subject_domain'] == 'female' for x in sources['sources']) == 19
+          assert len(cases['cases']) == 40
+          assert contract['frozen_guardrails']['sface_same_identity_minimum'] == 0.363
+          assert contract['frozen_guardrails']['outside_region_mae_max'] == 8.0
+          assert contract['frozen_guardrails']['wrong_person_final_pixels_max'] == 0
+          assert freeze['frozen_before_candidate_modification'] is True
+          assert freeze['production_pipeline_changed_by_freeze'] is False
+          assert all(float(c['face_overlap_ratio']) >= 0.95 for c in cases['cases'] if c['damage_type'] != 'extreme_low_evidence')
+          print('V4 contract invariants: PASS')
+          PY
+
+      - name: Commit immutable V4 manifests
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmarks/face-smartphone-v4-final-holdout/sources.json \
+                  benchmarks/face-smartphone-v4-final-holdout/cases.json \
+                  benchmarks/face-smartphone-v4-final-holdout/contract.json \
+                  benchmarks/face-smartphone-v4-final-holdout/freeze.json
+          git diff --cached --quiet && { echo 'No V4 freeze files generated'; exit 1; }
+          git commit -m 'Freeze independent V4 final holdout'
+          git push origin HEAD:hotfix/real-world-restoration-v1.1
