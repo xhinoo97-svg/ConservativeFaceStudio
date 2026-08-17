@@ -128,7 +128,9 @@ jobs:
             tests/test_v4_release_protocol_static.py \
             tests/test_v4_controlface_source_parser.py \
             tests/test_v4_freeze_history.py \
+            tests/test_v4_execution_authority.py \
             tests/test_same_head_windows_product.py \
+            tests/test_same_head_female_domain.py \
             tests/test_windows_exact_head_protocol.py \
             tests/test_female_domain_observed.py
 
@@ -206,6 +208,19 @@ jobs:
           test "$status" = completed
           test "$conclusion" = success
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Restore and verify exact-candidate female-domain report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf .same-head-female-domain
+          gh run download '${{ steps.female.outputs.run_id }}' \
+            --repo "$GITHUB_REPOSITORY" \
+            --name ConservativeFaceStudio-Female-Domain-Report \
+            --dir .same-head-female-domain
+          test -f .same-head-female-domain/female-domain-benchmark/female-domain-benchmark.json
+          python scripts/verify_same_head_female_domain.py
 
       - name: Restore exact-candidate verified production model pack
         env:
@@ -322,16 +337,20 @@ jobs:
           import secrets
 
           candidate_freeze = Path('face-domain-guard-v4-candidate-freeze.json')
+          female_report = Path('.same-head-female-domain/female-domain-benchmark/female-domain-benchmark.json')
+          windows_summary = Path('.same-head-release-metadata/validation-summary.json')
           candidate_sha = os.environ['CANDIDATE_SHA']
           payload = {
-              'schema_version': 2,
+              'schema_version': 3,
               'state': 'STARTED',
               'benchmark_id': os.environ['BENCHMARK_ID'],
               'candidate_id': os.environ['CANDIDATE_ID'],
               'candidate_commit_sha': candidate_sha,
               'candidate_freeze_sha256': hashlib.sha256(candidate_freeze.read_bytes()).hexdigest(),
               'windows_product_run_id': os.environ['WINDOWS_RUN_ID'],
+              'windows_validation_summary_sha256': hashlib.sha256(windows_summary.read_bytes()).hexdigest(),
               'female_domain_run_id': os.environ['FEMALE_RUN_ID'],
+              'female_domain_report_sha256': hashlib.sha256(female_report.read_bytes()).hexdigest(),
               'workflow_run_id': os.environ['GITHUB_RUN_ID'],
               'workflow_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
               'request_commit_sha': os.environ['REQUEST_SHA'],
@@ -403,6 +422,7 @@ jobs:
           path: |
             models/model-registry.json
             .same-head-release-metadata/validation-summary.json
+            .same-head-female-domain/female-domain-benchmark/female-domain-benchmark.json
             face-smartphone-v4-calibration/baseline.json
             face-smartphone-v4-calibration/gate.json
             face-domain-guard-v4-candidate-freeze.json
