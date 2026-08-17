@@ -72,12 +72,12 @@ def test_quick_profile_stays_five_cases_and_alternates_blur_with_mosaic(monkeypa
     assert common.issubset(even_names)
 
 
-def test_identity_guardrail_is_recorded_as_abstention_not_runtime_error(tmp_path: Path):
+def test_no_evidence_identity_guardrail_is_recorded_as_abstention_not_runtime_error(tmp_path: Path):
     report = {
         "cases": [
             {
                 "portrait": "example",
-                "scenario": "component_only_references",
+                "scenario": "opaque_sticker_single",
                 "error": "Controllo identità SFace sotto soglia: 0.290 < 0.363",
             },
             {
@@ -91,7 +91,7 @@ def test_identity_guardrail_is_recorded_as_abstention_not_runtime_error(tmp_path
     observed._postprocess_guardrail_abstentions(report, tmp_path)
     guardrail = report["cases"][0]
     assert guardrail["abstained"] is True
-    assert guardrail["abstention_reason"] == "identity_guardrail"
+    assert guardrail["abstention_reason"] == "identity_guardrail_low_evidence"
     assert guardrail["target95_applicable"] is False
     assert "error" not in guardrail
     assert report["summary"]["identity_guardrail_abstention_count"] == 1
@@ -99,11 +99,11 @@ def test_identity_guardrail_is_recorded_as_abstention_not_runtime_error(tmp_path
     assert report["cases"][1]["error"] == "unexpected runtime failure"
 
 
-def test_v4_fail_closed_identity_message_is_same_safety_abstention(tmp_path: Path):
+def test_v4_fail_closed_identity_message_abstains_only_on_no_evidence_scenario(tmp_path: Path):
     report = {
         "cases": [{
             "portrait": "example",
-            "scenario": "mosaic_single",
+            "scenario": "opaque_sticker_single",
             "error": "Controllo identità senza confronto SFace reale: il fallback proxy non è autorità V4",
         }],
         "summary": {"error_cases": 1},
@@ -111,16 +111,33 @@ def test_v4_fail_closed_identity_message_is_same_safety_abstention(tmp_path: Pat
     observed._postprocess_guardrail_abstentions(report, tmp_path)
     row = report["cases"][0]
     assert row["abstained"] is True
-    assert row["abstention_reason"] == "identity_guardrail"
+    assert row["abstention_reason"] == "identity_guardrail_low_evidence"
     assert "error" not in row
     assert report["summary"]["error_cases"] == 0
+
+
+def test_identity_failure_on_recoverable_mosaic_remains_runtime_error(tmp_path: Path):
+    report = {
+        "cases": [{
+            "portrait": "example",
+            "scenario": "mosaic_single",
+            "error": "Controllo identità SFace sotto soglia: 0.290 < 0.363",
+        }],
+        "summary": {"error_cases": 1},
+    }
+    observed._postprocess_guardrail_abstentions(report, tmp_path)
+    row = report["cases"][0]
+    assert row["error"].startswith("Controllo identità SFace sotto soglia")
+    assert row.get("abstained") is not True
+    assert report["summary"]["identity_guardrail_abstention_count"] == 0
+    assert report["summary"]["error_cases"] == 1
 
 
 def test_unrelated_female_domain_runtime_error_never_becomes_abstention(tmp_path: Path):
     report = {
         "cases": [{
             "portrait": "example",
-            "scenario": "mosaic_single",
+            "scenario": "opaque_sticker_single",
             "error": "unexpected tensor shape",
         }],
         "summary": {"error_cases": 1},
