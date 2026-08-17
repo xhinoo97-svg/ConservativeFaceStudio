@@ -11,19 +11,20 @@ consumes V4 and cannot be retried as certification.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
-import time
 from typing import Any
-from urllib.error import HTTPError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 import cv2
+from remotezip import RemoteZip
 
+from scripts import discover_face_smartphone_v4_sources as source_discovery
 from scripts import freeze_face_smartphone_v4_final_holdout as final_freeze
 from scripts import run_face_smartphone_baseline as core
 
@@ -31,17 +32,63 @@ CANDIDATE_ID = "face-domain-guard-v4"
 BENCHMARK_ID = "cfs-face-smartphone-v4-final-holdout"
 
 
-def _acquire_sources_with_429_backoff(cache: Path) -> dict[str, Path]:
-    delays = (0, 30, 90, 180)
-    for attempt, delay in enumerate(delays, start=1):
-        if delay:
-            time.sleep(delay)
+def _acquire_frozen_v4_sources(cache: Path) -> dict[str, Path]:
+    manifest_path = final_freeze.BENCHMARK_ROOT / "sources.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    sources = list(payload.get("sources", []))
+    if len(sources) != final_freeze.TOTAL_IDENTITIES:
+        raise RuntimeError("Frozen V4 source registry count drift")
+    if payload.get("dataset_revision") != source_discovery.DATASET_REVISION:
+        raise RuntimeError("Frozen V4 dataset revision does not match acquisition code")
+
+    cache.mkdir(parents=True, exist_ok=True)
+    resolved: dict[str, Path] = {}
+    missing: list[dict[str, Any]] = []
+    for source in sources:
+        target = cache / str(source["filename"])
+        expected = str(source["clean_source_sha256"])
+        if target.is_file():
+            if core._sha256(target) != expected:
+                raise RuntimeError(f"Frozen V4 cached source checksum mismatch: {source['source_id']}")
+            resolved[str(source["source_id"])] = target
+        else:
+            missing.append(source)
+
+    if missing:
+        session = source_discovery._session()
         try:
-            return core.acquire_sources(cache, offline=False)
-        except HTTPError as exc:
-            if exc.code != 429 or attempt == len(delays):
-                raise
-    raise RuntimeError("V4 final-holdout source acquisition exhausted retries")
+            with RemoteZip(
+                source_discovery.ARCHIVE_URL,
+                session=session,
+                timeout=120,
+                support_suffix_range=False,
+                initial_buffer_size=2 * 1024 * 1024,
+            ) as remote:
+                available = {info.filename for info in remote.infolist()}
+                for source in missing:
+                    member = str(source.get("archive_member", ""))
+                    if not member or member not in available:
+                        raise RuntimeError(f"Frozen V4 archive member unavailable: {source['source_id']}: {member}")
+                    payload_bytes = remote.read(member)
+                    expected = str(source["clean_source_sha256"])
+                    actual = hashlib.sha256(payload_bytes).hexdigest()
+                    if actual != expected:
+                        raise RuntimeError(f"Frozen V4 archive-member checksum mismatch: {source['source_id']}")
+                    target = cache / str(source["filename"])
+                    temporary = target.with_suffix(target.suffix + ".tmp")
+                    try:
+                        temporary.write_bytes(payload_bytes)
+                        os.replace(temporary, target)
+                    finally:
+                        if temporary.exists():
+                            temporary.unlink()
+                    resolved[str(source["source_id"])] = target
+        finally:
+            session.close()
+
+    if set(resolved) != {str(item["source_id"]) for item in sources}:
+        raise RuntimeError("Frozen V4 source acquisition registry is incomplete")
+    return resolved
 
 
 def _current_head() -> str:
@@ -134,7 +181,7 @@ def run(
     original_freeze = core.freeze
     core.freeze = final_freeze
     try:
-        source_paths = _acquire_sources_with_429_backoff(cache)
+        source_paths = _acquire_frozen_v4_sources(cache)
         _verify_source_dimensions(source_paths)
         report = core.run_baseline(
             output,
