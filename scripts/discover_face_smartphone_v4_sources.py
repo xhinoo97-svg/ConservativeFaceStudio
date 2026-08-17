@@ -44,7 +44,7 @@ ARCHIVE_URL = (
 DATASET_PAGE = f"https://huggingface.co/datasets/{DATASET_REPOSITORY}"
 LICENSE_NAME = "CC BY 4.0"
 LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/"
-USER_AGENT = "ConservativeFaceStudio-V4Freeze/2.0 (benchmark provenance)"
+USER_AGENT = "ConservativeFaceStudio-V4Freeze/2.1 (benchmark provenance)"
 RACES = ("African", "Asian", "Caucasian", "Indian")
 FEMALE_RACE_QUOTAS = {"African": 5, "Asian": 5, "Caucasian": 5, "Indian": 4}
 _IMAGE_RE = re.compile(r"^r(?P<race>[0-3])_g(?P<gender>[01])_a\d+_o(?P<orientation>\d+)_c[^/]+\.png$", re.I)
@@ -244,7 +244,7 @@ def discover_sources() -> dict[str, Any]:
             ARCHIVE_URL,
             session=session,
             timeout=120,
-            support_suffix_range=False,
+            support_suffix_range=True,
             initial_buffer_size=2 * 1024 * 1024,
         ) as remote:
             grouped = _groups(remote)
@@ -335,7 +335,7 @@ def discover_sources() -> dict[str, Any]:
         "dataset_license": LICENSE_NAME,
         "dataset_page": DATASET_PAGE,
         "dataset_revision": DATASET_REVISION,
-        "discovery_algorithm": "discover_face_smartphone_v4_sources.py:controlface10k-v2",
+        "discovery_algorithm": "discover_face_smartphone_v4_sources.py:controlface10k-v2.1",
         "download_date_utc": "2026-08-17",
         "identity_disjointness": (
             "ControlFace10K explicit synthetic identity UUIDs are unique within V4; source SHA-256 and locators "
