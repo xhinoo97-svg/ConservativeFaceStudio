@@ -110,6 +110,8 @@ jobs:
       - name: Targeted identity, provenance, MAIN and partial-reference regressions
         run: |
           python -m pytest -q \
+            tests/test_identity_anchor_v4_policy.py \
+            tests/test_identity_anchor_v4_fail_closed.py \
             tests/test_reliability_aware_identity.py \
             tests/test_face_domain_guard_v2_policy.py \
             tests/test_pretrained_face_resilience_regressions.py \
@@ -118,7 +120,10 @@ jobs:
             tests/test_nine_reference_support.py \
             tests/test_immutable_input_and_provenance_firewall.py \
             tests/test_provenance_source_mapping.py \
-            tests/test_guardrail_workspace_rollback.py
+            tests/test_guardrail_workspace_rollback.py \
+            tests/test_release_gate_wrong_person_provenance.py \
+            tests/test_v4_release_protocol_static.py \
+            tests/test_v4_controlface_source_parser.py
 
       - name: Full pytest
         run: python -m pytest -q
@@ -299,6 +304,7 @@ jobs:
           REQUEST_SHA: ${{ github.sha }}
 
       - name: Persist V4 consumption marker before first holdout case
+        id: consume
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -365,7 +371,7 @@ jobs:
             ${{ runner.temp }}/v4-execution-authority.json
 
       - name: Persist final consumed disposition
-        if: always() && steps.authority.outcome == 'success'
+        if: always() && steps.consume.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           V4_RUN_OUTCOME: ${{ steps.v4run.outcome }}
