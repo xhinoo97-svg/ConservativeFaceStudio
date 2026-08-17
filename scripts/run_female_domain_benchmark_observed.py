@@ -17,6 +17,7 @@ import numpy as np
 from app import female_domain_benchmark as benchmark
 from app.face_analysis import choose_backend
 from app.practical_benchmark import Scenario
+from scripts.face_smartphone_abstention import is_identity_safety_failure
 from scripts.run_female_domain_benchmark_resilient import _resilient_urlopen
 
 
@@ -63,7 +64,6 @@ CURATED_FEMALE_DOMAIN = (
 
 _BASE_MAKE_SCENARIOS = benchmark.make_scenarios
 _BASE_RUN_DOMAIN_BENCHMARK = benchmark.run_domain_benchmark
-_IDENTITY_GUARDRAIL_PREFIX = "Controllo identità SFace sotto soglia:"
 try:
     _LANDMARK_BACKEND = choose_backend(prefer_embeddings=False)
 except Exception:
@@ -108,10 +108,6 @@ def _observed_component_scenario(clean: np.ndarray, fallback: Scenario) -> Scena
 
 
 def _observed_make_scenarios(clean: np.ndarray, *, seed: int = 20260808, profile: str = "full") -> tuple[Scenario, ...]:
-    # Keep the production CI profile at exactly five cases per portrait (60-80
-    # portraits => 300-400 cases), but alternate the severe low-quality single-image
-    # case between heavy Gaussian blur and mosaic. This gives broad coverage without
-    # increasing workflow time and directly exercises the V3 failure family.
     if profile == "quick":
         full = list(_BASE_MAKE_SCENARIOS(clean, seed=seed, profile="full"))
         alternating = "mosaic_single" if int(seed) % 2 else "gaussian_heavy_single"
@@ -136,7 +132,7 @@ def _observed_make_scenarios(clean: np.ndarray, *, seed: int = 20260808, profile
 
 
 def _is_identity_guardrail_abstention(row: dict) -> bool:
-    return str(row.get("error", "")).startswith(_IDENTITY_GUARDRAIL_PREFIX)
+    return is_identity_safety_failure(row.get("error"))
 
 
 def _postprocess_guardrail_abstentions(report: dict, output: Path) -> dict:
