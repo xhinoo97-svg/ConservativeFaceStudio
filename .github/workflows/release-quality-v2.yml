@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  calibration-and-independent-final-holdout:
+  calibration-only-until-v4-certification:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -41,10 +41,15 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
-      - name: Freeze new independent final holdout before candidate evaluation
+      - name: Verify consumed V3 manifests without executing V3
         run: |
-          python scripts/freeze_face_smartphone_v3_final_holdout.py
+          test -f benchmarks/face-smartphone-v3-final-holdout/freeze.json
+          test -f benchmarks/face-smartphone-v3-final-holdout/cases.json
+          test -f benchmarks/face-smartphone-v3-final-holdout/sources.json
+          test -f benchmarks/face-smartphone-v3-final-holdout/contract.json
           python scripts/freeze_face_smartphone_v3_final_holdout.py --verify
+          git diff --exit-code -- benchmarks/face-smartphone-v3-final-holdout
+          echo 'V3 final holdout is consumed: verification only; execution forbidden in this workflow.'
 
       - name: Targeted source-eligibility, partial-reference, MAIN and provenance regressions
         run: |
@@ -223,32 +228,15 @@ jobs:
             --expected-candidate face-domain-guard-v3 \
             --output face-smartphone-v2-calibration/gate.json
 
-      - name: Freeze committed candidate after calibration and before final holdout
+      - name: Freeze same-HEAD candidate after calibration for later V4 certification
         run: |
           python scripts/freeze_face_domain_guard_v3_candidate.py \
             --calibration-gate face-smartphone-v2-calibration/gate.json \
             --model-root . \
             --output face-domain-guard-v3-candidate-freeze.json
+          echo 'Candidate freeze created, but no consumed final holdout is executed here.'
 
-      - name: One-shot independent 40-case final holdout
-        run: |
-          python scripts/run_face_smartphone_v3_final_holdout.py \
-            --output face-smartphone-v3-final-holdout-result \
-            --cache .benchmark-cache/face-smartphone-v3-final-holdout \
-            --model-root . \
-            --candidate-freeze face-domain-guard-v3-candidate-freeze.json
-
-      - name: Enforce 40/40 independent final-holdout admission
-        run: |
-          python scripts/validate_face_smartphone_release_gate.py \
-            face-smartphone-v3-final-holdout-result/baseline.json \
-            --expected-count 40 \
-            --expected-benchmark cfs-face-smartphone-v3-final-holdout \
-            --expected-split final_holdout \
-            --expected-candidate face-domain-guard-v3 \
-            --output face-smartphone-v3-final-holdout-result/gate.json
-
-      - name: Upload V2 release-quality evidence
+      - name: Upload calibration evidence only
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -269,6 +257,3 @@ jobs:
             benchmarks/face-smartphone-v3-final-holdout/cases.json
             benchmarks/face-smartphone-v3-final-holdout/freeze.json
             benchmarks/face-smartphone-v3-final-holdout/contract.json
-            face-smartphone-v3-final-holdout-result/baseline.json
-            face-smartphone-v3-final-holdout-result/gate.json
-            face-smartphone-v3-final-holdout-result/cases/**/final_provenance.json
