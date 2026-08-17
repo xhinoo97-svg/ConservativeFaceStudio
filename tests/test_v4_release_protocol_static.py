@@ -15,6 +15,8 @@ def test_v4_protocol_python_files_compile() -> None:
         "scripts/discover_face_smartphone_v4_sources.py",
         "scripts/freeze_face_smartphone_v4_final_holdout.py",
         "scripts/freeze_face_domain_guard_v4_candidate.py",
+        "scripts/face_smartphone_abstention.py",
+        "scripts/run_face_smartphone_v4_calibration.py",
         "scripts/run_face_smartphone_v4_final_holdout.py",
         "app/identity_anchor_v4_policy.py",
     ):
@@ -27,6 +29,13 @@ def test_consumed_v3_is_never_executed_by_release_quality() -> None:
     assert "run_face_smartphone_v3_final_holdout.py" not in workflow
     assert "freeze_face_smartphone_v3_final_holdout.py --verify" in workflow
     assert "V3 final holdout is consumed" in workflow
+
+
+def test_release_quality_calibrates_v4_without_executing_v4_final() -> None:
+    workflow = _text(".github/workflows/release-quality-v2.yml")
+    assert "python scripts/run_face_smartphone_v4_calibration.py" in workflow
+    assert "python scripts/run_face_smartphone_v4_final_holdout.py" not in workflow
+    assert "face-domain-guard-v4-candidate-freeze.json" in workflow
 
 
 def test_v4_final_workflow_has_single_explicit_request_trigger() -> None:
@@ -63,6 +72,17 @@ def test_v4_workflow_pins_candidate_as_request_parent() -> None:
     assert "git checkout --detach '${{ steps.request.outputs.candidate_sha }}'" in workflow
 
 
+def test_v4_final_workflow_recalibrates_with_same_abstention_aware_runner() -> None:
+    workflow = _text(".github/workflows/v4-final-certification.yml")
+    assert "python scripts/run_face_smartphone_v4_calibration.py" in workflow
+    assert "--expected-count 60" in workflow
+    assert "Enforce 60-case calibration admission" in workflow
+    assert "Enforce 40-case V4 final admission" in workflow
+    calibration = workflow.index("Run frozen 60-case calibration for V4 candidate")
+    consume = workflow.index("Persist V4 consumption marker before first holdout case")
+    assert calibration < consume
+
+
 def test_v4_identity_and_provenance_regressions_are_targeted_before_full_pytest() -> None:
     workflow = _text(".github/workflows/v4-final-certification.yml")
     targeted = workflow.index("Targeted identity, provenance, MAIN and partial-reference regressions")
@@ -71,9 +91,11 @@ def test_v4_identity_and_provenance_regressions_are_targeted_before_full_pytest(
     for required in (
         "tests/test_identity_anchor_v4_policy.py",
         "tests/test_identity_anchor_v4_fail_closed.py",
+        "tests/test_face_smartphone_abstention.py",
         "tests/test_release_gate_wrong_person_provenance.py",
         "tests/test_v4_release_protocol_static.py",
         "tests/test_v4_controlface_source_parser.py",
+        "tests/test_female_domain_observed.py",
     ):
         assert required in section
 
@@ -88,9 +110,10 @@ def test_v4_frozen_guardrails_remain_original_values() -> None:
     assert "CASE_COUNT = 40" in freeze_source
 
 
-def test_candidate_freeze_keeps_v4_identity_threshold_and_main_bridge_policy() -> None:
+def test_candidate_freeze_keeps_v4_identity_threshold_main_bridge_and_abstention_policy() -> None:
     candidate = _text("scripts/freeze_face_domain_guard_v4_candidate.py")
     assert '"identity_firewall_threshold": 0.363' in candidate
     assert '"identity_anchor_policy": "immutable-main-plus-main-bridged-trusted-references"' in candidate
     assert '"reference_only_cluster_rule": "never-identity-authority-without-main-or-same-canvas-bridge"' in candidate
     assert '"wrong_person_final_pixels_max": 0' in candidate
+    assert '"abstention_policy": "frozen-predeclared-low-evidence-only; no-output; not-a-restoration-pass"' in candidate
