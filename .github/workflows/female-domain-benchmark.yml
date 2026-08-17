@@ -67,7 +67,8 @@ jobs:
           Write-Host "candidate=$env:CANDIDATE_SHA"
           Write-Host "resolved portraits=$($report.portrait_count)/$($report.requested_portrait_count)"
           Write-Host "resolution errors=$($summary.source_resolution_error_count)"
-          Write-Host "completed cases=$($summary.completed_cases)"
+          Write-Host "restoration completions=$($summary.completed_cases)"
+          Write-Host "executed cases=$(@($report.cases).Count)"
           Write-Host "recoverable mean=$($summary.mean_score_recoverable)"
           Write-Host "target95=$($summary.target95_pass_count)/$($summary.target95_applicable_count)"
           Write-Host "mean damage reference coverage=$($summary.mean_damage_reference_coverage)"
@@ -116,7 +117,7 @@ jobs:
           $report = Get-Content $path -Raw | ConvertFrom-Json
           if ($report.source_head -ne $env:CANDIDATE_SHA) { throw "Female-domain report SHA mismatch" }
           if ([int]$report.portrait_count -lt 60) { throw "Female-domain benchmark resolved fewer than 60 portraits" }
-          if ([int]$report.summary.completed_cases -lt 300) { throw "Female-domain benchmark completed fewer than 300 cases" }
+          if (@($report.cases).Count -lt 300) { throw "Female-domain benchmark executed fewer than 300 cases" }
           $errors = @($report.cases | Where-Object { $_.error })
           $failed95 = @($report.cases | Where-Object { $_.target95_applicable -eq $true -and $_.target95_passed -ne $true })
           Write-Host "runtime errors=$($errors.Count)"
