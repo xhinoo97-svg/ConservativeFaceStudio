@@ -1,0 +1,146 @@
+name: Research GPEN BFR-512 vertical slice
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - research/run_gpen_vertical_slice.py
+      - .github/workflows/research-gpen-vertical-slice.yml
+      - app/core_models.py
+      - app/model_registry.py
+      - app/opencv_zoo_face.py
+      - app/face_analysis.py
+      - app/pretrained_values.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-gpen-bfr-512-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-cpu-vertical-slice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      GPEN_SOURCE_SHA: 2c736702983368847fb544d234a22ac7cff25802
+      GPEN_WEIGHT_URL: https://public-vigen-video.oss-cn-shanghai.aliyuncs.com/robin/models/GPEN-BFR-512.pth
+      DEV_SOURCE_URL: https://upload.wikimedia.org/wikipedia/commons/7/79/A_lady_at_front_day.jpg
+      DEV_SOURCE_SHA256: 6853c64a4a74a09481ef260ff953562ac65628e39d56cb30d58e7035125c7e0a
+
+    steps:
+      - name: Checkout research branch commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install isolated research dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'numpy>=1.26,<3' \
+            'opencv-python>=4.10,<5' \
+            'psutil>=5.9,<8' \
+            'scikit-image>=0.22,<1'
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python - <<'PY'
+          import cv2, numpy, psutil, torch, torchvision
+          print({
+              'torch': torch.__version__,
+              'torchvision': torchvision.__version__,
+              'opencv': cv2.__version__,
+              'numpy': numpy.__version__,
+              'psutil': psutil.__version__,
+              'cuda_available': torch.cuda.is_available(),
+          })
+          assert not torch.cuda.is_available(), 'This qualification slice must be CPU-only'
+          PY
+
+      - name: Fetch exact official GPEN source commit
+        run: |
+          set -euo pipefail
+          rm -rf .research/GPEN
+          git clone --filter=blob:none https://github.com/yangxy/GPEN.git .research/GPEN
+          git -C .research/GPEN checkout --detach "$GPEN_SOURCE_SHA"
+          actual="$(git -C .research/GPEN rev-parse HEAD)"
+          test "$actual" = "$GPEN_SOURCE_SHA"
+          echo "Official GPEN source commit: $actual"
+
+      - name: Download official GPEN-BFR-512 checkpoint
+        run: |
+          set -euo pipefail
+          mkdir -p .research/GPEN/weights
+          tmp=.research/GPEN/weights/GPEN-BFR-512.pth.part
+          dst=.research/GPEN/weights/GPEN-BFR-512.pth
+          rm -f "$tmp" "$dst"
+          curl --fail --location --retry 4 --retry-delay 10 --connect-timeout 30 --max-time 600 \
+            "$GPEN_WEIGHT_URL" -o "$tmp"
+          test -s "$tmp"
+          bytes="$(stat -c%s "$tmp")"
+          test "$bytes" -gt 100000000
+          mv "$tmp" "$dst"
+          sha256sum "$dst" | tee .research/gpen-checkpoint-sha256.txt
+          echo "GPEN checkpoint bytes: $bytes"
+
+      - name: Download frozen V1 development source and verify hash
+        run: |
+          set -euo pipefail
+          mkdir -p .research/input
+          curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 180 \
+            "$DEV_SOURCE_URL" -o .research/input/A_lady_at_front_day.jpg
+          actual="$(sha256sum .research/input/A_lady_at_front_day.jpg | awk '{print $1}')"
+          test "$actual" = "$DEV_SOURCE_SHA256" || {
+            echo "Development source hash mismatch: $actual != $DEV_SOURCE_SHA256"
+            exit 1
+          }
+
+      - name: Execute real GPEN CPU vertical slice
+        run: |
+          set -euo pipefail
+          python research/run_gpen_vertical_slice.py \
+            --input .research/input/A_lady_at_front_day.jpg \
+            --expected-input-sha256 "$DEV_SOURCE_SHA256" \
+            --gpen-root .research/GPEN \
+            --checkpoint .research/GPEN/weights/GPEN-BFR-512.pth \
+            --gpen-source-sha "$GPEN_SOURCE_SHA" \
+            --threads 4 \
+            --output research-results/gpen-bfr-512-v1
+
+      - name: Verify evidence bundle
+        run: |
+          set -euo pipefail
+          test -s research-results/gpen-bfr-512-v1/report.json
+          test -s research-results/gpen-bfr-512-v1/restored_gpen_bfr_512.png
+          test -s research-results/gpen-bfr-512-v1/comparison.png
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('research-results/gpen-bfr-512-v1/report.json').read_text())
+          assert report['source']['final_holdout_used'] is False
+          assert report['gpen']['device'] == 'cpu'
+          assert report['metrics']['sface_identity_gate_pass'] is True
+          assert report['gpen']['checkpoint_sha256_expected_upstream'] is None
+          assert report['production_qualified'] is False
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload real vertical-slice evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: gpen-bfr-512-real-cpu-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            research-results/gpen-bfr-512-v1/**
+            .research/gpen-checkpoint-sha256.txt
