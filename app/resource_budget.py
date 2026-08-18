@@ -21,13 +21,15 @@ class ResourceBudget:
     allowed_processors: int
     total_ram_bytes: int | None
     process_ram_limit_bytes: int | None
+    system_ram_limit_bytes: int | None = None
     max_parallel_heavy_models: int = 1
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
-def _physical_memory_bytes() -> int | None:
+def _physical_memory_status_bytes() -> tuple[int | None, int | None]:
+    """Return (total physical RAM, currently available physical RAM)."""
     if sys.platform.startswith("win"):
         class MEMORYSTATUSEX(ctypes.Structure):
             _fields_ = [
@@ -46,17 +48,41 @@ def _physical_memory_bytes() -> int | None:
         status.dwLength = ctypes.sizeof(status)
         try:
             if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
-                return int(status.ullTotalPhys)
+                return int(status.ullTotalPhys), int(status.ullAvailPhys)
         except (AttributeError, OSError):
-            return None
-        return None
+            return None, None
+        return None, None
+
+    if sys.platform.startswith("linux"):
+        try:
+            values: dict[str, int] = {}
+            with open("/proc/meminfo", "r", encoding="utf-8") as handle:
+                for line in handle:
+                    key, _, raw = line.partition(":")
+                    if key in {"MemTotal", "MemAvailable"}:
+                        amount = int(raw.strip().split()[0]) * 1024
+                        values[key] = amount
+            total = values.get("MemTotal")
+            available = values.get("MemAvailable")
+            if total is not None:
+                return int(total), int(available) if available is not None else None
+        except (OSError, IndexError, TypeError, ValueError):
+            pass
 
     try:
         page = int(os.sysconf("SC_PAGE_SIZE"))
         pages = int(os.sysconf("SC_PHYS_PAGES"))
-        return page * pages
+        total = page * pages
+        available_pages = int(os.sysconf("SC_AVPHYS_PAGES")) if hasattr(os, "sysconf") else 0
+        available = page * available_pages if available_pages > 0 else None
+        return total, available
     except (AttributeError, OSError, TypeError, ValueError):
-        return None
+        return None, None
+
+
+def _physical_memory_bytes() -> int | None:
+    total, _ = _physical_memory_status_bytes()
+    return total
 
 
 def _process_rss_bytes() -> int | None:
@@ -108,7 +134,7 @@ def detect_resource_budget(max_fraction: float = DEFAULT_MAX_RESOURCE_FRACTION) 
 
     logical = max(1, int(os.cpu_count() or 1))
     allowed = max(1, min(logical, int(math.floor(logical * fraction))))
-    total_ram = _physical_memory_bytes()
+    total_ram, _ = _physical_memory_status_bytes()
     ram_limit = int(math.floor(total_ram * fraction)) if total_ram else None
     return ResourceBudget(
         max_fraction=fraction,
@@ -116,6 +142,7 @@ def detect_resource_budget(max_fraction: float = DEFAULT_MAX_RESOURCE_FRACTION) 
         allowed_processors=allowed,
         total_ram_bytes=total_ram,
         process_ram_limit_bytes=ram_limit,
+        system_ram_limit_bytes=ram_limit,
         max_parallel_heavy_models=1,
     )
 
@@ -183,28 +210,54 @@ def assert_memory_within_budget(
     stage: str,
     reserve_bytes: int = 0,
 ) -> None:
-    limit = budget.process_ram_limit_bytes
-    if limit is None:
-        return
+    """Fail closed on either process RAM or whole-system RAM exceeding the budget."""
+    reserve = max(0, int(reserve_bytes))
+
+    process_limit = budget.process_ram_limit_bytes
     rss = _process_rss_bytes()
-    if rss is None:
-        return
-    projected = int(rss) + max(0, int(reserve_bytes))
-    if projected > int(limit):
-        raise ResourceBudgetExceeded(
-            f"RAM budget exceeded at {stage}: projected={projected} limit={limit} "
-            f"fraction={budget.max_fraction:.2f}"
-        )
+    if process_limit is not None and rss is not None:
+        projected_process = int(rss) + reserve
+        if projected_process > int(process_limit):
+            raise ResourceBudgetExceeded(
+                f"Process RAM budget exceeded at {stage}: projected={projected_process} "
+                f"limit={process_limit} fraction={budget.max_fraction:.2f}"
+            )
+
+    total, available = _physical_memory_status_bytes()
+    system_limit = budget.system_ram_limit_bytes
+    if total is not None and available is not None:
+        if system_limit is None:
+            system_limit = int(math.floor(total * budget.max_fraction))
+        used = max(0, int(total) - int(available))
+        projected_system_used = used + reserve
+        if projected_system_used > int(system_limit):
+            raise ResourceBudgetExceeded(
+                f"System RAM budget exceeded at {stage}: projected_used={projected_system_used} "
+                f"limit={system_limit} total={total} fraction={budget.max_fraction:.2f}"
+            )
 
 
 def resource_snapshot(budget: ResourceBudget) -> dict[str, object]:
     rss = _process_rss_bytes()
+    total, available = _physical_memory_status_bytes()
+    system_used = (
+        max(0, int(total) - int(available))
+        if total is not None and available is not None
+        else None
+    )
     return {
         **budget.to_dict(),
         "process_rss_bytes": rss,
         "process_ram_fraction": (
             float(rss / budget.total_ram_bytes)
             if rss is not None and budget.total_ram_bytes
+            else None
+        ),
+        "system_available_ram_bytes": available,
+        "system_used_ram_bytes": system_used,
+        "system_ram_fraction": (
+            float(system_used / total)
+            if system_used is not None and total
             else None
         ),
     }
