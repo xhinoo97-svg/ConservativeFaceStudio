@@ -26,8 +26,6 @@ REFERENCE_FIRST_DAMAGE_CLASSES: frozenset[str] = frozenset(
     }
 )
 
-# Dedicated identity-critical structures claim overlapping damaged pixels before broad
-# skin/shape regions. This is routing order only; it never creates geometry.
 REPAIR_COMPONENT_PRIORITY: tuple[str, ...] = (
     "left_eye",
     "right_eye",
@@ -130,14 +128,12 @@ def reference_first_component_repair(
 ) -> ReferenceFirstRepairResult:
     """Repair information-destroying face damage from observed same-person evidence first.
 
-    Each component calls the proven V1 observed-reference kernel from the same immutable
-    MAIN checkpoint. Only the returned repaired pixels are composited into the final
-    image. This avoids destructive sequential chaining. Local donor provenance is then
-    remapped to the original user reference source index 1..9.
+    Every component is evaluated from the same immutable MAIN. High-priority semantic
+    components reserve their target pixels even if observed evidence cannot repair them,
+    so a broad cheek/jaw region cannot later masquerade as eye/nose/mouth evidence.
+    Local donor provenance is remapped to the original user source index 1..9.
 
-    Any unresolved pixels remain unresolved. This function never generates replacement
-    pixels and never calls a blind/inpainting model; Paper Quality candidate generation
-    is a later route for the unresolved mask only.
+    Unresolved pixels stay unresolved. This function never invokes a generator.
     """
     base = np.asarray(primary)
     if base.dtype != np.uint8 or base.ndim != 3 or base.shape[2] != 3:
@@ -170,6 +166,8 @@ def reference_first_component_repair(
         requested = int(np.count_nonzero(target))
         if requested <= 0:
             continue
+        # Semantic ownership is reserved now, not only after successful repair.
+        claimed |= target
 
         selected_sources = tuple(int(value) for value in selection.selected_source_indices)
         if any(source < 1 or source > len(refs) for source in selected_sources):
@@ -179,9 +177,6 @@ def reference_first_component_repair(
         subset_refs = [refs[source - 1] for source in selected_sources]
         subset_masks = [masks[source - 1] for source in selected_sources]
 
-        # Identity authority has already been enforced by PersonalizedReferenceBank +
-        # component selector, including local-only partial references. Do not rerun a
-        # global full-face SFace rule here that would incorrectly discard sparse crops.
         local_result = repair_fn(
             base,
             subset_refs,
@@ -192,16 +187,17 @@ def reference_first_component_repair(
         local_provenance = np.asarray(local_result.provenance_map)
         if local_provenance.shape != shape:
             raise RuntimeError("Reference repair returned provenance with wrong shape")
+        local_image = np.asarray(local_result.image)
+        if local_image.shape != base.shape or local_image.dtype != np.uint8:
+            raise RuntimeError("Reference repair returned image with wrong shape or dtype")
         remapped, source_counts = _remap_local_provenance(local_provenance, selected_sources)
         repaired = (remapped > 0) & target
-        # A kernel is not allowed to write outside the requested component target.
         if np.any((local_provenance > 0) & ~target):
             raise RuntimeError("Reference repair attempted provenance outside requested target")
 
-        output[repaired] = np.asarray(local_result.image)[repaired]
+        output[repaired] = local_image[repaired]
         global_provenance[repaired] = remapped[repaired]
         repaired_global[repaired] = 255
-        claimed |= repaired
 
         class_values = np.asarray(damage.class_map)[target]
         class_names = tuple(
