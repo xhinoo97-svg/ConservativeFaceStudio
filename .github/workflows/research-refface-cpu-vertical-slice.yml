@@ -1,0 +1,231 @@
+name: Research RefFaceInpainting CPU vertical slice
+
+# Deliberately manual-only. Phase 13 must not execute until the preceding DamageMaskNet
+# development gate is verified. Creating this workflow does not run the specialist.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-cpu-reference-inpainting:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      REF_FACE_COMMIT: 0f1ad75677cc8fae4ae14d878e4c6cfce9365f28
+      CONTROLFACE_REVISION: a03589de1a9e028b2d16fa1eb0e019a6930e817c
+
+    steps:
+      - name: Checkout exact CFS research commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install isolated CPU research runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'torch==2.1.2+cpu' 'torchvision==0.16.2+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install \
+            'numpy>=1.26,<2' \
+            'opencv-python>=4.10,<5' \
+            'onnxruntime>=1.20,<2' \
+            'psutil>=5.9,<8' \
+            'gdown==5.2.0' \
+            'remotezip==0.12.3' \
+            'requests>=2.32,<3' \
+            'PyYAML>=6,<7'
+          python - <<'PY'
+          import cv2, numpy, onnxruntime, torch
+          print({'torch': torch.__version__, 'opencv': cv2.__version__, 'numpy': numpy.__version__, 'ort': onnxruntime.__version__, 'cuda': torch.cuda.is_available()})
+          assert not torch.cuda.is_available()
+          PY
+
+      - name: Fetch exact official RefFaceInpainting source
+        run: |
+          set -euo pipefail
+          mkdir -p .research
+          git init .research/RefFaceInpainting
+          git -C .research/RefFaceInpainting remote add origin https://github.com/WuyangLuo/RefFaceInpainting.git
+          git -C .research/RefFaceInpainting fetch --depth 1 origin "$REF_FACE_COMMIT"
+          git -C .research/RefFaceInpainting checkout --detach FETCH_HEAD
+          test "$(git -C .research/RefFaceInpainting rev-parse HEAD)" = "$REF_FACE_COMMIT"
+          test -s .research/RefFaceInpainting/LICENSE
+
+      - name: Apply minimal device-neutral CPU patch
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.research/RefFaceInpainting/networks/UnetG.py')
+          source = path.read_text(encoding='utf-8')
+          old = 'input_label = torch.cuda.FloatTensor(bs, self.n_classes, h, w).zero_()'
+          new = 'input_label = x.new_zeros((bs, self.n_classes, h, w))'
+          count = source.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one CUDA one-hot allocation, found {count}')
+          path.write_text(source.replace(old, new), encoding='utf-8')
+          print('Applied one device-allocation patch; architecture and checkpoint remain unchanged')
+          PY
+          ! grep -R --line-number -E 'torch\.cuda\.FloatTensor|\.cuda\(' \
+            .research/RefFaceInpainting/networks/UnetG.py \
+            .research/RefFaceInpainting/networks/Zencoder.py \
+            .research/RefFaceInpainting/networks/blocks.py \
+            .research/RefFaceInpainting/networks/arcface_models.py
+
+      - name: Download official RefFace and ArcFace checkpoints
+        run: |
+          set -euo pipefail
+          mkdir -p .research/refface-assets
+          gdown --id '1qn1fKj-4iwykSZl_GT9kjz2UTnbMlU36' -O .research/refface-assets/model.pth
+          gdown --id '1VpD27jHOPaOJRKFqOO_txLHAE05CbtLU' -O .research/refface-assets/BEST_checkpoint_r101.pth
+          test -s .research/refface-assets/model.pth
+          test -s .research/refface-assets/BEST_checkpoint_r101.pth
+          sha256sum .research/refface-assets/model.pth .research/refface-assets/BEST_checkpoint_r101.pth
+
+      - name: Install verified CFS YuNet SFace and 19-class parser assets
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from app.model_registry import download_model, inspect_model, registry_by_key
+
+          root = Path('.research/cfs-models').resolve()
+          registry = registry_by_key()
+          keys = ('opencv_yunet', 'opencv_sface', 'face_parsing_resnet18_onnx')
+          evidence = {}
+          for key in keys:
+              manifest = registry[key]
+              path = download_model(manifest, root, accept_license=True, timeout_seconds=120)
+              status = inspect_model(manifest, root)
+              if status.get('checksum_ok') is not True:
+                  raise SystemExit(f'{key} checksum verification failed: {status}')
+              evidence[key] = {
+                  'path': str(path),
+                  'sha256_expected': manifest.sha256,
+                  'bytes_expected': manifest.expected_size,
+                  'source_url': manifest.url,
+              }
+          Path('.research/cfs-models.json').write_text(json.dumps(evidence, indent=2, sort_keys=True))
+          print(json.dumps(evidence, indent=2, sort_keys=True))
+          PY
+
+      - name: Fetch two deterministic views of one ControlFace female identity
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from collections import defaultdict
+          from pathlib import Path
+          import cv2
+          import numpy as np
+          from remotezip import RemoteZip
+          from research.build_damage_source_bank import CONTROLFACE_URL, _identity_from_controlface_path
+
+          groups = defaultdict(list)
+          with RemoteZip(
+              CONTROLFACE_URL,
+              headers={'User-Agent': 'ConservativeFaceStudio-Research/2.0'},
+              timeout=120,
+              initial_buffer_size=4 * 1024 * 1024,
+              support_suffix_range=True,
+          ) as remote:
+              for info in remote.infolist():
+                  if info.is_dir():
+                      continue
+                  parsed = _identity_from_controlface_path(info.filename)
+                  if parsed is None or parsed[0] != 'female':
+                      continue
+                  if Path(info.filename).suffix.lower() not in {'.jpg', '.jpeg', '.png', '.webp'}:
+                      continue
+                  groups[parsed[1]].append(info.filename)
+              eligible = [key for key, values in groups.items() if len(values) >= 2]
+              if not eligible:
+                  raise SystemExit('No multi-view female ControlFace identity found')
+              identity = sorted(eligible, key=lambda text: hashlib.sha256(text.encode()).hexdigest())[0]
+              members = sorted(groups[identity], key=lambda text: hashlib.sha256(text.encode()).hexdigest())[:2]
+              out = Path('.research/refface-inputs')
+              out.mkdir(parents=True, exist_ok=True)
+              evidence = {'identity': identity, 'members': [], 'revision': __import__('os').environ['CONTROLFACE_REVISION'], 'license': 'CC BY 4.0'}
+              for index, member in enumerate(members):
+                  data = remote.read(member)
+                  array = np.frombuffer(data, np.uint8)
+                  image = cv2.imdecode(array, cv2.IMREAD_COLOR)
+                  if image is None or image.size == 0:
+                      raise SystemExit(f'Cannot decode ControlFace member {member}')
+                  target = out / ('main.png' if index == 0 else 'reference.png')
+                  if not cv2.imwrite(str(target), image):
+                      raise SystemExit(f'Cannot save {target}')
+                  evidence['members'].append({
+                      'path': str(target),
+                      'archive_member': member,
+                      'source_sha256': hashlib.sha256(data).hexdigest(),
+                      'saved_png_sha256': hashlib.sha256(target.read_bytes()).hexdigest(),
+                  })
+              Path('.research/refface-inputs/source.json').write_text(json.dumps(evidence, indent=2, sort_keys=True))
+              print(json.dumps(evidence, indent=2, sort_keys=True))
+          PY
+
+      - name: Execute real RefFaceInpainting CPU vertical slice under 80 percent total-PC budget
+        run: |
+          set -euo pipefail
+          YUNET='.research/cfs-models/models/detection/face_detection_yunet_2023mar.onnx'
+          SFACE='.research/cfs-models/models/identity/face_recognition_sface_2021dec.onnx'
+          PARSER='.research/cfs-models/models/parsing/face_parsing_resnet18.onnx'
+          python research/run_refface_cpu_vertical_slice.py \
+            --main-image .research/refface-inputs/main.png \
+            --reference-image .research/refface-inputs/reference.png \
+            --ref-face-root .research/RefFaceInpainting \
+            --generator-checkpoint .research/refface-assets/model.pth \
+            --arcface-checkpoint .research/refface-assets/BEST_checkpoint_r101.pth \
+            --parser-model "$PARSER" \
+            --yunet-model "$YUNET" \
+            --sface-model "$SFACE" \
+            --output research-results/refface-cpu-v1
+
+      - name: Verify RefFace evidence contract
+        run: |
+          set -euo pipefail
+          test -s research-results/refface-cpu-v1/report.json
+          test -s research-results/refface-cpu-v1/restored_refface.png
+          test -s research-results/refface-cpu-v1/comparison.png
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path('research-results/refface-cpu-v1/report.json').read_text())
+          assert r['final_holdout_used'] is False
+          assert r['production_qualified'] is False
+          assert r['provenance_class'] == 'GENERATED_MODEL_INFERRED'
+          assert r['upstream']['commit'] == '0f1ad75677cc8fae4ae14d878e4c6cfce9365f28'
+          assert r['identity']['threshold'] == 0.363
+          assert r['identity']['gate_pass'] is True
+          assert r['quality']['healthy_outside_exact_main'] is True
+          assert r['runtime']['resource_budget']['max_fraction'] == 0.80
+          assert r['runtime']['resource_budget']['max_parallel_heavy_models'] == 1
+          for stage in ('before_load', 'after_load', 'after_unload_gc'):
+              fraction = r['runtime'][stage].get('system_ram_fraction')
+              if fraction is not None:
+                  assert fraction <= 0.80
+          print(json.dumps(r, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload RefFace research evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: refface-cpu-development-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            research-results/refface-cpu-v1/**
+            .research/refface-inputs/source.json
+            .research/cfs-models.json
