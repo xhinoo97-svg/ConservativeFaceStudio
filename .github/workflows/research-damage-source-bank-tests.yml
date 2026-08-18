@@ -1,0 +1,30 @@
+name: Research Damage Source Bank Tests
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - research/build_damage_source_bank.py
+      - tests/test_damage_source_bank.py
+      - .github/workflows/research-damage-source-bank-tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-bank-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Install narrow test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'pytest>=8,<9' 'numpy>=1.26,<2' 'opencv-python>=4.10,<5'
+      - name: Verify deterministic source-bank parsing and split
+        run: python -m pytest -q tests/test_damage_source_bank.py
