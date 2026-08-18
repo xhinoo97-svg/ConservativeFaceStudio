@@ -1,0 +1,36 @@
+name: Research DamageMaskNet runtime
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - app/damage_taxonomy.py
+      - app/damage_mask_runtime.py
+      - app/component_bank.py
+      - research/damage_mask_dataset.py
+      - tests/test_damage_mask_runtime.py
+      - tests/test_component_bank.py
+      - .github/workflows/research-damage-mask-runtime.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install narrow dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'pytest>=8,<9' 'numpy>=1.26,<3' 'opencv-python>=4.10,<5'
+      - name: Verify frozen taxonomy and DamageMaskNet runtime contract
+        run: python -m pytest -q tests/test_damage_mask_runtime.py
+      - name: Verify all thirteen observed component routing regions
+        run: python -m pytest -q tests/test_component_bank.py
