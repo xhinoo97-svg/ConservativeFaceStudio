@@ -1,6 +1,6 @@
 # SPECIALIST_MODEL_ROUTING_V2.md
 
-Status: 2026-08-17
+Status: 2026-08-18
 Branch: `research/paper-quality-local-v2`
 
 ## Non-negotiable execution budget
@@ -8,92 +8,121 @@ Branch: `research/paper-quality-local-v2`
 Paper Quality mode uses `app/resource_budget.py` with a maximum total-PC resource fraction of **0.80**.
 
 - CPU affinity: at most `floor(logical_processors * 0.80)` logical processors.
-- Heavy models: **exactly one at a time**.
-- Physical-RAM process ceiling: `0.80 * total_physical_RAM` when the OS can report it.
-- Every heavy model route performs pre-load, post-load, post-inference and post-unload checks.
+- Heavy models: **one at a time**.
+- Process working-set/RSS ceiling: no more than `0.80 * total_physical_RAM` when measurable.
+- Whole-system physical RAM: CFS refuses a heavy-model load/inference when projected **total PC RAM use** would exceed 80%.
+- Every heavy route performs checks before load and after load/inference/unload.
 - OpenMP, MKL, OpenBLAS, NumExpr, OpenCV and PyTorch thread counts are capped.
-- No quality gate may be weakened to stay inside the budget. If a model cannot qualify under the budget, it is rejected for the target PC.
+- No quality or identity gate is weakened to stay inside the budget. A model that cannot qualify under the budget is rejected for the target PC.
 
-For the intended 16 GiB machine, the nominal process ceiling is approximately 12.8 GiB, leaving at least 20% physical RAM outside the application budget.
+On the intended 16 GiB EliteBook, the nominal 80% physical-RAM ceiling is approximately 12.8 GiB for **all running software combined**, preserving at least ~3.2 GiB for Windows/UI/other processes under normal measurable conditions.
 
 ## Selection philosophy
 
 Use the most specialized model that wins on the actual degradation family. Do not run every model and do not chain generative restorers destructively.
 
-Every heavy candidate starts from a common 512 aligned checkpoint and returns a `RestorationCandidate`. Identity remains a hard gate before perceptual ranking.
+Every heavy candidate starts from a common aligned checkpoint and returns a `RestorationCandidate`. Identity is a hard gate before perceptual ranking. Observed same-person evidence has higher evidentiary authority than any generated candidate.
 
 ## Primary specialist map
 
-| Damage / task | Primary specialist to qualify | Secondary / challenger | Why |
+| Damage / task | Primary route to qualify | Secondary / challenger | Why |
 |---|---|---|---|
-| Mild deblur / denoise | Existing NAFNet | task-specific NAFNet checkpoint only if benchmarked | Lightweight, already compatible with the local architecture; preserve for mild cases. |
-| Severe blind facial degradation | **OSDFace** research challenger | GPEN BFR-512, GFPGAN v1.4, CodeFormer | OSDFace is face-specific one-step diffusion (CVPR 2025) and is scientifically stronger than treating a general diffusion model as the default. It must still prove CPU/RAM/Windows feasibility under the 80% cap before promotion. |
-| Fast severe facial restoration | **GPEN BFR-512** | GFPGAN v1.4 | GPEN already produced a real CPU result with strong SFace identity on the first development case; license/Windows/target-hardware gates remain open. |
-| Fidelity-biased blind facial restoration | **GFPGAN v1.4** | CodeFormer high-fidelity setting | GFPGAN v1.4 produced the best PSNR/SSIM of the first GPEN/GFPGAN A/B case and lower measured peak RSS than GPEN. More cases are required. |
-| Controllable quality/fidelity restoration | **CodeFormer** | GFPGAN v1.4 | Explicit fidelity control and aligned-face restoration; also provides a dedicated official face-inpainting model. License constrains production qualification. |
-| JPEG / double-JPEG / social recompression | **FBCNN** | NAFNet/SwinIR only if validation wins | FBCNN is directly specialized for blind JPEG artifact removal; route it only when JPEG severity warrants pre-cleaning. |
-| Genuine low light | **Zero-DCE++** research specialist | a later lightweight low-light challenger if licensing blocks shipping | Extremely lightweight and task-specific; non-commercial licensing must remain a production blocker unless resolved. |
-| Sticker / scribble / opaque block with usable same-person evidence | **Observed per-component reference reconstruction** | RefineFIR-inspired copy-or-not scoring | Real same-person evidence outranks any generator. Selection occurs independently per eye/brow/nose/philtrum/mouth/etc. |
-| Large facial occlusion with one strong same-person reference | **RefFaceInpainting** research challenger | CodeFormer inpainting | Reference-guided face inpainting is specialized for large missing regions with identity/texture control. Must prove CPU/Windows/weight availability. |
-| Severe degradation with multiple same-person references | **InstantRestore** research challenger | RefineFIR concepts + component bank | InstantRestore is explicitly personalized and uses a small set of references with shared-image attention. It is evaluated as a one-step personalized route, not assumed deployable on the EliteBook. |
-| Fine identity detail from references | **RefineFIR-inspired copy-or-not component route** | current component bank | Prefer lightweight extraction of the paper's reference-copy decision logic before considering its full research stack. |
-| Damage classification / localization | **DamageMaskNet trained for CFS** | face parsing + deterministic heuristics | Exact synthetic corruption masks allow a target-domain model for scribble/sticker/mosaic/black-bar/blur/JPEG classes. |
-| Identity verification | **Frozen SFace gate** | ArcFace/InsightFace as independent secondary evaluator after calibration | SFace threshold is not lowered. Wrong-person and partial references cannot become global anchors. |
-| Face-only x2 upscale | **Real-ESRGAN x2 only after restoration** | SwinIR if it wins target-hardware validation | Upscale is post-restoration and bounded to avoid spending CPU/RAM on healthy background by default. |
+| Mild deblur / denoise | Existing NAFNet | task-specific NAFNet challenger only if measured | Lightweight existing production path; no need for a facial generator on mild damage. |
+| JPEG / double-JPEG / social recompression | **FBCNN** | NAFNet/SwinIR only if validation wins | FBCNN is directly specialized and already improved PSNR, SSIM and SFace on the first real CFS JPEG slice. |
+| Genuine low light | Zero-DCE++ research specialist | later lightweight low-light challenger | Run only after low-light detection; licensing can block shipping. |
+| Sticker / scribble / mosaic / missing component with valid same-person evidence | **Observed per-component reconstruction** | RefineFIR-inspired copy-or-not scoring | Real same-person evidence outranks generated content and best matches the product's identity goal. |
+| Personalized severe degradation with several references | **InstantRestore benchmark candidate** | CFS component bank + RefineFIR; FaceMe only if needed | InstantRestore is specifically designed for a degraded face plus a small set of same-person references in one forward pass. It still must prove CPU/Windows/80%-budget feasibility. |
+| Fine facial detail from one strong reference | **RefineFIR benchmark/concept** | current component-bank scoring | Explicitly addresses whether identity-specific details should be copied from the reference. |
+| Large opaque facial occlusion with one strong reference | **RefFaceInpainting benchmark candidate** | CodeFormer inpainting | Specialized for large missing facial regions with identity and component texture control. |
+| Fast severe blind facial restoration | **GPEN BFR-512** | GFPGAN v1.4 | GPEN currently has the strongest measured SFace among the first CFS blind slices. |
+| Fidelity-biased blind facial restoration | **GFPGAN v1.4** | CodeFormer | Best first-case PSNR/SSIM among GPEN/GFPGAN while remaining below identity threshold risk. |
+| Controllable blind / inpainting prior | **CodeFormer** | GFPGAN | Useful fidelity knob and official aligned-face/inpainting paths; licensing remains visible. |
+| Extreme blind damage without adequate reference evidence | **OSDFace research challenger** | GPEN/GFPGAN/CodeFormer | Modern one-step diffusion with explicit identity loss; only promoted if real CPU gain justifies cost. |
+| Damage classification / localization | **DamageMaskNet trained for CFS** | deterministic heuristics + face parsing | Exact synthetic masks make this one of the few models worth training specifically for CFS. |
+| Identity verification | **Frozen SFace hard gate** | independent ArcFace/AdaFace evaluator after calibration | Safety threshold is never lowered; secondary embeddings are diagnostic/consensus only. |
+| Face-only upscale | Real-ESRGAN x2 only after restoration | SwinIR if target validation wins | No global background SR by default on CPU. |
 
-## Important distinction: scientific best vs target-machine best
+## Personalized routing for MAIN + 0..9 references
 
-A newer research model is not automatically the production winner.
+For every identity-critical component independently:
 
-For example, OSDFace is a face-specialized one-step diffusion model and InstantRestore is personalized, but both remain `RESEARCH` until they satisfy:
+1. Build accepted identity anchors from valid **full-face** references only.
+2. Keep partial references component-local.
+3. Rank observed component evidence by visibility, sharpness, damage, pose/geometric fit, exposure and agreement with other accepted references.
+4. If adequate observed evidence exists, reconstruct from the best same-person component source(s).
+5. If observed evidence is insufficient in Paper Quality mode, run the most specialized learned candidate **one at a time**:
+   - personalized multi-reference severe case -> InstantRestore first after qualification;
+   - one-reference fine-detail case -> RefineFIR route;
+   - large missing area -> RefFaceInpainting;
+   - blind severe residual -> GPEN/GFPGAN/CodeFormer, then OSDFace only if needed.
+6. Apply SFace hard gate and geometry/healthy-boundary checks.
+7. Mark all selected generated pixels `GENERATED_MODEL_INFERRED`.
+8. Unload the heavy model before another heavy candidate may be loaded.
+
+A final face may legitimately use:
+
+- left eye from REF3 observed evidence,
+- right eye from REF5 observed evidence,
+- nose from MAIN,
+- mouth from an accepted generated InstantRestore/CodeFormer candidate,
+
+provided geometry, identity, seams and provenance all pass.
+
+## Dynamic stop policy
+
+Do not execute all models merely to compare them in production.
+
+Example severe route:
+
+`COMMON CHECKPOINT -> specialist A -> hard gates -> score`
+
+If accepted with sufficient calibrated quality margin: **STOP**.
+
+Only when rejected/ambiguous:
+
+`unload A -> specialist B -> hard gates -> score -> unload B`
+
+Never:
+
+`GPEN -> GFPGAN -> CodeFormer -> OSDFace`
+
+as a destructive image chain.
+
+## Scientific-best vs EliteBook-best
+
+A newer model is not automatically the shipping winner.
+
+InstantRestore, OSDFace, FaceMe and other diffusion-based systems remain `RESEARCH` until they satisfy all of:
 
 1. official source and checkpoint provenance;
 2. code/weights license audit;
 3. real CPU execution;
 4. Windows execution;
-5. <=80% total-PC resource budget;
-6. no OOM / leak;
-7. identity hard gate;
-8. measured improvement on the relevant degradation family;
+5. <=80% CPU/process RAM/**whole-system RAM** policy;
+6. no OOM or persistent memory leak after unload;
+7. frozen identity hard gate;
+8. measurable improvement on the exact degradation family;
 9. acceptable seconds-per-512-face on the real HP EliteBook 1030 G3.
 
-If they fail those gates, the target-machine best can remain GPEN/GFPGAN/CodeFormer or a reference-first component route.
+If they fail, a smaller GPEN/GFPGAN/FBCNN/NAFNet/reference-first route is the better production model even if a paper reports stronger GPU results.
 
-## Sequential heavy-model policy
+## 2026 paper-only teachers
 
-For one damaged face/component:
+- **PerFuSe (CVPRW 2026):** highly relevant personalized full-image modular fusion and smartphone evaluation; no official executable repository/checkpoint found in the 2026-08-18 audit, so no runtime is claimed.
+- **Reference-Guided Identity Preserving Face Restoration (2025):** composite reference context, hard-example identity loss and training-free multi-reference adaptation; current public repository contains paper material rather than an executable model release.
+- **BioDDM (CVPRW 2026):** use biometric-subspace guidance as an identity-ranking concept, not a default CPU diffusion dependency.
 
-`CHECKPOINT -> specialist A -> score -> unload -> specialist B only if required -> score -> unload -> select/fuse`
-
-Never:
-
-`GPEN -> GFPGAN -> CodeFormer -> diffusion`
-
-The latter compounds hallucination and violates the common-checkpoint comparison design.
-
-## Per-component preference for the real use case
-
-The user normally provides MAIN + 0..9 references. For identity-critical damage the router preference is:
-
-1. same-person observed component with adequate geometry/quality;
-2. component-bank reconstruction;
-3. personalized reference model if qualified;
-4. blind face prior candidate;
-5. explicit unresolved/abstain in Conservative mode.
-
-A valid Paper Quality output can therefore use different sources/models for left eye, right eye, nose and mouth, provided identity, seams, geometry and provenance all pass.
+These works can influence CFS architecture, but cannot be called installed, compatible or benchmarked until code and weights actually exist and execute.
 
 ## Qualification order from current state
 
-1. Complete CodeFormer `w=0.5` vertical slice under the 80% resource budget.
-2. Build common `FaceRestorerAdapter` with mandatory resource-budget hooks.
-3. Re-run GPEN/GFPGAN/CodeFormer through the common adapter under the same 80% cap.
-4. Integrate FBCNN as the first true degradation specialist.
-5. Build DamageMaskNet dataset/training/inference path.
-6. Connect personalized per-component reference routing.
-7. Benchmark RefFaceInpainting for large occlusion.
-8. Benchmark OSDFace as severe blind-restoration challenger.
-9. Benchmark InstantRestore on the actual multi-reference protocol.
-10. Promote only measured winners; reject models that do not justify RAM/time/dependency cost.
+1. Complete DamageMaskNet mixed-source DEVELOPMENT slice and ONNX parity.
+2. Scale DamageMaskNet development/validation data toward 300–400 identity-disjoint sources; compare another lightweight segmentation architecture only if the U-Net hypothesis is inadequate.
+3. Connect damage class/confidence to existing component-bank per-component routing.
+4. Run **InstantRestore** as the first new learned personalized vertical slice under the 80% governor.
+5. Benchmark RefineFIR and RefFaceInpainting on their specialist reference/occlusion cases.
+6. Run the broader degradation matrix for GPEN/GFPGAN/CodeFormer/FBCNN using the common adapter.
+7. Benchmark OSDFace only on severe blind cases that remain unresolved.
+8. Promote only measured winners per damage family.
 
-Final holdouts remain untouched until the research/validation candidate is frozen.
+Final holdouts remain untouched until development/validation choices are frozen.
