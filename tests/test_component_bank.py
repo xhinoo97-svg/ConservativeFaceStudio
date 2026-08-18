@@ -41,6 +41,7 @@ def test_component_coverage_identifies_nose_only_reference() -> None:
     assert result["nose"].usable
     assert result["mouth"].coverage < 0.20
     assert not result["mouth"].usable
+    assert result["face_contour"].coverage == 0.0
 
 
 def test_component_bank_allows_different_sources_for_different_parts() -> None:
@@ -75,6 +76,7 @@ def test_brow_only_reference_does_not_claim_eye_or_forehead() -> None:
     assert bank["left_brow"] and bank["left_brow"][0].source_index == 27
     assert bank["left_eye"] == []
     assert bank["forehead"] == []
+    assert bank["face_contour"] == []
     assert np.count_nonzero((masks["left_brow"] > 0) & (masks["left_eye"] > 0)) == 0
 
 
@@ -95,6 +97,7 @@ def test_lower_face_crop_can_supply_mouth_chin_without_claiming_eyes() -> None:
     assert bank["philtrum"] and bank["philtrum"][0].source_index == 31
     assert bank["left_eye"] == []
     assert bank["right_eye"] == []
+    assert bank["face_contour"] == []
 
 
 def test_chin_is_not_double_counted_as_broad_jaw_evidence() -> None:
@@ -102,6 +105,51 @@ def test_chin_is_not_double_counted_as_broad_jaw_evidence() -> None:
     masks = canonical_component_masks(shape, landmarks, bbox)
     overlap = (masks["chin"] > 0) & (masks["jaw"] > 0)
     assert np.count_nonzero(overlap) == 0
+
+
+def test_face_contour_is_a_nonempty_disjoint_boundary_band() -> None:
+    shape, landmarks, bbox = _geometry()
+    masks = canonical_component_masks(shape, landmarks, bbox)
+    contour = masks["face_contour"] > 0
+    assert np.count_nonzero(contour) > 0
+    for name, mask in masks.items():
+        if name == "face_contour":
+            continue
+        assert np.count_nonzero(contour & (mask > 0)) == 0, name
+
+
+def test_contour_only_reference_gets_contour_authority_without_central_components() -> None:
+    shape, landmarks, bbox = _geometry()
+    masks = canonical_component_masks(shape, landmarks, bbox)
+    bank = build_component_bank(
+        [masks["face_contour"].copy()],
+        landmarks,
+        bbox,
+        source_indices=[41],
+        minimum_coverage=0.50,
+    )
+    assert bank["face_contour"] and bank["face_contour"][0].source_index == 41
+    for name in ("left_eye", "right_eye", "nose", "mouth", "left_cheek", "right_cheek", "chin", "jaw"):
+        assert bank[name] == []
+
+
+def test_component_bank_exposes_all_thirteen_required_components() -> None:
+    shape, landmarks, bbox = _geometry()
+    assert set(canonical_component_masks(shape, landmarks, bbox)) == {
+        "left_eye",
+        "right_eye",
+        "left_brow",
+        "right_brow",
+        "nose",
+        "philtrum",
+        "mouth",
+        "left_cheek",
+        "right_cheek",
+        "chin",
+        "jaw",
+        "forehead",
+        "face_contour",
+    }
 
 
 def test_component_bank_does_not_claim_unobserved_regions() -> None:
