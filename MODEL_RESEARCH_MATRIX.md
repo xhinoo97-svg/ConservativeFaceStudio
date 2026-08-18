@@ -1,88 +1,96 @@
 # MODEL_RESEARCH_MATRIX.md
 
-Status date: 2026-08-17
+Status date: 2026-08-18
 
 Research branch base: certified V1 `2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 
-`NOT VERIFIED` means no authoritative statement was found in the paper/official repository during this audit. It is intentionally not inferred from third-party ports.
+`NOT VERIFIED` means no authoritative statement has been established for ConservativeFaceStudio. Published paper quality is not treated as target-PC compatibility.
 
 ## Qualification rules
 
-- `RESEARCH`: scientifically relevant, not yet run in ConservativeFaceStudio.
-- `BENCHMARKING`: official implementation/checkpoint is being measured.
-- `QUALIFIED`: real local execution, identity/quality/backend/license checks and target-product gates passed.
-- `REJECTED`: measured or legal/dependency evidence makes it unsuitable for production.
-- ONNX/OpenVINO support is `NOT VERIFIED` unless supplied officially or converted with parity tests by this project.
-- Windows/CPU claims distinguish upstream claims from ConservativeFaceStudio qualification.
+- `RESEARCH`: scientifically relevant, not yet executed in CFS.
+- `BENCHMARKING`: official implementation/checkpoint has produced or is producing measured CFS evidence, but release gates remain open.
+- `QUALIFIED`: real local execution, license, identity, quality, Windows and target-product gates passed.
+- `REJECTED`: measured, legal or dependency evidence makes the model unsuitable for the product.
+- Every Paper Quality heavy model must obey `app/resource_budget.py`: <=80% CPU affinity, <=80% process RAM, <=80% total system RAM, and one heavy model at a time.
+- ONNX/OpenVINO is `NOT VERIFIED` unless supplied upstream or converted by CFS with numerical/identity/visual parity evidence.
+- No final holdout is used to choose models.
 
-## Tier A — required qualification candidates
+## Measured Tier A candidates
 
-| Model | Paper / official source | Task / architecture | Params / FLOPs | License audit | Checkpoint | CPU / Windows | ONNX / OpenVINO | Known limitations / identity risk | Target blocks | Priority / state |
-|---|---|---|---|---|---|---|---|---|---|---|
-| GPEN BFR-512 | CVPR 2021, *GAN Prior Embedded Network for Blind Face Restoration in the Wild*; https://github.com/yangxy/GPEN ; https://arxiv.org/abs/2105.06070 | Blind face restoration; GAN prior embedded directly in restoration network, 512 aligned face path | NOT VERIFIED authoritatively in current audit | **Code/weights license NOT VERIFIED**: repository exposes no clear top-level license in audited file tree; README states released weights are not the authors' best model due to commercial issues | Official `GPEN-BFR-512.pth` linked by upstream README | Upstream explicitly states CPU works without `--use_cuda` and Windows works without compiling CUDA; **CFS Windows/EliteBook not yet measured** | No official ONNX/OpenVINO artifact found; conversion requires parity test | Generative prior can invent identity detail; checkpoint redistribution cannot be qualified until license clarified | 2, 8; candidate source for 9 | **P0 / BENCHMARKING next** |
-| GFPGAN v1.4 | CVPR 2021, *Towards Real-World Blind Face Restoration with Generative Facial Prior*; https://github.com/TencentARC/GFPGAN | Blind face restoration with pretrained generative facial prior | NOT VERIFIED | Apache-2.0 for GFPGAN code, subject to listed third-party licenses; weights terms must be recorded with downloaded asset | Official v1.4 model in upstream model zoo; upstream says v1.4 gives slightly more detail and better identity than v1.3 | Clean implementation avoids CUDA extensions; CFS CPU/Windows execution **not yet measured** | No official ONNX/OpenVINO qualification found | Upstream itself notes generative versions can alter identity; must A/B against v1.3 and SFace hard gate | 2, 8; candidate source for 9 | **P1 / RESEARCH** |
-| CodeFormer | NeurIPS 2022, *Towards Robust Blind Face Restoration with Codebook Lookup Transformer*; https://github.com/sczhou/CodeFormer | VQ codebook + Transformer; blind restoration, fidelity control, aligned-face inpainting | NOT VERIFIED | S-Lab License 1.0, non-commercial use; checkpoint redistribution/use must comply | Official `codeformer.pth`; official inpainting checkpoint also released | Official inference contains CPU path; CFS Windows/CPU performance not measured | No official ONNX/OpenVINO qualification found; Transformer/VQ conversion must be proven | Fidelity-realness tradeoff; strong prior can hallucinate identity; license limits production scenarios | 2, 8; candidate source for 9 | **P2 / RESEARCH** |
-| FBCNN | ICCV 2021, *Towards Flexible Blind JPEG Artifacts Removal*; https://github.com/jiaxi-jiang/FBCNN | Blind JPEG artifact removal; quality-factor predictor + restoration network | NOT VERIFIED | Apache-2.0 | Official color/grayscale pretrained models in upstream | PyTorch implementation; CFS CPU/Windows not yet measured | No official ONNX/OpenVINO qualification found | Specialist only; must not pre-clean healthy/non-JPEG faces | 3 before BFR when JPEG severe | **P1 / RESEARCH** |
-| NAFNet | ECCV 2022, *Simple Baselines for Image Restoration*; https://github.com/megvii-research/NAFNet | Activation-free image restoration network; denoise/deblur | Authoritative counts depend on task/config; do not substitute a single number | Upstream license to be re-audited against exact checkpoint already used by CFS | Existing CFS verified OpenCV-Zoo NAFNet ONNX | Already part of V1 production path; exact V1 qualification remains authoritative only for existing checkpoint | Existing ONNX path is already integrated; OpenVINO parity not yet established | General restoration, not an identity-aware facial generator | 2, 3 | **Existing V1 component / preserve** |
-| Zero-DCE++ | TPAMI 2021, *Learning to Enhance Low-Light Image via Zero-Reference Deep Curve Estimation*; https://github.com/Li-Chongyi/Zero-DCE_extension | Lightweight zero-reference low-light curve estimation | NOT VERIFIED in audited upstream README | CC BY-NC 4.0 / academic-research-only statement in upstream | Upstream `Epoch99.pth` snapshot | Upstream environment is old PyTorch/CUDA; CFS CPU/Windows not measured | No official ONNX/OpenVINO qualification found | Can shift exposure/colour; route only after real low-light detection | 3 | **P2 / RESEARCH; licensing restricts shipping** |
+| Model | Official source | Task | License / checkpoint | CFS evidence so far | Main risk | Target | State |
+|---|---|---|---|---|---|---|---|
+| **GPEN BFR-512** | CVPR 2021; `yangxy/GPEN` | Fast blind face restoration with embedded GAN prior | Official checkpoint available; code/weights redistribution terms still not sufficiently explicit for release qualification | Real Linux CPU 512 slice PASS; SFace `0.95397`; ~`2.697 s`; peak RSS ~`1.828 GB`; one development case only | Generative detail can diverge from ground truth; licensing unresolved; Windows/EliteBook not measured | Blocks 2/8 | **BENCHMARKING** |
+| **GFPGAN v1.4** | CVPR 2021; `TencentARC/GFPGAN` | Blind face restoration with generative facial prior | Apache-2.0 code; exact asset terms still recorded separately | Apples-to-apples Linux CPU slice PASS; SFace `0.91665`; ~`2.787 s`; peak RSS ~`1.666 GB`; PSNR/SSIM higher than GPEN on the first development case | Identity change under strong generative prior; one case is insufficient | Blocks 2/8 | **BENCHMARKING** |
+| **CodeFormer** | NeurIPS 2022; `sczhou/CodeFormer` | Codebook/Transformer restoration with fidelity control and face-inpainting model | S-Lab License 1.0 / non-commercial constraints remain a production blocker | Real CPU vertical slice PASS at official aligned-face `w=0.5` after packaging fix; 80% governor active; comparison evidence corrected | License; fidelity-realness trade-off; Windows/EliteBook not measured | Blocks 2/8 | **BENCHMARKING** |
+| **FBCNN** | ICCV 2021; `jiaxi-jiang/FBCNN` | Blind JPEG artifact removal | Apache-2.0; official color checkpoint | Real CPU QF=20 slice PASS. PSNR `34.62 -> 36.78 dB`; SSIM `0.9486 -> 0.9634`; SFace `0.9571 -> 0.9691`; peak RSS ~`1.305 GB` | Specialist only; must qualify double-JPEG/social/smartphone recompression and Windows | Block 3 before BFR only when JPEG is detected | **BENCHMARKING / current JPEG leader** |
+| **NAFNet** | ECCV 2022; `megvii-research/NAFNet` | Mild deblur/denoise | Existing CFS ONNX production asset | Existing certified V1 path remains authoritative | Not a facial-prior generator | Blocks 2/3 | **Existing V1 component** |
+| **Zero-DCE++** | TPAMI 2021; `Li-Chongyi/Zero-DCE_extension` | Low-light enhancement | Non-commercial/academic restrictions in upstream licensing | Not yet CFS-benchmarked | Exposure/colour drift; license; only route on genuine low light | Block 3 | **RESEARCH** |
 
-## Tier B — benchmark, do not automatically ship
+## Highest-priority personalized / severe specialists
 
-| Model | Official source / paper | Core idea | License / deployment evidence | Main risk / expected cost | Target | State |
+| Model | Official source / paper | Specialization | Upstream runtime evidence | Why it matters to CFS | Target-PC concern | Priority / state |
 |---|---|---|---|---|---|---|
-| RestoreFormer++ | TPAMI 2023; https://github.com/wzhouxiff/RestoreFormerPlusPlus ; https://arxiv.org/abs/2308.07228 | Reconstruction-oriented HQ dictionary + fully-spatial multi-head cross-attention + extended degradation model | Apache-2.0 code; Linux/GPU-oriented research stack; CPU/Windows/ONNX not qualified | Transformer/dictionary memory and dependency cost; identity must be measured | 2/8 candidate | RESEARCH |
-| VQFR v2 | ECCV 2022 Oral; https://github.com/TencentARC/VQFR ; https://arxiv.org/abs/2205.06803 | Vector-quantized detail dictionary + parallel decoder + texture warping | Apache-2.0; upstream lists Linux/GPU as optional but uses research extensions; CFS CPU/Windows not qualified | Custom extension/deformable-conv complexity; quality can outpace fidelity | 2/8 candidate | RESEARCH |
-| GPEN face inpainting | https://github.com/yangxy/GPEN | GPEN generative inpainting, upstream 1024 path | Same unresolved GPEN license issue; upstream checkpoint available | 1024 path likely costly on 16 GB CPU; identity-critical hallucination risk | 8 | RESEARCH; only after BFR-512 |
-| RefFaceInpainting | TCSVT 2023, *Reference-Guided Large-Scale Face Inpainting with Identity and Texture Control*; https://github.com/WuyangLuo/RefFaceInpainting ; https://arxiv.org/abs/2303.07014 | Dual identity/texture control with Half-AdaIN and component-wise style injection | Tested upstream with PyTorch 1.10.1 / RTX3090; license/checkpoint redistribution NOT VERIFIED in current audit | Old GPU-oriented stack; large-mask generative risk; potentially valuable for personalized severe occlusion | 8 | RESEARCH |
-| SwinIR | ICCV Workshops 2021, *SwinIR: Image Restoration Using Swin Transformer*; https://github.com/JingyunLiang/SwinIR | Residual Swin Transformer blocks for SR/denoise/JPEG | Apache-2.0; upstream publishes params/FLOPs for specific SR configs, not assumed for our task | Heavier than FBCNN/NAFNet; only useful if measured quality gain outweighs CPU cost | 3/12 | RESEARCH |
+| **InstantRestore** | SIGGRAPH 2025; official `snap-research/InstantRestore` | **Single-step personalized face restoration** using shared-image attention and ~4 same-person references; no per-identity fine-tune at inference | Official code and pretrained checkpoints are published; upstream setup is CUDA-oriented PyTorch | Closest published model to the actual CFS use case: degraded MAIN + several photos of the same person; direct competitor to our reference-bank route | Diffusion backbone may still be too slow/heavy on EliteBook CPU; must run one real 512 CPU slice under 80% before any promotion | **P0 personalized challenger / RESEARCH** |
+| **OSDFace** | CVPR 2025; official `jkwang28/OSDFace` | One-step diffusion blind face restoration with visual representation embedder/VQ prior and explicit recognition identity loss | Upstream released inference code + pretrained models in Dec 2025; documented environment is PyTorch 2.4/CUDA 12.1-oriented | Strong severe-blind challenger where no reference evidence exists | CPU/RAM/dependency/Windows feasibility unknown; likely materially heavier than GPEN/GFPGAN | **P1 severe-blind challenger / RESEARCH** |
+| **RefineFIR** | WACV 2025; official `RefineFIR/RefineFIR` | **Single-reference fine-detail restoration**, explicit copy-or-not behavior | Paper and official code/data link published | Very aligned with CFS component philosophy: copy wrinkles/moles/eye/nose/mouth detail only when semantically consistent | Runtime/license/checkpoint audit still required | **P0 architectural + benchmark candidate** |
+| **RefFaceInpainting** | TCSVT 2023; official `WuyangLuo/RefFaceInpainting` | Large facial occlusion inpainting with separate identity + component-texture control from a reference | Official code/checkpoint; upstream tested PyTorch 1.10.1 on RTX3090; MIT repository license | Highly specialized for sticker/black-bar/large missing facial regions when a good same-person reference exists | Old GPU-oriented stack, dependency age, CPU performance unknown | **P1 occlusion specialist / RESEARCH** |
+| **FaceMe** | AAAI 2025; official `modyu-liu/FaceMe` | Personalized diffusion restoration using identity features from one/few/arbitrary refs | Official inference/training code; checkpoint links; RealVisXL/ControlNet-scale stack; Pi-Lab License 1.0 | Strong identity-conditioning comparison for CFS consensus reference profile | Likely too heavy for CPU-only EliteBook, but must be measured rather than assumed | **P2 personalized challenger / RESEARCH** |
+| **RestoreFormer++** | TPAMI 2023; official `wzhouxiff/RestoreFormerPlusPlus` | Reconstruction-oriented dictionary + spatial cross-attention | Apache-2.0 code, official checkpoint | Useful non-diffusion severe BFR challenger if newer models cannot meet CPU budget | Transformer/dictionary memory and older research dependencies | **P2 / RESEARCH** |
 
-## Teacher / architecture-extraction models
+## New 2025–2026 architecture teachers
 
-These are architectural teachers first. They are not production dependencies unless a later benchmark explicitly promotes them.
+| Work | Verified status | Useful concept | CFS decision |
+|---|---|---|---|
+| **PerFuSe — Personalized Full-Image Restoration via Modular Fusion** (CVPRW 2026) | CVF paper/supplement available. No official implementation/checkpoint was found in the repository audit on 2026-08-18. | Separates personalized and non-personalized regions; multiple generative modules; mask-guided/context-aware fusion; uses a subject photo library; evaluated on real smartphone images | **TEACHER only** until official executable code/checkpoints exist. Extract modular mask/fusion/reference-selection ideas; do not fabricate a runtime. |
+| **Reference-Guided Identity Preserving Face Restoration** (2025, Zhou et al.) | Paper available; `cdluminate/RefIPFR` currently contains paper material only, not an executable model release | Composite high/low-level reference context; hard-example identity loss; training-free multi-reference adaptation at inference | **TEACHER / high-priority concept**. Do not schedule model integration until official code/weights are actually released. |
+| **BioDDM** (CVPRW 2026) | Paper-level research candidate | Biometric-subspace/identity guidance for diffusion restoration | Extract identity-guidance ideas only; iterative diffusion is not a default CPU target. |
+| **NTIRE 2026 face restoration challenge methods** | Challenge evidence, generally unconstrained compute | Modern identity/perceptual evaluation and current failure modes | Use for metric/routing ideas, not as automatic production dependencies. |
 
-| Model | Primary source | Useful idea to extract | Why not ship by default | State |
-|---|---|---|---|---|
-| DMDNet | https://github.com/csxmli2016/DMDNet | Dual generic + identity-specific memory dictionaries; component-level matching | CC BY-NC-SA; legacy stack; our existing component/reference bank can implement the idea more cheaply | TEACHER |
-| DFDNet | ECCV 2020; https://github.com/csxmli2016/DFDNet | Multi-scale dictionaries for left/right eyes, nose, mouth; confidence-aware dictionary feature transfer | CC BY-NC-SA; generic dictionary is less personalized than our real-reference bank | TEACHER |
-| ASFFNet / ASFFNet512 | CVPR 2020; https://github.com/csxmli2016/ASFFNet512 | Multi-exemplar selection, feature alignment/illumination normalization, adaptive spatial feature fusion | CC BY-NC-SA; GPU research implementation; idea fits Block 7/9 without full model | TEACHER |
-| RefineFIR | WACV 2025, *Copy or Not? Reference-Based Face Image Restoration with Fine Details*; https://github.com/RefineFIR/RefineFIR | Explicit copy-or-not objective; copy identity-specific fine detail only when semantically consistent | Runtime/license/weights not yet audited; use decision concept first | TEACHER |
-| InstantRestore | SIGGRAPH 2025; https://github.com/snap-research/InstantRestore ; https://arxiv.org/abs/2412.06753 | Single-step personalized diffusion, shared-image attention, ~4 refs, landmark-attention identity supervision | Tested upstream in CUDA Docker; diffusion backbone unsuitable for target CPU until proven otherwise | TEACHER |
-| FaceMe | AAAI 2025; https://github.com/modyu-liu/FaceMe ; https://arxiv.org/abs/2501.05177 | Consensus/personal identity embeddings from arbitrary reference count as diffusion conditioning | Stable-Diffusion/ControlNet-scale stack; Pi-Lab license; target CPU cost expected high but must be measured before any claim | TEACHER |
-| ReF-LDM | NeurIPS 2024; https://github.com/ChiWeiHsiao/ref-ldm ; https://arxiv.org/abs/2412.05043 | CacheKV for flexible multi-reference aggregation; identity-disjoint FFHQ-Ref split | Non-commercial research license; 50-step LDM inference in official demo; too costly for current target unless a lightweight derivative is built | TEACHER |
-| OSDFace | CVPR 2025; https://github.com/jkwang28/OSDFace ; https://arxiv.org/abs/2411.17163 | One-step diffusion; visual tokenizer + VQ dictionary + explicit face-recognition identity loss | Official environment is PyTorch 2.4/CUDA 12.1-oriented; CFS CPU/Windows not qualified | TEACHER |
-| DifFace | TPAMI 2024; https://github.com/zsyOAOA/DifFace ; https://arxiv.org/abs/2212.06512 | Diffused-error contraction; graceful handling of unseen severe degradation; adjustable fidelity/realness | Iterative diffusion is expensive on target CPU; use robustness concepts/benchmark only | TEACHER |
-| DR2 | CVPR 2023, *Diffusion-Based Robust Degradation Remover for Blind Face Restoration*; paper: https://openaccess.thecvf.com/content/CVPR2023/html/Wang_DR2_Diffusion-Based_Robust_Degradation_Remover_for_Blind_Face_Restoration_CVPR_2023_paper.html ; code referenced by paper ecosystem: https://github.com/Kaldwin0106/DR2_Drgradation_Remover | Convert arbitrary degradation into a degradation-invariant coarse prediction before enhancement | Iterative diffusion cost; official code/license/checkpoint status must be independently verified before any integration | TEACHER |
+## Additional architecture teachers
 
-## Immediate engineering conclusions
+| Model | Useful idea | Default decision |
+|---|---|---|
+| DMDNet | Identity-specific + generic component dictionaries | Reuse concept in CFS component/reference memory, not full legacy stack |
+| DFDNet | Multi-scale eye/nose/mouth dictionaries and confidence transfer | Teacher |
+| ASFFNet | Multi-exemplar feature alignment and adaptive fusion | Teacher |
+| ReF-LDM | Flexible multi-reference CacheKV aggregation | Teacher; multi-step LDM too costly by default |
+| DifFace / DR2 | Robustness to unknown severe degradation | Teacher/benchmark only |
 
-1. **Do not install ten models.** The first real vertical slice is GPEN BFR-512 only.
-2. The existing CFS component bank and up-to-nine-reference memory already implement the correct product skeleton for personalized per-component routing; extend their scoring rather than replacing them.
-3. Paper Quality mode needs a new generated provenance class `GENERATED_MODEL_INFERRED`; existing conservative observed provenance remains authoritative.
-4. GPEN BFR-512 can be benchmarked because the upstream explicitly documents CPU and Windows operation, but it cannot become a redistributable `QUALIFIED` production dependency until code/weights licensing is explicitly resolved.
-5. GFPGAN v1.4 is the next model only after GPEN produces a real CFS image and actual CPU RAM/time/identity evidence.
-6. CodeFormer is technically attractive for severe restoration/inpainting but its S-Lab non-commercial license must remain visible in qualification state.
-7. FBCNN is the preferred first JPEG specialist because its task exactly matches single/double/real-world JPEG artifacts and its code is Apache-2.0.
-8. Diffusion systems are teacher/benchmark candidates, not default EliteBook dependencies.
+## Production-oriented ranking by actual CFS damage
 
-## Primary-source audit set
+This is a **qualification order**, not a claim that every model will ship.
 
-- GPEN: https://github.com/yangxy/GPEN ; https://arxiv.org/abs/2105.06070
-- GFPGAN: https://github.com/TencentARC/GFPGAN
-- CodeFormer: https://github.com/sczhou/CodeFormer
-- FBCNN: https://github.com/jiaxi-jiang/FBCNN
-- NAFNet: https://github.com/megvii-research/NAFNet
-- Zero-DCE++: https://github.com/Li-Chongyi/Zero-DCE_extension
-- RestoreFormer++: https://github.com/wzhouxiff/RestoreFormerPlusPlus
-- VQFR: https://github.com/TencentARC/VQFR
-- RefFaceInpainting: https://github.com/WuyangLuo/RefFaceInpainting
-- SwinIR: https://github.com/JingyunLiang/SwinIR
-- DMDNet: https://github.com/csxmli2016/DMDNet
-- DFDNet: https://github.com/csxmli2016/DFDNet
-- ASFFNet512: https://github.com/csxmli2016/ASFFNet512
-- RefineFIR paper: https://openaccess.thecvf.com/content/WACV2025/html/Chong_Copy_or_Not_Reference-Based_Face_Image_Restoration_with_Fine_Details_WACV_2025_paper.html
-- InstantRestore: https://github.com/snap-research/InstantRestore
-- FaceMe: https://github.com/modyu-liu/FaceMe
-- ReF-LDM: https://github.com/ChiWeiHsiao/ref-ldm
-- OSDFace: https://github.com/jkwang28/OSDFace
-- DifFace: https://github.com/zsyOAOA/DifFace
-- DR2 paper: https://openaccess.thecvf.com/content/CVPR2023/html/Wang_DR2_Diffusion-Based_Robust_Degradation_Remover_for_Blind_Face_Restoration_CVPR_2023_paper.html
+1. **Observed same-person component evidence** — always first for sticker/scribble/mosaic/missing eye/nose/mouth when geometry and identity are valid.
+2. **FBCNN** — JPEG/double-JPEG/social recompression pre-clean only when detected.
+3. **NAFNet** — mild blur/noise/deblur.
+4. **InstantRestore** — first personalized learned challenger after DamageMaskNet/reference-bank routing, because its input contract most closely matches MAIN + several references.
+5. **RefineFIR** — fine identity-detail/reference copy-or-not challenger.
+6. **RefFaceInpainting** — large occlusion with a strong reference.
+7. **GPEN / GFPGAN / CodeFormer** — blind generative candidates when observed reference evidence cannot solve the component.
+8. **OSDFace** — severe blind challenger if its one-step diffusion runtime fits <=80% total-PC resources and provides measured quality gain.
+9. **FaceMe / RestoreFormer++** — benchmark only if the preceding specialists leave a measurable quality gap.
+10. **PerFuSe / RefIPFR / BioDDM** — architecture teachers until an official executable implementation exists and target-PC feasibility can be measured.
+
+## Non-negotiable identity/provenance policy
+
+- SFace frozen safety threshold remains unchanged.
+- Wrong-person references have zero observed-pixel and identity-anchor authority.
+- Partial references remain component-local.
+- Generated candidates are `GENERATED_MODEL_INFERRED`, never `OBSERVED_REFERENCE` or `ORIGINAL_RECOVERED`.
+- Healthy MAIN pixels are not rewritten merely because a generator looks sharper.
+- Candidate scoring is done from a common checkpoint; heavy generators are not chained destructively.
+- Final model selection is calibrated only on DEVELOPMENT/VALIDATION, never final holdout.
+
+## Immediate execution order
+
+1. Complete DamageMaskNet mixed-source DEVELOPMENT vertical slice and ONNX parity.
+2. Build the larger 300–400 source development/validation bank and compare lightweight segmentation architectures only if the current U-Net hypothesis fails/underperforms.
+3. Connect DamageMaskNet output to the existing per-component reference bank.
+4. Benchmark **InstantRestore** as the first learned personalized model under the same 80% governor.
+5. Benchmark RefineFIR / RefFaceInpainting on their specialist cases.
+6. Re-run GPEN/GFPGAN/CodeFormer/FBCNN over the broader degradation validation matrix through the common adapter.
+7. Benchmark OSDFace severe cases only after the personalized/reference-first path is established.
+8. Promote only measured winners per degradation family.
+
+Final holdouts remain untouched until the research/validation candidate is frozen.
