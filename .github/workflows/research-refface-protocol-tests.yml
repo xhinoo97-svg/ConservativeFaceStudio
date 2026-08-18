@@ -1,0 +1,35 @@
+name: Research RefFace CPU protocol tests
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - app/face_parsing_runtime.py
+      - research/run_refface_cpu_vertical_slice.py
+      - .github/workflows/research-refface-cpu-vertical-slice.yml
+      - tests/test_face_parsing_runtime.py
+      - tests/test_refface_cpu_protocol.py
+      - .github/workflows/research-refface-protocol-tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  protocol-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install narrow dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'pytest>=8,<9' 'numpy>=1.26,<3' 'opencv-python>=4.10,<5' 'PyYAML>=6,<7'
+      - name: Verify CFS 19-class face parser contract
+        run: python -m pytest -q tests/test_face_parsing_runtime.py
+      - name: Verify RefFace benchmark remains manual CPU-only and hard-gated
+        run: python -m pytest -q tests/test_refface_cpu_protocol.py
