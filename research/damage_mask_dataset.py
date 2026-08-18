@@ -11,22 +11,7 @@ from typing import Iterable
 import cv2
 import numpy as np
 
-
-DAMAGE_CLASSES = (
-    'HEALTHY',
-    'BLUR',
-    'MOTION_BLUR',
-    'PIXELATION',
-    'BLOCK_MOSAIC',
-    'JPEG_ARTIFACT',
-    'SCRIBBLE',
-    'STICKER',
-    'OPAQUE_BLOCK',
-    'BLACK_BAR',
-    'PARTIAL_OCCLUSION',
-    'MISSING_COMPONENT',
-)
-CLASS_TO_INDEX = {name: index for index, name in enumerate(DAMAGE_CLASSES)}
+from app.damage_taxonomy import CLASS_TO_INDEX, DAMAGE_CLASSES
 
 
 @dataclass(frozen=True)
@@ -243,10 +228,10 @@ def apply_exact_damage(face_bgr: np.ndarray, damage_class: str, seed: int) -> Da
         result = _composite(face_bgr, changed, mask)
     elif damage_class == 'MISSING_COMPONENT':
         zones = (
-            (0.16, 0.25, 0.48, 0.43),  # left-eye/brow region in aligned-ish crop
-            (0.52, 0.25, 0.84, 0.43),  # right-eye/brow
-            (0.34, 0.38, 0.66, 0.67),  # nose/philtrum
-            (0.25, 0.61, 0.75, 0.80),  # mouth/chin
+            (0.16, 0.25, 0.48, 0.43),
+            (0.52, 0.25, 0.84, 0.43),
+            (0.34, 0.38, 0.66, 0.67),
+            (0.25, 0.61, 0.75, 0.80),
         )
         zx1, zy1, zx2, zy2 = rng.choice(zones)
         rect = (int(zx1 * size), int(zy1 * size), int(zx2 * size), int(zy2 * size))
