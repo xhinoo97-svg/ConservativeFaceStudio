@@ -3,8 +3,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
-import shutil
 import zipfile
 from collections import defaultdict
 from pathlib import Path
@@ -103,8 +101,10 @@ def _pick_identities(groups: dict[str, dict[str, list[str]]]) -> tuple[list[tupl
         raise RuntimeError(
             f"ControlFace10K identity discovery too small: female={len(female)} male={len(male)}"
         )
-    train = [("female", item) for item in female[:9]] + [("male", item) for item in male[:3]]
-    validation = [("female", item) for item in female[9:12]] + [("male", item) for item in male[3:4]]
+    # Keep the first vertical slice female-heavy while retaining control diversity.
+    # The current trainer reserves the final two records as identity-disjoint validation.
+    train = [("female", item) for item in female[:10]] + [("male", item) for item in male[:4]]
+    validation = [("female", item) for item in female[10:12]]
     return train, validation
 
 
@@ -200,8 +200,8 @@ def build(output_dir: Path, manifest_path: Path, fairface_count: int) -> dict[st
     val_ids = [str(row["identity_key"]) for row in sources if row["dataset_split"] == "validation"]
     if set(train_ids) & set(val_ids):
         raise RuntimeError("Identity leakage in mixed source bank")
-    if len(val_ids) != 4:
-        raise RuntimeError(f"Expected four validation identities, got {len(val_ids)}")
+    if len(val_ids) != 2:
+        raise RuntimeError(f"Expected two validation identities, got {len(val_ids)}")
 
     payload: dict[str, object] = {
         "version": 2,
