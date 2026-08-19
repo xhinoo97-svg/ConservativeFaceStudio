@@ -48,6 +48,7 @@ def test_empty_identity_scores_are_not_a_pass() -> None:
 
 
 def test_nonempty_proxy_or_sface_scores_remain_valid_evidence() -> None:
+    """Legacy structured score results did not always label the engine."""
     for scores in ([0.41], [0.80, 0.39]):
         result = ExecutionResult(
             "identity_check",
@@ -55,6 +56,35 @@ def test_nonempty_proxy_or_sface_scores_remain_valid_evidence() -> None:
             {"scores": list(scores), "best": max(scores), "minimum": 0.363},
         )
         _require_identity_result_evidence(result)
+
+
+def test_explicit_non_sface_proxy_engine_is_not_identity_authority() -> None:
+    result = ExecutionResult(
+        "identity_check",
+        np.zeros((4, 4, 3), dtype=np.uint8),
+        {
+            "engine": "histogram-proxy",
+            "scores": [0.91],
+            "best": 0.91,
+            "minimum": 0.363,
+        },
+    )
+    with pytest.raises(BlockExecutionError, match="fallback proxy"):
+        _require_identity_result_evidence(result)
+
+
+def test_explicit_sface_engine_with_nonempty_scores_is_valid() -> None:
+    result = ExecutionResult(
+        "identity_check",
+        np.zeros((4, 4, 3), dtype=np.uint8),
+        {
+            "engine": "opencv-zoo-sface-cpu",
+            "scores": [0.41],
+            "best": 0.41,
+            "minimum": 0.363,
+        },
+    )
+    _require_identity_result_evidence(result)
 
 
 def test_empty_score_failure_restores_runtime_reference_list() -> None:

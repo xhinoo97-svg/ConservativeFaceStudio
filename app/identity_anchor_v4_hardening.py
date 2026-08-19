@@ -5,8 +5,10 @@ from __future__ import annotations
 The preflight identity component is useful for ranking, but it is single-link: A-B and
 B-C can form one component even when A-C is below the SFace threshold. V4 identity
 authority therefore never propagates transitively through that component. It uses only
-direct SFace edges already computed during preflight, anchored to MAIN source 0 or to
-an independently face-local same-canvas bridge source.
+direct SFace evidence anchored to MAIN source 0 or to an independently face-local
+same-canvas bridge source. Existing current-stage direct SFace flags remain usable when
+no valid preflight matrix exists; a missing historical `engine` label is not itself proof
+of a proxy, while an explicitly non-SFace engine is rejected.
 """
 
 from functools import wraps
@@ -99,7 +101,7 @@ def _direct_identity_authority(workspace) -> dict[int, tuple[int, ...]]:
 
     Authorities are fixed before traversal: MAIN (if it has an embedding) plus exact
     face-local same-canvas bridge sources. Newly trusted references never become new
-    anchors, which prevents single-link/transitive identity propagation.
+    anchors, preventing single-link/transitive identity propagation.
     """
     parsed = _preflight_direct_sface_edges(workspace)
     if parsed is None:
@@ -133,6 +135,49 @@ def _direct_identity_authority(workspace) -> dict[int, tuple[int, ...]]:
     return authority
 
 
+def _runtime_order(workspace, reference_count: int) -> list[int]:
+    raw = workspace.metadata.get("runtime_source_order")
+    if isinstance(raw, list) and len(raw) == reference_count + 1:
+        try:
+            return [int(value) for value in raw]
+        except (TypeError, ValueError):
+            pass
+    return list(range(reference_count + 1))
+
+
+def _current_direct_sface_sources(workspace, reference_count: int) -> set[int]:
+    """Return current-stage whole-face SFace-positive sources.
+
+    A current `reference_identity_verified=True` plus a usable numeric score is direct
+    evidence produced for the current runtime slot. It is mapped through
+    `runtime_source_order`, so reordering cannot change the original source identity.
+    This fallback is used when no valid preflight matrix is available; it does not
+    create transitive trust.
+    """
+    flags = workspace.metadata.get("reference_identity_verified")
+    scores = workspace.metadata.get("reference_identity_scores")
+    if not isinstance(flags, list) or len(flags) != reference_count:
+        return set()
+    if not isinstance(scores, list) or len(scores) != reference_count:
+        return set()
+    order = _runtime_order(workspace, reference_count)
+    result: set[int] = set()
+    for index, flag in enumerate(flags):
+        if not bool(flag) or index + 1 >= len(order):
+            continue
+        score = scores[index]
+        if score is None:
+            continue
+        try:
+            value = float(score)
+            source = int(order[index + 1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value) and source > 0:
+            result.add(source)
+    return result
+
+
 def _harden_bridge_result(
     workspace,
     original_bridge,
@@ -153,10 +198,10 @@ def _harden_bridge_result(
 
     flags, reasons, _trusted = original_bridge(workspace)
     authority = _direct_identity_authority(workspace)
+    parsed = _preflight_direct_sface_edges(workspace)
     same_canvas = _face_local_identity_bridge_sources(workspace)
-    order = workspace.metadata.get("runtime_source_order")
-    if not isinstance(order, list) or len(order) != count + 1:
-        order = list(range(count + 1))
+    current_direct = _current_direct_sface_sources(workspace, count)
+    order = _runtime_order(workspace, count)
 
     for index in range(count):
         try:
@@ -166,21 +211,38 @@ def _harden_bridge_result(
             reasons[index] = "rejected_invalid_source_mapping"
             continue
 
-        if source in same_canvas and flags[index]:
+        score_values = workspace.metadata.get("reference_identity_scores")
+        current_score = score_values[index] if isinstance(score_values, list) and len(score_values) == count else None
+
+        # A face-local same-canvas source is a global anchor only if it also has a
+        # whole-face identity observation. Sparse/partial sheets remain component-local.
+        if source in same_canvas and flags[index] and current_score is not None:
             reasons[index] = "verified_face_local_same_canvas_main_bridge"
             continue
-        if before_flags[index] and before_reasons[index] == "direct_sface":
+
+        if before_flags[index] and before_reasons[index] == "direct_sface" and current_score is not None:
             flags[index] = True
             reasons[index] = "direct_sface"
             continue
+
         linked = authority.get(source, ())
-        if linked:
+        if linked and current_score is not None:
             flags[index] = True
             if 0 in linked:
                 reasons[index] = "direct_main_sface_bridge"
             else:
                 reasons[index] = "same_canvas_direct_sface_bridge"
             continue
+
+        # If preflight has no valid matrix, preserve only direct current-stage SFace
+        # evidence. This is not a reference-cluster rescue: each source has its own
+        # current score/flag and is mapped to its original source id.
+        if parsed is None and source in current_direct:
+            flags[index] = True
+            if reasons[index] in {"rejected", ""}:
+                reasons[index] = "direct_sface"
+            continue
+
         if flags[index] or before_flags[index] or reasons[index] in {
             "same_canvas_bridged_cross_reference_cluster",
             "main_bridged_cross_reference_cluster",
@@ -191,7 +253,11 @@ def _harden_bridge_result(
     trusted = {
         int(order[index + 1])
         for index, flag in enumerate(flags)
-        if flag and index + 1 < len(order)
+        if flag
+        and index + 1 < len(order)
+        and isinstance(workspace.metadata.get("reference_identity_scores"), list)
+        and len(workspace.metadata["reference_identity_scores"]) == count
+        and workspace.metadata["reference_identity_scores"][index] is not None
     }
     workspace.metadata["reference_identity_verified"] = flags
     workspace.metadata["reference_identity_reasons"] = reasons
@@ -202,34 +268,52 @@ def _harden_bridge_result(
 
 
 def _harden_trusted_sources(workspace, reference_count: int, original_trusted) -> set[int]:
+    """Return global identity anchors with explicit full-face evidence only."""
     flags = workspace.metadata.get("reference_identity_verified")
-    reasons = workspace.metadata.get("reference_identity_reasons")
     scores = workspace.metadata.get("reference_identity_scores")
-    order = workspace.metadata.get("runtime_source_order")
-    if not isinstance(order, list) or len(order) != reference_count + 1:
-        order = list(range(reference_count + 1))
-
-    score_values = scores if isinstance(scores, list) and len(scores) == reference_count else [None] * reference_count
-    reason_values = reasons if isinstance(reasons, list) and len(reasons) == reference_count else ["rejected"] * reference_count
+    reasons = workspace.metadata.get("reference_identity_reasons")
+    order = _runtime_order(workspace, reference_count)
+    parsed = _preflight_direct_sface_edges(workspace)
+    authority = _direct_identity_authority(workspace)
+    same_canvas = _face_local_identity_bridge_sources(workspace)
     hardened = workspace.metadata.get("identity_v4_flags_hardened") is True
 
+    score_values = scores if isinstance(scores, list) and len(scores) == reference_count else None
+    reason_values = reasons if isinstance(reasons, list) and len(reasons) == reference_count else ["rejected"] * reference_count
+
     trusted: set[int] = set()
-    if isinstance(flags, list) and len(flags) == reference_count:
+
+    # When current LANDMARKS/SFace flags exist, they describe the current runtime slots.
+    # A usable current score is required, which prevents a partial same-canvas sheet from
+    # becoming a global anchor. If a valid preflight matrix exists and flags have not yet
+    # been V4-hardened, only fixed direct authority or an explicit direct_sface reason may
+    # survive. Without a valid matrix, current per-source SFace flags are the best direct
+    # evidence available and are preserved.
+    if isinstance(flags, list) and len(flags) == reference_count and score_values is not None:
         for index, flag in enumerate(flags):
             if not bool(flag) or score_values[index] is None or index + 1 >= len(order):
                 continue
-            source = int(order[index + 1])
-            if hardened or str(reason_values[index]) == "direct_sface":
+            try:
+                source = int(order[index + 1])
+            except (TypeError, ValueError):
+                continue
+            if source <= 0:
+                continue
+            if hardened:
+                trusted.add(source)
+            elif parsed is None:
+                trusted.add(source)
+            elif str(reason_values[index]) == "direct_sface" or source in authority:
                 trusted.add(source)
 
-    # Defense in depth for consumers that call this helper before LANDMARKS has run
-    # the V4 bridge: re-derive only fixed direct authority, never component-wide trust.
-    authority = _direct_identity_authority(workspace)
-    parsed = _preflight_direct_sface_edges(workspace)
-    positions = parsed[0] if parsed is not None else {}
-    same_canvas = _face_local_identity_bridge_sources(workspace)
-    trusted.update(source for source in authority if source > 0)
-    trusted.update(source for source in same_canvas if source in positions)
+    else:
+        # Before current SFace flags exist, use only the fixed preflight direct graph.
+        trusted.update(source for source in authority if source > 0)
+        # A strict face-local same-canvas source may itself be a global anchor only when
+        # the preflight matrix proves that a whole-face embedding existed for that source.
+        if parsed is not None:
+            positions = parsed[0]
+            trusted.update(source for source in same_canvas if source in positions)
 
     workspace.metadata["identity_transitive_component_authority_disabled"] = True
     workspace.metadata["identity_pre_landmarks_direct_trusted_original_source_indices"] = sorted(trusted)
@@ -241,19 +325,26 @@ def _require_real_sface_result(result) -> None:
 
     details = getattr(result, "details", None)
     if not isinstance(details, dict):
-        raise BlockExecutionError(
-            "Controllo identità V4 senza evidenza strutturata SFace"
-        )
+        raise BlockExecutionError("Controllo identità V4 senza evidenza strutturata SFace")
     scores = details.get("scores")
     if not isinstance(scores, list) or not scores:
-        raise BlockExecutionError(
-            "Controllo identità V4 senza confronti SFace utilizzabili"
-        )
-    engine = str(details.get("engine", "")).lower()
-    if "sface" not in engine:
-        raise BlockExecutionError(
-            "Controllo identità senza confronto SFace reale: il fallback proxy non è autorità V4"
-        )
+        raise BlockExecutionError("Controllo identità V4 senza confronti SFace utilizzabili")
+    try:
+        numeric = [float(value) for value in scores]
+    except (TypeError, ValueError):
+        raise BlockExecutionError("Controllo identità V4 con score biometrico non valido")
+    if any(not math.isfinite(value) for value in numeric):
+        raise BlockExecutionError("Controllo identità V4 con score biometrico non finito")
+
+    # Historical valid handlers did not always emit an `engine` field. Missing metadata
+    # alone is not proof that the scores came from a proxy. But if an engine is explicitly
+    # declared, it must identify SFace; explicit histogram/proxy engines fail closed.
+    if "engine" in details:
+        engine = str(details.get("engine", "")).strip().lower()
+        if "sface" not in engine:
+            raise BlockExecutionError(
+                "Controllo identità senza confronto SFace reale: il fallback proxy non è autorità V4"
+            )
 
 
 def install_identity_anchor_v4_hardening() -> None:
