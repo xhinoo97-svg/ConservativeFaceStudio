@@ -4,17 +4,20 @@ import json
 import logging
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 import cv2
 import numpy as np
-from PySide6.QtCore import QThread, Qt
+from PySide6.QtCore import QThread, QTimer, Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -29,6 +32,7 @@ from .execution import Workspace
 from .hardware import detect_hardware_profile
 from .imaging import fit_to_canvas, read_image
 from .paths import model_search_roots, user_data_root
+from .progress_timeline import BLOCK_TITLES, format_duration
 from .project import ProjectDocument, load_project, save_project
 from .reference_limits import MAX_PROJECT_IMAGES, MAX_REFERENCE_IMAGES, validate_reference_count
 from .settings import load_runtime_settings
@@ -74,7 +78,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Conservative Face Studio — Automatic Strict Mode")
-        self.resize(1120, 790)
+        self.resize(1120, 900)
 
         self.primary: np.ndarray | None = None
         self.references: list[np.ndarray] = []
@@ -92,6 +96,9 @@ class MainWindow(QMainWindow):
         self.update_applying = False
         self.pending_update_apply = False
         self.pending_installer_path: str | None = None
+        self._progress_event: dict[str, object] | None = None
+        self._progress_event_started_monotonic: float | None = None
+        self._timeline_items: list[QListWidgetItem] = []
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -118,7 +125,17 @@ class MainWindow(QMainWindow):
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 13)
+        self.progress.setFormat("%v / 13 — %p%")
         layout.addWidget(self.progress)
+
+        self.progress_detail_label = QLabel("Timeline: —")
+        self.progress_detail_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+        layout.addWidget(self.progress_detail_label)
+
+        self.timeline = QListWidget()
+        self.timeline.setMaximumHeight(190)
+        self._reset_timeline()
+        layout.addWidget(self.timeline)
 
         controls = QHBoxLayout()
         self.load_primary_button = QPushButton("Carica MAIN IMAGE")
@@ -139,6 +156,10 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.download_button)
         layout.addLayout(controls)
 
+        self.progress_timer = QTimer(self)
+        self.progress_timer.setInterval(1000)
+        self.progress_timer.timeout.connect(self._refresh_progress_clock)
+
         self.load_primary_button.clicked.connect(self.load_primary)
         self.load_references_button.clicked.connect(self.load_references)
         self.clear_references_button.clicked.connect(self.clear_references)
@@ -149,6 +170,100 @@ class MainWindow(QMainWindow):
         self.download_button.clicked.connect(self.download_results)
         self._refresh_hardware_status()
         self._update_controls()
+
+    def _reset_timeline(self) -> None:
+        self.timeline.clear()
+        self._timeline_items = []
+        for index, title in enumerate(BLOCK_TITLES, start=1):
+            item = QListWidgetItem(f"{index:02d}. {title} — WAITING")
+            self.timeline.addItem(item)
+            self._timeline_items.append(item)
+        self._progress_event = None
+        self._progress_event_started_monotonic = None
+        if hasattr(self, "progress_detail_label"):
+            self.progress_detail_label.setText("Timeline: —")
+
+    @staticmethod
+    def _progress_text(payload: dict[str, object], *, elapsed_override: float | None = None) -> str:
+        block_index = int(payload.get("block_index", 0) or 0)
+        block_total = int(payload.get("block_total", 13) or 13)
+        title = str(payload.get("block_title", "Preparazione"))
+        role = str(payload.get("model_role", "—"))
+        elapsed = elapsed_override
+        if elapsed is None:
+            try:
+                elapsed = float(payload.get("elapsed_block_seconds", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                elapsed = 0.0
+        try:
+            estimated_block = payload.get("estimated_block_seconds")
+            estimated_block = None if estimated_block is None else float(estimated_block)
+        except (TypeError, ValueError):
+            estimated_block = None
+        try:
+            remaining = payload.get("estimated_remaining_seconds")
+            remaining = None if remaining is None else float(remaining)
+        except (TypeError, ValueError):
+            remaining = None
+        if elapsed_override is not None and remaining is not None:
+            baseline_elapsed = float(payload.get("elapsed_block_seconds", 0.0) or 0.0)
+            remaining = max(0.0, remaining - max(0.0, elapsed_override - baseline_elapsed))
+        prefix = "Preparazione" if block_index <= 0 else f"Blocco {block_index}/{block_total}"
+        estimate = f"stima blocco {format_duration(estimated_block)}"
+        return (
+            f"{prefix} • {title} • {role} • trascorso {format_duration(elapsed)} • "
+            f"{estimate} • rimanente ~{format_duration(remaining)}"
+        )
+
+    def _on_progress_detail(self, payload: object) -> None:
+        if not isinstance(payload, dict):
+            return
+        event = dict(payload)
+        self._progress_event = event
+        phase = str(event.get("phase", ""))
+        block_index = int(event.get("block_index", 0) or 0)
+        status = str(event.get("status", "RUNNING"))
+        if status == "RUNNING":
+            self._progress_event_started_monotonic = time.monotonic()
+        else:
+            self._progress_event_started_monotonic = None
+        self.progress_detail_label.setText(self._progress_text(event))
+
+        if 1 <= block_index <= len(self._timeline_items):
+            title = str(event.get("block_title", BLOCK_TITLES[block_index - 1]))
+            role = str(event.get("model_role", "—"))
+            elapsed = event.get("elapsed_block_seconds")
+            elapsed_value = None
+            try:
+                elapsed_value = None if elapsed is None else float(elapsed)
+            except (TypeError, ValueError):
+                elapsed_value = None
+            suffix = format_duration(elapsed_value) if status != "RUNNING" else "00:00"
+            self._timeline_items[block_index - 1].setText(
+                f"{block_index:02d}. {title} — {status} — {role} — {suffix}"
+            )
+            self.timeline.scrollToItem(self._timeline_items[block_index - 1])
+        elif phase.startswith("prepare"):
+            self.status.setText(str(event.get("message", "Preparazione modelli")))
+
+    def _refresh_progress_clock(self) -> None:
+        event = self._progress_event
+        started = self._progress_event_started_monotonic
+        if not isinstance(event, dict) or started is None or str(event.get("status")) != "RUNNING":
+            return
+        try:
+            baseline = float(event.get("elapsed_block_seconds", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            baseline = 0.0
+        elapsed = baseline + max(0.0, time.monotonic() - started)
+        self.progress_detail_label.setText(self._progress_text(event, elapsed_override=elapsed))
+        block_index = int(event.get("block_index", 0) or 0)
+        if 1 <= block_index <= len(self._timeline_items):
+            title = str(event.get("block_title", BLOCK_TITLES[block_index - 1]))
+            role = str(event.get("model_role", "—"))
+            self._timeline_items[block_index - 1].setText(
+                f"{block_index:02d}. {title} — RUNNING — {role} — {format_duration(elapsed)}"
+            )
 
     @staticmethod
     def _update_manifest_url() -> str:
@@ -231,8 +346,6 @@ class MainWindow(QMainWindow):
         self.pending_installer_path = None
         self._update_controls()
         if pending_apply:
-            from PySide6.QtCore import QTimer
-
             QTimer.singleShot(0, lambda: self._start_update_worker(apply_updates=True))
         elif pending_installer:
             try:
@@ -243,8 +356,6 @@ class MainWindow(QMainWindow):
             except Exception as exc:
                 QMessageBox.critical(self, "Errore installer", str(exc))
                 return
-            from PySide6.QtCore import QTimer
-
             QTimer.singleShot(0, QApplication.quit)
 
     def closeEvent(self, event) -> None:  # noqa: N802
@@ -301,6 +412,7 @@ class MainWindow(QMainWindow):
         self.after_panel.clear()
         self.after_panel.setText("Risultato finale")
         self.progress.setValue(0)
+        self._reset_timeline()
         self.confidence_label.setText("Original Information Confidence: —")
         self.status.setText("MAIN IMAGE caricata. La foto #1 resterà il canvas finale. Aggiungi da 0 a 9 reference.")
         self._update_controls()
@@ -400,6 +512,7 @@ class MainWindow(QMainWindow):
         else:
             self.after_panel.setText("Risultato finale")
         self.progress.setValue(0)
+        self._reset_timeline()
         self.confidence_label.setText("Original Information Confidence: —")
         self.status.setText(
             f"Progetto caricato: 1 MAIN IMAGE + {len(fitted)} reference. Ripresa sicura dalle sorgenti immutabili."
@@ -490,6 +603,7 @@ class MainWindow(QMainWindow):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._on_progress)
+        worker.progress_detail.connect(self._on_progress_detail)
         worker.completed.connect(self._on_completed)
         worker.failed.connect(self._on_failed)
         worker.completed.connect(thread.quit)
@@ -501,6 +615,8 @@ class MainWindow(QMainWindow):
         self.worker = worker
         self.progress.setRange(0, 13)
         self.progress.setValue(0)
+        self._reset_timeline()
+        self.progress_timer.start()
         self.confidence_label.setText("Original Information Confidence: calcolo in corso")
         self.status.setText("Pipeline automatica in esecuzione")
         self._update_controls()
@@ -524,6 +640,8 @@ class MainWindow(QMainWindow):
             save_project(self._project_document(status="running", last_checkpoint=checkpoint), self.recovery_project_path)
 
     def _on_completed(self, result: object) -> None:
+        self.progress_timer.stop()
+        self._progress_event_started_monotonic = None
         if not isinstance(result, AutomaticRunResult):
             self._on_failed("Risultato pipeline non valido")
             return
@@ -552,6 +670,7 @@ class MainWindow(QMainWindow):
                 f"Original Information Confidence: {evidence:.1f}%   |   Generated: {generated:.1f}%   |   Symmetry: {symmetry:.1f}%   |   Unresolved: {unresolved:.1f}%"
             )
         self.status.setText("Elaborazione completata. Premi Scarica risultati ZIP.")
+        self.progress_detail_label.setText("Timeline: 13/13 completati — ETA 00:00")
         if self.recovery_project_path is not None:
             save_project(
                 self._project_document(status="completed", last_checkpoint=str(result.final_image)),
@@ -561,8 +680,11 @@ class MainWindow(QMainWindow):
 
     def _on_failed(self, message: str) -> None:
         LOGGER.error("Pipeline failed: %s", message)
+        self.progress_timer.stop()
+        self._progress_event_started_monotonic = None
         self.progress.setValue(0)
         self.status.setText("Elaborazione non completata")
+        self.progress_detail_label.setText("Timeline: elaborazione interrotta")
         self.confidence_label.setText("Original Information Confidence: non disponibile")
         if self.recovery_project_path is not None:
             save_project(self._project_document(status="failed"), self.recovery_project_path)
