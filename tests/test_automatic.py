@@ -4,10 +4,12 @@ import hashlib
 import json
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
 import app.automatic as automatic_module
+import app.execution as execution_module
 
 from app.automatic import AutomaticPipelineRunner
 from app.execution import ExecutionResult, Workspace
@@ -129,9 +131,19 @@ def test_preflight_cannot_mutate_true_import_snapshot(monkeypatch, tmp_path: Pat
         workspace.metadata["preflight_deblurred_all"] = True
         return Result()
 
+    class SyntheticSFaceBackend:
+        name = "synthetic-sface-test-fixture"
+
+        def analyze(self, image):
+            # Autorun plumbing is not a face-recognition test. Provide deterministic,
+            # explicit SFace-like evidence so V4 fail-closed semantics remain active
+            # instead of depending on the deliberately forbidden histogram proxy.
+            return SimpleNamespace(embedding=np.asarray([1.0, 0.0, 0.0], dtype=np.float32))
+
     monkeypatch.setattr(automatic_module, "preprocess_and_select_front_base", preflight)
     monkeypatch.setattr(automatic_module, "restore_imported_primary_for_same_canvas", lambda workspace, observed: type("D", (), {"applied": False, "reason": "fixture", "matched_reference_count": 0, "original_selected_source_index": 0})())
     monkeypatch.setattr(automatic_module, "apply_observed_restoration_policy", lambda workspace, observed: None)
+    monkeypatch.setattr(execution_module, "choose_backend", lambda prefer_embeddings=True: SyntheticSFaceBackend())
     model = tmp_path / "nafnet.onnx"
     model.write_bytes(b"fixture")
     workspace = Workspace(primary=source.copy(), metadata={"core_model_paths": {"opencv_nafnet_deblur": str(model)}})

@@ -34,12 +34,16 @@ def _same_canvas_match(primary: np.ndarray, reference: np.ndarray) -> bool:
         iterations=1,
     )
     comparable = observed_u8 > 0
-    if int(np.count_nonzero(comparable)) < max(256, int(round(primary.shape[0] * primary.shape[1] * 0.05))):
+    comparable_count = int(np.count_nonzero(comparable))
+    if comparable_count < max(256, int(round(primary.shape[0] * primary.shape[1] * 0.05))):
         return False
 
     base_lab = cv2.cvtColor(primary, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
     ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB).astype(np.float32) / 255.0
-    delta = np.mean(np.abs(base_lab - ref_lab), axis=2)[comparable]
+    delta_map = np.mean(np.abs(base_lab - ref_lab), axis=2)
+    delta = delta_map[comparable]
+    # The global photometric rule remains strict. Local-damage tolerance is allowed only
+    # after this check, and only for the secondary gradient test below.
     if float(np.median(delta)) > 0.035 or float(np.percentile(delta, 90.0)) > 0.10:
         return False
 
@@ -51,9 +55,35 @@ def _same_canvas_match(primary: np.ndarray, reference: np.ndarray) -> bool:
     ref_gy = cv2.Sobel(ref_gray, cv2.CV_32F, 0, 1, ksize=3)
     base_grad = cv2.magnitude(base_gx, base_gy)
     ref_grad = cv2.magnitude(ref_gx, ref_gy)
-    edges = comparable & ((base_grad >= 12.0) | (ref_grad >= 12.0))
-    if int(np.count_nonzero(edges)) >= 64:
-        edge_delta = np.abs(base_grad[edges] - ref_grad[edges])
+    raw_edges = comparable & ((base_grad >= 12.0) | (ref_grad >= 12.0))
+    raw_edge_count = int(np.count_nonzero(raw_edges))
+
+    # Mosaic/pixelation may alter only a few source pixels while creating many artificial
+    # gradient boundaries around that local region. When the strict global Lab check has
+    # already passed and the photometric mismatch is <=10% of comparable pixels, exclude
+    # only a small dilated neighborhood of those local mismatches from the edge check.
+    # The reference still needs substantial stable edge support, so a same-background but
+    # structurally different image cannot pass by having all informative edges discarded.
+    edge_comparable = raw_edges
+    local_mismatch = comparable & (delta_map > 0.035)
+    mismatch_count = int(np.count_nonzero(local_mismatch))
+    mismatch_fraction = mismatch_count / max(1, comparable_count)
+    if 0 < mismatch_count and mismatch_fraction <= 0.10 and raw_edge_count >= 64:
+        mismatch_u8 = local_mismatch.astype(np.uint8) * 255
+        exclusion = cv2.dilate(
+            mismatch_u8,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+            iterations=1,
+        ) > 0
+        stable_edges = raw_edges & ~exclusion
+        stable_edge_count = int(np.count_nonzero(stable_edges))
+        minimum_stable_edges = max(64, int(round(raw_edge_count * 0.35)))
+        if stable_edge_count < minimum_stable_edges:
+            return False
+        edge_comparable = stable_edges
+
+    if int(np.count_nonzero(edge_comparable)) >= 64:
+        edge_delta = np.abs(base_grad[edge_comparable] - ref_grad[edge_comparable])
         if float(np.median(edge_delta)) > 8.0 or float(np.percentile(edge_delta, 90.0)) > 42.0:
             return False
     return True

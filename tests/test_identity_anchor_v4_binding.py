@@ -35,6 +35,10 @@ def _workspace():
                 "applied": False,
                 "restored_source_index": 0,
                 "matched_original_reference_indices": [2],
+                "identity_bridge_original_reference_indices": [2],
+                "identity_bridge_matched_original_reference_indices": [2],
+                "identity_bridge_requires_face_local_observed_agreement": True,
+                "identity_bridge_region": "inner_face_peripheral_band_v1",
             },
         }
     )
@@ -46,7 +50,7 @@ def test_v4_policy_is_bound_into_installer_and_global_guardrail() -> None:
     assert getattr(automatic.AutomaticPipelineRunner._global_identity_anchors, "_cfs_v4_identity_anchor", False) is True
 
 
-def test_v2_firewall_reads_v4_same_canvas_override_at_runtime() -> None:
+def test_v2_firewall_reads_v4_face_local_same_canvas_override_at_runtime() -> None:
     install_identity_anchor_v4_policy()
     workspace = _workspace()
 
@@ -58,11 +62,16 @@ def test_v2_firewall_reads_v4_same_canvas_override_at_runtime() -> None:
     assert workspace.metadata["identity_anchor_policy"] == POLICY_NAME
 
 
-def test_non_same_canvas_rejected_source_remains_rejected() -> None:
+def test_broad_same_canvas_without_face_local_identity_proof_remains_rejected() -> None:
     install_identity_anchor_v4_policy()
     workspace = _workspace()
-    workspace.metadata["same_canvas_primary_anchor"]["matched_original_reference_indices"] = []
+    # Keep broad same-canvas evidence present but remove the strict face-local identity
+    # bridge. Broad canvas/background agreement alone must not override V2 rejection.
+    workspace.metadata["same_canvas_primary_anchor"]["identity_bridge_original_reference_indices"] = []
+    workspace.metadata["same_canvas_primary_anchor"]["identity_bridge_matched_original_reference_indices"] = []
 
     eligibility = v2._identity_eligibility_by_source(workspace)
 
+    assert workspace.metadata["same_canvas_primary_anchor"]["matched_original_reference_indices"] == [2]
     assert eligibility[2] == v2.IDENTITY_REJECTED
+    assert workspace.metadata["identity_firewall_same_canvas_override_original_source_indices"] == []
