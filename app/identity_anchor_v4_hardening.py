@@ -7,10 +7,10 @@ B-C can form one component even when A-C is below the SFace threshold. V4 identi
 authority therefore never propagates transitively through that component. It uses only
 direct SFace evidence anchored to MAIN source 0 or to an independently face-local
 same-canvas bridge source. Newly trusted references never become new fixed identity
-anchors. Existing current-stage direct SFace flags remain usable when no valid preflight
-matrix exists, except flags explicitly labelled as legacy cluster promotions. A missing
-historical `engine` label is not itself proof of a proxy, while an explicitly non-SFace
-engine is rejected.
+anchors. Every direct edge is accepted only when value >= minimum. Existing current-
+stage direct SFace flags remain usable when no valid preflight matrix exists, except flags
+explicitly labelled as legacy cluster promotions. A missing historical `engine` label is
+not itself proof of a proxy, while an explicitly non-SFace engine is rejected.
 """
 
 from functools import wraps
