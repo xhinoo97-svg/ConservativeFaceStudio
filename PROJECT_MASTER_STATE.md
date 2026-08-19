@@ -9,10 +9,10 @@
 - Canonical branch: `meta/project-state`
 - Certified base: `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`
 - Last technical branch: `hotfix/real-world-restoration-v1.1`
-- Previous technical HEAD: `84640fb7cee273bb0f5dcb19b4f9a1f3908e583e`
-- Last technical HEAD: `ab69f18aae3c486710f93aff73bab65fd97641a4`
+- Previous technical HEAD: `ab69f18aae3c486710f93aff73bab65fd97641a4`
+- Last technical HEAD: `9b8810ce5e53daa92d4f13bcbd8b23c6a25df105`
 - Track A identity-authority implementation hypothesis: **CLOSED after 3/3 evidence-based behavioral attempts.**
-- Current Track A blocker: exact-head CI for the documentation/protocol-only correction at `ab69f18a...` is **NOT_VERIFIED**. The correction restored the required non-transitive invariant sentence and changed no executable logic.
+- Current Track A blocker: exact-head CI for `9b8810ce...` is **NOT_VERIFIED**. This commit restores the complete static direct-edge protocol wording required by `test_v4_direct_edge_protocol.py`; executable logic is unchanged.
 - Current Track B blocker: recover DamageMaskNet attempt-3 evidence without rerun for observability.
 
 FORENSIC_MODE_READY: **TRUE for certified PRODUCT_V1 only**  
@@ -30,7 +30,7 @@ CFS is a local Windows face-restoration system for damaged phone/social-media po
 
 PRODUCT_V1 is certified/immutable. PRODUCT_V1_1 is a safety/operational hotfix isolated from Paper Quality. Track B contains real CPU research evidence and specialist/reference/fusion infrastructure.
 
-Track A’s three-attempt identity hypothesis converged behaviorally: ranking cluster != identity authority; direct whole-face evidence is preserved; partial same-canvas stays component-local; explicit cluster promotions fail closed; legacy structured SFace scores without an `engine` label remain compatible while explicit proxy engines are rejected. The only remaining failure at `84640fb7...` was a static source-text contract. Technical HEAD `ab69f18a...` restores that exact invariant wording only.
+Track A’s behavioral identity hypothesis has converged: ranking cluster != identity authority; direct whole-face evidence is preserved; partial same-canvas stays component-local; explicit cluster promotions fail closed; legacy structured SFace scores without an `engine` label remain compatible while explicit proxy engines are rejected. Subsequent failures were static source-contract omissions only. `9b8810ce...` restores all strings required by the static direct-edge test without changing executable behavior.
 
 ## 2. Branch and release map
 
@@ -39,7 +39,7 @@ Track A’s three-attempt identity hypothesis converged behaviorally: ranking cl
 | `main` | `2767513f...` | FROZEN / RELEASED | preserve |
 | `feature/block-pipeline-v1` | `5eff6673...` | MERGED / SUPERSEDED | archive |
 | `release/v1-certified` | `f476c6f0...` | FROZEN / ARCHIVED | preserve |
-| `hotfix/real-world-restoration-v1.1` | `ab69f18a...` | VALIDATING / ACTIVE | exact-head CI NOT_VERIFIED; previous `84640fb7...` had `1 failed,107 passed`, sole failure static invariant text |
+| `hotfix/real-world-restoration-v1.1` | `9b8810ce...` | VALIDATING / ACTIVE | exact-head CI NOT_VERIFIED; previous `ab69f18a...` had `1 failed,107 passed`, sole failure static `value >= minimum` source contract |
 | `research/face-restoration-v2` | `757a3f60...` | SUPERSEDED AS ACTIVE ARCHITECTURE | preserve assets |
 | `research/paper-quality-local-v2` | `645862d1...` | ACTIVE / BENCHMARKING | DamageMaskNet evidence recovery |
 | `meta/project-state` | self-SHA omitted | ACTIVE META | update after each technical push |
@@ -57,7 +57,7 @@ V3 and V4 remain verification-only during current Track A work; neither may be e
 ## 5. CURRENT GLOBAL OBJECTIVES
 
 - OBJ-001 Preserve V1 — PASS.
-- OBJ-002 Restore V1.1 — VALIDATING. Identity behavior hypothesis closed; protocol-only invariant correction pushed at `ab69f18a...`; exact-head gates pending verification.
+- OBJ-002 Restore V1.1 — VALIDATING. Identity behavior hypothesis closed; static protocol wording fully restored at `9b8810ce...`; exact-head gates pending verification.
 - OBJ-003 Canonical ledger — IN_PROGRESS.
 - OBJ-004 DamageMaskNet — BLOCKED pending existing attempt3 evidence.
 - OBJ-005 Broad BFR selection — IN_PROGRESS.
@@ -101,7 +101,7 @@ HEALTHY preserve MAIN; BLUR NAFNet/measured BFR; JPEG FBCNN; PIXELATION/MOSAIC o
 
 ## 13. DECISION LOG
 
-DEC-001 canonical ledger ACCEPTED. DEC-002 advanced research branch active ACCEPTED. DEC-003 <=80% CPU/process/system RAM + one heavy model ACCEPTED. DEC-004 evidence authority order ACCEPTED. DEC-005 mixed DamageMaskNet bank ACCEPTED. DEC-006 RefFace after DamageMaskNet ACCEPTED/BLOCKED. DEC-007 V3 consumed/V4 untouched ACCEPTED. DEC-008 ranking cluster != identity authority **ACCEPTED; identity implementation hypothesis CLOSED after 3 attempts**. Residual static-contract restoration is explicitly not a fourth behavioral attempt.
+DEC-001 canonical ledger ACCEPTED. DEC-002 advanced research branch active ACCEPTED. DEC-003 <=80% CPU/process/system RAM + one heavy model ACCEPTED. DEC-004 evidence authority order ACCEPTED. DEC-005 mixed DamageMaskNet bank ACCEPTED. DEC-006 RefFace after DamageMaskNet ACCEPTED/BLOCKED. DEC-007 V3 consumed/V4 untouched ACCEPTED. DEC-008 ranking cluster != identity authority **ACCEPTED; identity implementation hypothesis CLOSED after 3 attempts**. Static-contract restoration is not a fourth behavioral attempt.
 
 ## 14. EXPERIMENT LOG
 
@@ -110,8 +110,9 @@ GPEN/GFPGAN/FBCNN real DEV evidence; CodeFormer packaging fail then CPU PASS. Da
 Track A identity hypothesis:
 - attempt1 `3e919f7a...`: `4 failed,102 passed`;
 - attempt2 `7c683edd...`: `1 failed,107 passed`, cluster-only missing-matrix failure;
-- attempt3 `84640fb7...`: `1 failed,107 passed`, sole failure static `tests/test_v4_direct_edge_protocol.py::test_v4_hardening_forbids_transitive_component_authority`, requiring exact sentence `Newly trusted references never become new`; no dynamic identity assertion failed. Artifact `9351774422`, digest `c010fb733dc58fc9725aa7b27745f0ef704c8d7ffe5862cc1371f2260461bbe0`.
-- protocol/documentation correction `ab69f18aae3c486710f93aff73bab65fd97641a4`: restored the exact required sentence in the module docstring while leaving executable logic unchanged. Result NOT_VERIFIED at this ledger update.
+- attempt3 `84640fb7...`: `1 failed,107 passed`, sole failure static direct-edge source contract; no dynamic identity assertion failed.
+- protocol correction `ab69f18a...`: restored `Newly trusted references never become new`; Release Quality #127 remained `1 failed,107 passed` because the same static test also required literal `value >= minimum`. Artifact ID `9364087295`, digest `fe8372e30b5f9443c98af8268281559dca8c171dea05707bc55a28e77e4f7d10`. Windows #1310 stopped at `Run tests`; downstream packaging was not reached.
+- complete static protocol correction `9b8810ce5e53daa92d4f13bcbd8b23c6a25df105`: added the remaining required direct-edge wording while leaving executable logic unchanged. Result NOT_VERIFIED at ledger update.
 
 ## 15. QUALITY SCOREBOARD
 
@@ -134,15 +135,25 @@ SFace `0.363`; wrong-person observed pixels `0`; provenance violations `0`; froz
 Historical `3645c8c...`: Release Quality `4 failed,195 passed`, Windows/Female FAIL.
 Attempt1 `3e919f7a...`: `4 failed,102 passed`.
 Attempt2 `7c683edd...`: `1 failed,107 passed` behavioral cluster-only issue.
-Attempt3 `84640fb7...`: `1 failed,107 passed`; all remaining failure evidence was static source-text contract only.
+Attempt3 `84640fb7...`: `1 failed,107 passed`; all remaining failure evidence static source-text contract only.
 
-Current `ab69f18a...`: restored the exact static sentence `Newly trusted references never become new` in the identity-hardening docstring; executable logic unchanged. **Exact-head CI NOT_VERIFIED.**
+`ab69f18a...`: Release Quality #127 `1 failed,107 passed`; static test passed the restored non-transitive sentence but then failed on missing literal `value >= minimum`. Windows #1310 failed at generic test step, consistent with the same static-suite blocker; no packaging evidence from that HEAD.
+
+Current `9b8810ce...`: all explicit assertions in `tests/test_v4_direct_edge_protocol.py` have been inspected and their required invariant strings are present. Executable logic unchanged. **Exact-head CI NOT_VERIFIED.**
 
 If targeted identity/protocol suite is green, proceed to full pytest and same-head Windows/Female/Release Quality. Any new behavioral identity failure requires a new documented hypothesis, not continuation of the closed 3/3 hypothesis. V3/V4 remain unexecuted.
 
 ## 20. TRACK B — PAPER QUALITY
 
 Active `research/paper-quality-local-v2@645862d1...`: real CPU BFR/JPEG evidence, 80% governor, DamageMaskNet pipeline, Personalized Reference Bank, reference-first repair, selector, deterministic fusion, parser adapter, RefFace manual workflow. Models must converge to qualified/rejected/documented blocker.
+
+PDF-derived research constraints verified 2026-08-19:
+- reference-guided face inpainting should decouple global identity from local component texture/control rather than treat a reference as one indiscriminate whole-face donor;
+- alignment/correspondence should restrict information exchange to matching regions;
+- severe BFR requires balancing perceptual quality with identity and benefits from region-adaptive identity guidance rather than uniform generative pressure;
+- the MAIN image preserves pose/composition/expression/geometry; references clarify identity and damaged details; unsupported fine detail must remain conservative rather than invented.
+
+These research findings support the existing PRODUCT_V3/V4 design but do not automatically qualify any new model for V1.1.
 
 ## 21. CURRENT PAPER QUALITY BLOCKER
 
@@ -167,5 +178,7 @@ Select winners on identity-disjoint DEV/VALIDATION per degradation; identity har
 - HIST-20260819-007 identity attempt2 push `3e919f7a... -> 7c683edd...`.
 - HIST-20260819-008 attempt2 CI `1 failed,107 passed`, artifact `9351701070`, digest `d5a6a9e...`.
 - HIST-20260819-009 identity attempt3 push `7c683edd... -> 84640fb7...`.
-- HIST-20260819-010 attempt3 result: Release Quality #126 (`32214190714`) `1 failed,107 passed`; sole failure static source-contract phrase; artifact `9351774422`, digest `c010fb733dc58fc9725aa7b27745f0ef704c8d7ffe5862cc1371f2260461bbe0`; identity behavior hypothesis closed at 3/3.
-- **HIST-20260819-011:** protocol/documentation-only technical push `84640fb7cee273bb0f5dcb19b4f9a1f3908e583e -> ab69f18aae3c486710f93aff73bab65fd97641a4`. File: `app/identity_anchor_v4_hardening.py`. Change: restore exact static invariant sentence `Newly trusted references never become new` in module docstring. Executable behavior/models/checkpoints/thresholds/holdouts unchanged. CI result NOT_VERIFIED at ledger update.
+- HIST-20260819-010 attempt3 result: Release Quality #126 `1 failed,107 passed`; sole static source-contract phrase failure; identity behavior hypothesis closed at 3/3.
+- HIST-20260819-011 protocol-only push `84640fb7... -> ab69f18a...`, restored first invariant sentence, no executable change.
+- HIST-20260819-012 exact `ab69f18a...` Release Quality #127: `1 failed,107 passed`, remaining static literal `value >= minimum`; artifact `9364087295`, digest `fe8372e30b5f9443c98af8268281559dca8c171dea05707bc55a28e77e4f7d10`; Windows #1310 failed at tests.
+- **HIST-20260819-013:** protocol-only technical push `ab69f18aae3c486710f93aff73bab65fd97641a4 -> 9b8810ce5e53daa92d4f13bcbd8b23c6a25df105`. File `app/identity_anchor_v4_hardening.py`; restored complete direct-edge static wording after inspecting the entire static test. Executable behavior/models/checkpoints/thresholds/holdouts unchanged. Exact-head CI NOT_VERIFIED at ledger update.
