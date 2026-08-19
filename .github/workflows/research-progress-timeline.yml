@@ -1,0 +1,32 @@
+name: Research progress timeline
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - app/progress_timeline.py
+      - app/worker.py
+      - app/main_window.py
+      - tests/test_progress_timeline.py
+      - .github/workflows/research-progress-timeline.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  timeline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Compile progress integration
+        run: python -m py_compile app/progress_timeline.py app/worker.py app/main_window.py
+      - name: Test timing privacy ETA and UI wiring
+        run: |
+          python -m pip install 'pytest>=8,<9'
+          python -m pytest -q tests/test_progress_timeline.py
