@@ -1,793 +1,730 @@
 # Conservative Face Studio — Project Master State
 
-> CANONICAL PROJECT LEDGER. Read this file before making project decisions in a new ChatGPT/Codex/engineering session.
+> CANONICAL PROJECT LEDGER. Every new engineering/ChatGPT/Codex session must read this file before making project decisions.
 >
-> This ledger records verified repository state, planning definitions, measured evidence, unresolved uncertainty, important failures and the next exact engineering action. It is intentionally separate from certified production history.
+> This is a living construction document: CURRENT STATE is editable, while important failures, decisions, experiments and technical pushes are preserved in the append-only historical sections. `IMPLEMENTED != TESTED != BENCHMARKED != QUALIFIED != RELEASED`.
 
 ## 0. Document metadata
 
-- **Last ledger update:** 2026-08-19T05:14+02:00 (Europe/Rome)
+- **Last ledger update:** 2026-08-19T05:46+02:00 (Europe/Rome)
 - **Technical state verified at:** 2026-08-19
 - **Repository:** `xhinoo97-svg/ConservativeFaceStudio`
 - **Canonical state branch:** `meta/project-state`
-- **Last technical branch:** `research/paper-quality-local-v2`
-- **Last technical HEAD:** `645862d1b8ff3c1d7abe7df6cee0e17e4f2d68dd`
+- **Last technical branch:** `hotfix/real-world-restoration-v1.1`
+- **Previous technical HEAD:** `3645c8c39653d04616167e881adaf28d2b93cd45`
+- **Last technical HEAD:** `3e919f7a1cc54e1bdb00607c2bbeece1d3392724`
 - **Certified base:** `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`
-- **Current active engineering tracks:** Track A — V1.1 operational stabilization; Track B — Paper Quality research
+- **Current active engineering tracks:** Track A — PRODUCT_V1_1 operational stabilization; Track B — Paper Quality research
 - **Current exact blockers:**
-  1. Track A: same-HEAD hotfix CI is red because current identity/preflight hardening breaks legitimate same-person component-transfer / same-canvas cases in targeted regressions; Windows and Female-domain are also red on the same hotfix HEAD.
-  2. Track B: DamageMaskNet mixed-source U-Net attempt 3 was triggered but its final evidence cannot currently be recovered through the available Actions interface; do not launch attempt 4 merely for observability.
+  1. **Track A:** a direct-MAIN component-transfer fix has been pushed at `3e919f7a...`; its same-HEAD CI result is **NOT_VERIFIED**. The immediately preceding head `3645c8c...` had Release Quality, Windows and Female-domain all FAIL.
+  2. **Track B:** DamageMaskNet mixed-source U-Net attempt 3 was already triggered, but its final evidence remains unavailable through the current Actions interface. Do not launch attempt 4 merely to recover observability.
 - **Overall project status:** PARTIAL
 
 | Global gate | State | Scope / evidence |
 |---|---|---|
-| FORENSIC_MODE_READY | TRUE | Certified PRODUCT_V1 only; does not imply V1.1 readiness. |
-| PAPER_QUALITY_MODE_READY | FALSE | Research components exist; validation/Windows/target-PC gates incomplete. |
-| WINDOWS_INSTALLER_READY | PARTIAL | Historical PRODUCT_V1 installer/package certification exists; current V1.1 and Paper Quality builds are not release-ready. |
-| TARGET_HARDWARE_READY | FALSE | No verified real HP EliteBook 1030 G3 acceptance. |
-| QUALITY_TARGET_ACHIEVED | FALSE | Development evidence is promising but no broad identity-disjoint validation establishes the final target. |
+| FORENSIC_MODE_READY | TRUE | Certified PRODUCT_V1 only. This does not certify V1.1. |
+| PAPER_QUALITY_MODE_READY | FALSE | Real DEV evidence exists, but broad validation/Windows/target-PC gates are incomplete. |
+| WINDOWS_INSTALLER_READY | PARTIAL | Historical PRODUCT_V1 package certification exists; V1.1 new-head and Paper Quality package state are not verified. |
+| TARGET_HARDWARE_READY | FALSE | No real HP EliteBook 1030 G3 Paper Quality acceptance. |
+| QUALITY_TARGET_ACHIEVED | FALSE | No broad identity-disjoint evidence establishes the final quality target. |
 | PROJECT_FINISHED | FALSE | Unified product acceptance is incomplete. |
 
 ### Mandatory ledger update protocol
 
-Every future technical push to an active branch must follow:
+For every active technical branch:
 
-`technical work -> tests -> commit -> push -> read exact remote HEAD -> update this ledger -> commit/push ledger`
+`technical work -> tests/evidence -> commit -> push -> read exact remote HEAD -> update PROJECT_MASTER_STATE.md -> commit/push ledger`
 
-For every technical push, append a Historical Record entry containing technical branch, previous HEAD, exact new HEAD, timestamp, tests/workflows/results, affected models/objectives and next action. Do not try to record the ledger commit's own SHA inside the same commit.
+The ledger records the technical commit SHA, never its own current commit SHA. Do not force-push certified history and do not auto-merge.
 
 ---
 
 ## 1. Executive project summary
 
-Conservative Face Studio (CFS) is a local Windows face-restoration application designed for difficult real photographs, especially low-quality smartphone/social-media images and photographs with blur, JPEG damage, pixelation, mosaics, stickers, scribbles, opaque coverage or missing facial detail.
+Conservative Face Studio (CFS) is a local Windows face-restoration application for difficult real photographs: low-quality smartphone/social-media images, blur, JPEG damage, pixelation/mosaic, scribbles/stickers/black bars, opaque loss, crop/partial faces and multi-reference restoration.
 
-Its defining architectural distinction is that **evidence-faithful restoration and generative restoration are separate authorities**:
+CFS deliberately separates two authorities:
 
-- **Conservative / forensic mode** prioritizes original MAIN pixels and verified same-person reference pixels, tracks provenance, rejects wrong-person contribution and abstains when evidence is inadequate.
-- **Paper Quality mode** may use modern learned facial priors to improve perceptual quality, but every generated pixel remains `GENERATED_MODEL_INFERRED`; generation may never be represented as observed evidence.
+- **Conservative / forensic mode:** original MAIN and verified same-person observed reference evidence have priority; provenance is explicit; wrong-person contribution is zero; inadequate evidence may remain unresolved/abstain.
+- **Paper Quality mode:** learned facial priors may synthesize missing information, but generated content is always `GENERATED_MODEL_INFERRED` and can never be relabeled as observed evidence.
 
-PRODUCT_V1 is a certified conservative baseline. PRODUCT_V1.1 is an operational hotfix that is currently blocked by real regressions and must not import experimental Paper Quality models to hide them. The advanced Paper Quality research track has real CPU development evidence for GPEN, GFPGAN v1.4, CodeFormer and FBCNN, plus implemented research infrastructure for resource control, damage routing, personalized references, reference-first repair, candidate selection and component-aware fusion.
+PRODUCT_V1 is the immutable certified baseline. PRODUCT_V1_1 is an operational/safety hotfix and must be repaired without importing experimental Paper Quality generators. Track B is a real ML research program with real Linux CPU development evidence for GPEN, GFPGAN v1.4, CodeFormer and FBCNN, plus implemented research infrastructure for resource control, damage routing, personalized references, reference-first repair, hard-gated candidate selection and deterministic component fusion.
 
-The biggest technical limitation is that the advanced research architecture is not yet qualified end-to-end on Windows/EliteBook and DamageMaskNet attempt 3 evidence remains unresolved. The biggest quality limitation is insufficient broad identity-disjoint validation to choose per-damage winners and calibrate the candidate selector without cherry-picking.
-
-**Current next milestone:** restore auditable state first; then stabilize Track A regressions independently and recover DamageMaskNet attempt 3 evidence before executing RefFaceInpainting attempt 1/3.
+Current Track A work isolates **ranking membership** from **identity/component authority**: a single-link SFace component may rank references, but only a direct MAIN↔REF SFace edge at the frozen threshold, or a separate strict face-local same-canvas proof, may authorize an observed reference. Track B remains blocked on DamageMaskNet attempt-3 evidence recovery.
 
 ---
 
 ## 2. Branch and release map
 
-| Branch | Purpose | Base | Current verified HEAD | Status | Last meaningful change | CI state | Merge state | Superseded by | Next gate |
+| Branch | Purpose | Base | Current verified HEAD | Status | Last meaningful change | CI state | Merge status | Superseded by | Next gate |
 |---|---|---|---|---|---|---|---|---|---|
-| `main` | Certified PRODUCT_V1 | historical | `2767513f95dde2d417e7c6f1faf2357149a1a32f` | FROZEN / RELEASED | Signed merge of PR #1; commit records Windows #1195, Female #463, Release Quality #13 certification | Historical certified green | merged | none | Do not modify/rewrite. |
-| `feature/block-pipeline-v1` | Original V1 implementation branch | pre-V1 | `5eff667373cd47c07ba14aaad2acafee6d5a61c1` | MERGED / SUPERSEDED | Block pipeline implementation | historical | merged into main as one parent | `main` | Archive as history. |
-| `release/v1-certified` | Certified V1 candidate | V1 feature branch | `f476c6f04b57b658fd152a0a82e5b50cb5afbdbc` | FROZEN / ARCHIVED | Candidate that passed V1 certification before merge | historical certified green | merged via PR #1 | `main` | Preserve. |
-| `hotfix/real-world-restoration-v1.1` | Track A operational/safety hotfix | PRODUCT_V1 | `3645c8c39653d04616167e881adaf28d2b93cd45` | BLOCKED / ACTIVE | Identity/preflight, V4 protocol, Windows/female qualification hardening | Release Quality FAIL; Windows FAIL; Female-domain FAIL on exact HEAD | PR #2 OPEN, DRAFT, NOT MERGED | none | Fix inherited identity/preflight regressions without weakening thresholds; rerun same-HEAD gates. |
-| `research/face-restoration-v2` | Early degradation/dataset research | `main` | `757a3f6081b7b152cdc615a07cd99aec40fa0a1c` | SUPERSEDED AS ACTIVE ARCHITECTURE | Early degradation generator and dataset specification | NOT_VERIFIED | not merged | `research/paper-quality-local-v2` as active direction, but **not** a Git superset | Preserve/port useful dataset assets explicitly if needed. |
-| `research/paper-quality-local-v2` | Advanced Track B Paper Quality research | `main` | `645862d1b8ff3c1d7abe7df6cee0e17e4f2d68dd` | ACTIVE / BENCHMARKING | Resource governor, BFR/JPEG evidence, DamageMaskNet/reference/fusion research, RefFace preparation, truth-state report | latest research push-run state partly NOT_VERIFIED | not merged | none | Recover DamageMaskNet attempt 3 evidence. |
-| `meta/project-state` | Canonical project state / technical archive | certified `main` | self-referential ledger SHA intentionally not recorded here | ACTIVE META | Canonical ledger creation | documentation-only | not for product merge | none | Update after every technical push. |
+| `main` | Certified PRODUCT_V1 | historical | `2767513f95dde2d417e7c6f1faf2357149a1a32f` | FROZEN / RELEASED | Signed PR #1 merge; commit records Windows #1195, Female #463, Release Quality #13 | historical certified green | MERGED | none | Preserve; never rewrite. |
+| `feature/block-pipeline-v1` | Original V1 implementation | pre-V1 | `5eff667373cd47c07ba14aaad2acafee6d5a61c1` | MERGED / SUPERSEDED | Original block pipeline | historical | merged into main | `main` | archive only |
+| `release/v1-certified` | Certified V1 candidate | V1 feature | `f476c6f04b57b658fd152a0a82e5b50cb5afbdbc` | FROZEN / ARCHIVED | Same-SHA candidate certification | historical certified green | merged via PR #1 | `main` | preserve |
+| `hotfix/real-world-restoration-v1.1` | Track A operational/safety hotfix | PRODUCT_V1 | `3e919f7a1cc54e1bdb00607c2bbeece1d3392724` | VALIDATING / ACTIVE | Persist direct MAIN component-transfer authority; same-canvas evidence-key compatibility | **NOT_VERIFIED on this new HEAD**; previous `3645c8c...` had Release Quality/Windows/Female FAIL | PR #2 OPEN, DRAFT, NOT MERGED | none | targeted tests, full pytest, then same-HEAD Windows/Female/Release Quality |
+| `research/face-restoration-v2` | Early degradation/dataset research | `main` | `757a3f6081b7b152cdc615a07cd99aec40fa0a1c` | SUPERSEDED AS ACTIVE ARCHITECTURE | Early degradation generator/dataset spec | NOT_VERIFIED | not merged | `research/paper-quality-local-v2` as active direction, but not a literal Git superset | preserve/port useful assets explicitly |
+| `research/paper-quality-local-v2` | Advanced Paper Quality research | `main` | `645862d1b8ff3c1d7abe7df6cee0e17e4f2d68dd` | ACTIVE / BENCHMARKING | BFR/JPEG evidence, 80% governor, DamageMaskNet/reference/fusion/RefFace preparation | latest research push state partly NOT_VERIFIED | not merged | none | recover DamageMaskNet attempt 3 evidence |
+| `meta/project-state` | Canonical project ledger | certified `main` | intentionally not self-recorded | ACTIVE META | canonical state archive | documentation-only | not a product merge branch | none | update after every technical push |
 
-### Research branch reconciliation
+### Research-branch reconciliation
 
-`research/face-restoration-v2` and `research/paper-quality-local-v2` diverged from the same certified base. The advanced branch does **not** literally contain the two commits from the early branch. Therefore the early branch is superseded only as the **active architecture**, not falsely described as merged. Its dataset/degradation concepts remain historical material that may be explicitly ported after review.
+`research/face-restoration-v2` and `research/paper-quality-local-v2` diverged from the same certified base. The advanced branch does **not** literally contain the two early research commits. Therefore the early branch is only superseded as the active architecture; its data/degradation assets remain historical material for explicit review/porting.
 
 ---
 
 ## 3. PRODUCT VERSION ROADMAP
 
-Product version labels are planning/release definitions. They are separate from dataset/holdout labels.
+Product versions and evaluation/holdout versions are separate namespaces.
 
 ### PRODUCT_V1 — Certified Conservative Baseline
 
-- **Status:** RELEASED
-- **Objective:** evidence-first conservative/forensic restoration with auditable provenance.
-- **User-visible purpose:** safely restore damaged faces without representing generated guesses as observed identity evidence.
-- **Base:** `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`
-- **Architecture:** 13-block deterministic/evidence-first pipeline.
-- **Core models:** YuNet, SFace, NAFNet, face-parsing ResNet18 ONNX, head-pose MobileNetV2 ONNX, LaMa ONNX where policy permits.
-- **Blocks modified:** baseline all 13.
-- **Datasets:** V1 calibration/final/female benchmark lineage.
-- **Supported photo types:** baseline blur/occlusion/reference workflows according to V1 release contract.
-- **Known limitations:** perceptual restoration quality below modern generative BFR on severe information loss; real-world robustness motivated V1.1.
-- **Safety guarantees:** frozen SFace `0.363`; wrong-person observed contribution `0`; provenance violations `0`; healthy-region policy preserved.
-- **Resource target:** CPU/local/offline production baseline.
-- **Windows status:** historically certified.
-- **EliteBook status:** NOT_VERIFIED as a specific real-machine acceptance campaign.
-- **Completed:** release certification and merge.
-- **Blocker:** none for historical release; immutable baseline.
-- **Next gate:** none; preserve as regression reference.
+- **State:** RELEASED
+- **Objective/user purpose:** evidence-first local conservative restoration with auditability.
+- **Base:** `main@2767513f...`
+- **Architecture:** certified 13-block pipeline.
+- **Models:** YuNet, SFace, NAFNet, face-parsing ResNet18 ONNX, head-pose MobileNetV2 ONNX, constrained LaMa and deterministic infrastructure.
+- **Supported domain:** baseline blur/occlusion/reference restoration according to the frozen V1 contract.
+- **Safety:** SFace `0.363`; wrong-person observed pixels `0`; provenance violations `0`; healthy-region policy preserved.
+- **Windows:** historical PASS/certified.
+- **EliteBook-specific acceptance:** NOT_VERIFIED.
+- **Known limitation:** severe missing information cannot achieve modern generative perceptual quality without leaving the forensic evidence domain.
+- **Acceptance evidence:** signed merge and historical certification runs.
 
 ### PRODUCT_V1_1 — Operational Real-World Hotfix
 
-- **Status:** IMPLEMENTING / BLOCKED
-- **Objective:** improve runtime robustness and real-world restoration safety without weakening V1 evidence philosophy.
-- **User-visible purpose:** safer/reliable operation on difficult phone/reference cases.
-- **Base/branch:** `hotfix/real-world-restoration-v1.1` from PRODUCT_V1.
-- **Architecture:** same 13-block conservative architecture with identity/preflight/provenance hardening.
-- **Models:** same production model family; no Track B generative rescue.
-- **Blocks most affected:** preflight/identity, reference eligibility, regional repair/fusion, release protocol.
-- **Datasets:** inherited calibration, female-domain, consumed V3 history, frozen V4 protocol.
-- **Known limitations:** current exact HEAD has targeted identity regressions and three red release workflows.
-- **Safety guarantees:** SFace remains `0.363`; wrong-person pixels `0`; provenance violations `0`; no V3 tuning; no early V4.
-- **Windows status:** FAIL on current HEAD.
-- **EliteBook status:** NOT_RUN.
-- **Current work:** repair legitimate same-person transfer/bridge semantics while remaining fail-closed for wrong-person/transitive identity.
-- **Next gate:** targeted regressions -> full pytest -> same-HEAD Windows/Female/Release Quality -> only then candidate/final protocol.
+- **State:** VALIDATING
+- **Branch/head:** `hotfix/real-world-restoration-v1.1@3e919f7a...`
+- **Objective:** real-world reliability without changing V1 safety philosophy.
+- **Architecture/models:** same production family; no Track B generators.
+- **Blocks affected:** preflight/identity, observed reference eligibility, same-canvas bridge, repair/fusion safety, release protocol.
+- **Current work:** ranking clusters remain ranking-only; direct MAIN↔REF SFace authority is now persisted separately for component transfer; strict face-local same-canvas remains a separate override.
+- **Safety:** threshold remains `0.363`; no transitive A-B-C identity authority; wrong-person `0`; provenance `0`; V3 never rerun; V4 not executed early.
+- **Windows/Female/Release Quality:** new-head state NOT_VERIFIED; previous exact head failed all three.
+- **Next gate:** narrow regressions -> full pytest -> same-head Windows/Female/Release Quality -> candidate protocol.
 
 ### PRODUCT_V2 — Paper Quality Local
 
-- **Status:** BENCHMARKING
-- **Objective:** modern local CPU-first perceptual restoration with damage-aware specialist routing and explicit generated provenance.
-- **User-visible purpose:** substantially better-looking restoration when Conservative Mode cannot recover missing information.
-- **Base/branch:** `research/paper-quality-local-v2` from certified PRODUCT_V1.
-- **Architecture:** common candidate adapter, damage routing, hard identity gates, deterministic evidence-aware fusion, 80% resource governor.
-- **Models evaluated:** GPEN BFR-512, GFPGAN v1.4, CodeFormer, FBCNN, existing NAFNet; DamageMaskNet under development.
-- **Blocks modified/prototyped:** 2, 3, 6, 8, 9, 11, 13 plus shared resource/runtime infrastructure.
-- **Datasets:** DEVELOPMENT research source bank; DamageMaskNet FairFace + ControlFace source bank; no final-holdout tuning.
-- **Supported photos:** blur, mixed degradation, JPEG, severe blind facial degradation, information-loss cases with generated fallback.
-- **Known limitations:** no broad validation/model winner; licensing blockers for some research models; Windows/EliteBook not qualified.
-- **Safety:** generated pixels tagged `GENERATED_MODEL_INFERRED`; SFace hard gate unchanged.
-- **Resource target:** <=80% logical CPU, <=80% process/system RAM, one heavy model at a time.
-- **Next gate:** resolve DamageMaskNet attempt 3; then broaden identity-disjoint BFR/JPEG validation and calibrate selector on DEV/VALIDATION only.
+- **State:** BENCHMARKING
+- **Branch:** `research/paper-quality-local-v2`
+- **Objective:** damage-aware local CPU restoration with modern priors and explicit generated provenance.
+- **Models under evidence:** GPEN BFR-512, GFPGAN v1.4, CodeFormer, FBCNN, NAFNet; DamageMaskNet under development.
+- **Architecture:** common candidate adapter; specialist routing; hard identity gates; deterministic evidence-aware fusion; 80% resource governor.
+- **Safety:** generated content always `GENERATED_MODEL_INFERRED`; SFace hard gate unchanged.
+- **Resource target:** <=80% logical CPU, <=80% process/system RAM, one heavy model resident.
+- **Windows/EliteBook:** NOT_RUN/NOT_READY for Paper Quality release.
+- **Current blocker:** DamageMaskNet attempt-3 result recovery.
 
 ### PRODUCT_V3 — Personalized Multi-Reference Restoration
 
-- **Status:** PLANNED with enabling research prototypes
-- **Objective:** MAIN + 0–9 same-person references as structured identity/component guidance, not one whole-face donor.
-- **User-visible purpose:** use the best observed eye/nose/mouth/etc. from different valid photos of the same person.
-- **Base:** future validated PRODUCT_V2 architecture.
-- **Architecture:** `PersonIdentityProfile`, component bank, per-component quality/coverage, full-vs-partial identity authority, robust consensus embedding.
-- **Models:** SFace identity; reference-conditioned specialist candidates only after qualification.
-- **Blocks targeted:** 7, 8, 9, 11, 13.
-- **Known limitations:** prototypes are not a released PRODUCT_V3; broad reference-bank validation is pending.
-- **Safety:** partial references component-local only; wrong-person never global anchor/donor/identity booster.
-- **Next gate:** validate reference bank and reference-first reconstruction over identity-disjoint multi-reference cases.
+- **State:** PLANNED with enabling prototypes
+- **Objective:** MAIN + 0–9 same-person references used per component, not one global best donor.
+- **Architecture:** local `PersonIdentityProfile`, robust full-reference consensus, component coverage/quality, partial-reference local authority.
+- **Blocks:** 7, 8, 9, 11, 13.
+- **Safety:** full accepted reference may be global anchor; partial accepted reference is component-local; wrong-person is never anchor/donor/identity booster.
+- **Next gate:** identity-disjoint 0/1/9-reference validation with exact provenance.
 
 ### PRODUCT_V4 — Damage-Specialist Hybrid Architecture
 
-- **Status:** PLANNED with enabling research prototypes
-- **Objective:** route each corruption family to the most specialized acceptable engine and fuse at component level.
-- **Architecture:** DamageMaskNet/detector -> specialist route -> component candidate scoring -> deterministic fusion.
-- **Models considered:** FBCNN, NAFNet, GPEN/GFPGAN/CodeFormer, RefFaceInpainting, possible future qualified lightweight specialists.
-- **Blocks targeted:** 2, 3, 6, 7, 8, 9, 11, 12.
-- **Known limitations:** DamageMaskNet not yet verified; RefFace prepared but NOT_RUN; other specialists not qualified.
-- **Next gate:** finish PRODUCT_V2/V3 evidence and specialist qualification.
+- **State:** PLANNED with enabling prototypes
+- **Objective:** detect corruption family, choose the best specialist, score/fuse at component level.
+- **Candidates:** FBCNN, NAFNet, qualified BFR, RefFaceInpainting and future measured specialists.
+- **Blocks:** 2, 3, 6, 7, 8, 9, 11, 12.
+- **Current enablers:** DamageMaskNet pipeline, specialist routing framework, component fusion.
+- **Blocker:** segmentation/specialist qualification incomplete.
 
 ### PRODUCT_V5 — Unified Final Product
 
-- **Status:** PLANNED
-- **Objective:** stable Conservative Mode + Paper Quality Mode + personalized references + specialist routing + offline Windows model pack + clean installer + target-PC acceptance.
-- **User-visible purpose:** one production application choosing the best verified local path for each person/damage while preserving evidence semantics.
-- **Acceptance:** all product gates, clean Windows, offline package, model hashes/licenses, real HP EliteBook acceptance, no known release defects.
+- **State:** PLANNED
+- **Objective:** stable Conservative + Paper Quality + personalized multi-reference + specialist routing + offline Windows model pack + installer + target-PC acceptance.
+- **Acceptance:** no known release defect, clean Windows/offline package, model hashes/licenses, real EliteBook evidence, all safety/quality gates.
 
 ---
 
 ## 4. HOLDOUT / BENCHMARK LINEAGE
 
-| Evaluation set | Purpose | Identity/case state | Source/legal state | Split/freeze | Executed | Consumed | Tuning allowed? | Relevant result/state |
+| Evaluation set | Purpose | Cases/identities | Source/legal | Split/freeze | Executed | Consumed | Tuning? | State/result |
 |---|---|---|---|---|---|---|---|---|
-| CALIBRATION_V1 | V1 safety calibration | 60 cases historically reported | frozen project manifests | historical | YES | certification evidence | only according to original calibration protocol | historical `60/60` at certified candidate. |
-| FINAL_HOLDOUT_V1 | PRODUCT_V1 certification | 40 cases historically reported | frozen project manifests | final | YES | YES for certification semantics | NO after certification | historical `40/40` at certified candidate. |
-| FINAL_HOLDOUT_V2 | historical project lineage | exact current manifest/result details not re-reconciled in this ledger pass | NOT_VERIFIED | historical | NOT_VERIFIED | NOT_VERIFIED | NO unless protocol explicitly says otherwise | recover before making claims. |
-| FINAL_HOLDOUT_V3 | V1.1 historical final evaluation | 40 cases | frozen | final | YES | **YES** | **NO** | `39/40`; failure `cfsfs3-fin-020-medium_block_mosaic`, SFace `0.360 < 0.363`. Never rerun for tuning/certification. |
-| FINAL_HOLDOUT_V4 | independent V1.1 final holdout | 40 cases, 20 identities; 19 female-domain + 1 control | ControlFace10K CC BY 4.0 source pinned; no V1/V2/V3 collision recorded in freeze | frozen before candidate change | **NO** | **NO** | **NO before execution; never tune on it** | `freeze.json` exists; `CONSUMED.json` absent; certification request absent. SFace `0.363`, outside MAE `8.0`, wrong-person `0`. |
-| FINAL_HOLDOUT_V5 | future independent final set | not created | not created | future | NO | NO | NO | PLANNED only. |
-| Female-domain benchmark | real-domain safety/quality stress | current quick profile designed for 300–400 cases | curated/project sources | validation/stress | multiple historical runs | no final-holdout semantics | report-only quality metrics; safety gates apply | current hotfix run benchmark execution reached completion but lightweight report validation failed; exact nested assertion NOT_VERIFIED here. |
-| Paper Quality DEV | model comparison / calibration development | identity-disjoint expansion required | research source bank | DEVELOPMENT | partial | NO | YES | GPEN/GFPGAN/CodeFormer/FBCNN evidence exists, currently too small for production winner selection. |
-| Paper Quality VALIDATION | independent model/router validation | to be expanded | open-source licensed banks | VALIDATION | partial/not comprehensive | NO | selector thresholds/weights frozen after this stage | broad validation incomplete. |
-| DamageMaskNet research bank | exact synthetic damage masks on face sources | mixed FairFace real + ControlFace multi-view/identity-disjoint validation | source/license recorded in research bank | TRAIN/VALIDATION | attempt 3 triggered | NO | TRAIN/DEV only | final attempt-3 evidence currently NOT_VERIFIED. |
+| CALIBRATION_V1 | V1 safety calibration | historical 60 cases | frozen manifests | calibration | YES | certification evidence | only under original protocol | historical `60/60` at certified candidate |
+| FINAL_HOLDOUT_V1 | PRODUCT_V1 certification | historical 40 | frozen | final | YES | YES | NO | historical `40/40` |
+| FINAL_HOLDOUT_V2 | historical lineage | exact details not fully re-reconciled in this ledger pass | NOT_VERIFIED | historical | NOT_VERIFIED | NOT_VERIFIED | NO unless protocol proves otherwise | recover before claiming |
+| FINAL_HOLDOUT_V3 | V1.1 historical final evaluation | 40 | frozen | final | YES | **YES** | **NO** | `39/40`; `cfsfs3-fin-020-medium_block_mosaic`; SFace `0.360 < 0.363` |
+| FINAL_HOLDOUT_V4 | independent V1.1 final holdout | 40 / 20 identities; 19 female-domain + 1 control | ControlFace10K CC BY 4.0, pinned | frozen before candidate modification | **NO** | **NO** | **NO** | freeze exists; no `CONSUMED.json`; no certification request; SFace `0.363`, MAE `8.0`, wrong-person `0` |
+| FINAL_HOLDOUT_V5 | future | not created | not created | future | NO | NO | NO | PLANNED |
+| Female-domain | real-domain stress/safety | quick profile targets ~300–400 cases | curated/project sources | validation/stress | multiple runs | not a final holdout | quality report-only; safety hard gates | previous hotfix head: benchmark completed then report validation FAIL; exact nested reason NOT_VERIFIED |
+| Paper Quality DEV | model comparison | expansion required | research sources | DEV | partial | NO | YES | real BFR/FBCNN evidence exists, insufficient for production winner |
+| Paper Quality VALIDATION | independent model/router validation | expansion required | licensed research banks | VALIDATION | incomplete | NO | freezes selector after validation | incomplete |
+| DamageMaskNet bank | exact synthetic masks | FairFace + ControlFace mixed bank; identity-disjoint ControlFace validation | source/license recorded | TRAIN/VALIDATION | attempt 3 triggered | NO | TRAIN/DEV only | result NOT_VERIFIED |
 
-### Holdout invariants
-
-- Consumed holdouts are never reused for tuning.
-- HOLDOUT_V3 remains consumed even though it failed 1/40.
-- HOLDOUT_V4 must not be executed until the correct same-candidate pre-final sequence authorizes one-shot execution.
-- Never rename or mutate an old holdout to manufacture independence.
+**Invariant:** consumed holdouts are never tuned/rerun. HOLDOUT_V3 stays consumed. HOLDOUT_V4 remains untouched until the correct one-shot sequence.
 
 ---
 
 ## 5. CURRENT GLOBAL OBJECTIVES
 
 ### OBJ-001 — Preserve certified PRODUCT_V1
-- **VERSION:** PRODUCT_V1
-- **TRACK:** Release baseline
+- **VERSION/TRACK:** V1 / baseline
 - **STATUS:** PASS
-- **WHY:** provide immutable safe regression baseline.
-- **SUCCESS:** `main` remains at certified history unless an explicit future release is merged through normal review.
-- **EVIDENCE:** signed merge `2767513f...`; historical certification runs recorded in commit.
+- **WHY:** immutable regression reference.
+- **SUCCESS:** no history rewrite/force push.
+- **EVIDENCE:** signed `main@2767513f...` merge and historical certification.
 - **BLOCKER:** none.
-- **NEXT:** never force-push/rewrite.
+- **NEXT:** preserve.
 - **LAST UPDATED:** 2026-08-19.
 
 ### OBJ-002 — Restore PRODUCT_V1_1 operational gates
-- **VERSION:** PRODUCT_V1_1
-- **TRACK:** A
-- **STATUS:** BLOCKED
-- **WHY:** current hotfix must work in real cases without weakening safety.
-- **SUCCESS:** targeted tests + full pytest + same-HEAD Windows + Female-domain + Release Quality pass, wrong-person/provenance remain zero.
-- **EVIDENCE:** current HEAD `3645c8c...`; Release Quality targeted suite `4 failed, 195 passed`.
-- **BLOCKER:** legitimate same-person transfer/identity bridge is rejected by current preflight/hardening semantics.
-- **NEXT:** inspect current hotfix identity/preflight code and fix root cause without changing SFace `0.363`.
-- **LAST UPDATED:** 2026-08-19.
+- **VERSION/TRACK:** V1.1 / A
+- **STATUS:** VALIDATING
+- **WHY:** real cases must work without weakening safety.
+- **SUCCESS:** targeted tests + full pytest + same-HEAD Windows/Female/Release Quality, wrong-person/provenance zero.
+- **CURRENT EVIDENCE:** previous `3645c8c...` Release Quality targeted suite `4 failed, 195 passed`; patch `3e919f7a...` now persists direct MAIN component-transfer evidence and same-canvas alias compatibility.
+- **CURRENT BLOCKER:** new-head test/workflow outcome NOT_VERIFIED.
+- **DEPENDENCIES:** preflight SFace matrix, V2 firewall, V4 direct-edge hardening, face-local same-canvas proof.
+- **NEXT:** evaluate new-head targeted/full suite; fix only remaining root cause.
+- **LAST UPDATED:** 2026-08-19T05:46+02:00.
 
 ### OBJ-003 — Maintain canonical project ledger
-- **VERSION:** all
-- **TRACK:** meta
+- **VERSION/TRACK:** all / meta
 - **STATUS:** IN_PROGRESS
-- **WHY:** eliminate dependence on chat memory.
-- **SUCCESS:** this file updated after every technical push with exact remote SHA/evidence.
-- **BLOCKER:** none.
-- **NEXT:** append ledger entry immediately after next technical push.
-- **LAST UPDATED:** 2026-08-19.
+- **WHY:** remove dependence on conversation memory.
+- **SUCCESS:** every technical push immediately recorded with exact SHA/evidence.
+- **CURRENT EVIDENCE:** this update records `3645c8c... -> 3e919f7a...`.
+- **NEXT:** update again after the next technical push.
 
 ### OBJ-004 — Resolve DamageMaskNet hypothesis
-- **VERSION:** PRODUCT_V2/PRODUCT_V4 enabling research
-- **TRACK:** B
+- **VERSION/TRACK:** V2/V4 / B
 - **STATUS:** BLOCKED
-- **WHY:** damage-aware routing requires reliable localized damage classification.
-- **SUCCESS:** recover attempt-3 result; if PASS, per-class IoU/F1 + ONNX parity + RAM/runtime; if model/data FAIL, stop U-Net hypothesis after 3 attempts.
-- **EVIDENCE:** attempts 1/2 infrastructure fail; attempt 3 mixed-source triggered.
-- **BLOCKER:** final attempt-3 evidence not observable in current interface.
-- **NEXT:** recover existing evidence without rerunning/tuning.
-- **LAST UPDATED:** 2026-08-19.
+- **SUCCESS:** recover attempt 3; PASS requires per-class IoU/F1, ONNX parity, RAM/runtime; true quality failure exhausts U-Net hypothesis.
+- **EVIDENCE:** attempt 1 HTTP403, attempt 2 HTTP429, attempt 3 mixed-source triggered.
+- **BLOCKER:** attempt-3 evidence not observable through current interface.
+- **NEXT:** recover existing evidence without rerun.
 
-### OBJ-005 — Select blind face-restoration candidates using broad evidence
-- **VERSION:** PRODUCT_V2
-- **TRACK:** B
+### OBJ-005 — Select blind BFR candidates using broad evidence
+- **VERSION/TRACK:** V2 / B
 - **STATUS:** IN_PROGRESS
-- **SUCCESS:** identity-disjoint DEV/VALIDATION comparison of GPEN/GFPGAN/CodeFormer by identity, quality, geometry, artifacts, runtime/RAM.
-- **CURRENT EVIDENCE:** one comparable development case plus real CPU execution.
-- **BLOCKER:** insufficient sample size; licensing for some candidates.
-- **NEXT:** multi-image benchmark after immediate blocker resolution.
+- **SUCCESS:** identity-disjoint DEV/VALIDATION comparison by identity, perceptual quality, geometry, artifacts, healthy preservation, runtime/RAM.
+- **EVIDENCE:** real one-case comparable GPEN/GFPGAN and CodeFormer slice.
+- **BLOCKER:** insufficient breadth; licensing for some candidates.
+- **NEXT:** multi-image benchmark after current blocker.
 
 ### OBJ-006 — Qualify JPEG specialist
-- **VERSION:** PRODUCT_V2/4
-- **TRACK:** B
+- **VERSION/TRACK:** V2/V4 / B
 - **STATUS:** IN_PROGRESS
-- **SUCCESS:** FBCNN gains on JPEG QF ranges, double JPEG, social-media recompression, resize+JPEG, JPEG+blur without identity regression; Windows/EliteBook acceptance.
-- **EVIDENCE:** QF20 DEV improvement in PSNR/SSIM/SFace.
-- **NEXT:** broaden JPEG validation.
+- **SUCCESS:** JPEG QF ranges, double JPEG, social-media recompression, resize+JPEG, JPEG+blur, Windows/EliteBook.
+- **EVIDENCE:** FBCNN QF20 improves PSNR/SSIM/SFace.
+- **NEXT:** broaden validation.
 
 ### OBJ-007 — Validate Personalized Reference Bank
-- **VERSION:** PRODUCT_V3
-- **TRACK:** B
+- **VERSION/TRACK:** V3 / B
 - **STATUS:** IN_PROGRESS
-- **SUCCESS:** 0/1/9 refs, full/partial/wrong/duplicate/low-quality/multi-pose tests with per-component improvement and exact provenance.
+- **SUCCESS:** 0/1/9, full/partial/wrong/duplicate/low-quality/multi-pose tests; per-component improvement; exact provenance.
 - **EVIDENCE:** framework implemented; latest workflow state NOT_VERIFIED.
 - **NEXT:** broad validation after core damage gate.
 
 ### OBJ-008 — Measure RefFaceInpainting CPU feasibility
-- **VERSION:** PRODUCT_V3/4
-- **TRACK:** B
+- **VERSION/TRACK:** V3/V4 / B
 - **STATUS:** BLOCKED
-- **SUCCESS:** real same-identity reference inpainting output under 80% budget, identity gate, exact healthy outside mask, hashes/runtime/RAM.
-- **EVIDENCE:** manual-only vertical slice prepared; official MIT source pinned; core CUDA allocation patch isolated.
-- **BLOCKER:** sequencing requires DamageMaskNet gate resolution.
-- **NEXT:** execute attempt 1/3 only after OBJ-004 resolves.
+- **SUCCESS:** same-person inpainting under 80%, SFace gate, exact healthy outside mask, hashes/runtime/RAM.
+- **EVIDENCE:** manual-only workflow prepared, 0/3 attempts consumed.
+- **BLOCKER:** sequence requires OBJ-004.
+- **NEXT:** attempt 1/3 only after DamageMaskNet resolution.
 
-### OBJ-009 — Build Paper Quality Windows model pack/installer
-- **VERSION:** PRODUCT_V2→V5
-- **TRACK:** B/release
+### OBJ-009 — Paper Quality Windows model pack/installer
+- **VERSION/TRACK:** V2→V5 / release
 - **STATUS:** PROPOSED
-- **SUCCESS:** offline verified model pack, hashes/licenses, no dev Python, clean-machine package execution.
-- **NEXT:** only after model/router qualification.
+- **SUCCESS:** offline verified pack, hashes/licenses, no dev Python, clean-machine execution.
+- **NEXT:** after model/router qualification.
 
-### OBJ-010 — Real HP EliteBook 1030 G3 acceptance
-- **VERSION:** PRODUCT_V5
-- **TRACK:** release
+### OBJ-010 — Real HP EliteBook acceptance
+- **VERSION/TRACK:** V5 / release
 - **STATUS:** PROPOSED
-- **SUCCESS:** real CPU/RAM/Windows/backend measurements on blur, JPEG, mosaic, scribbled eye, sticker mouth, low-light, multi-reference; no OOM/crash/network/CUDA/dev tools.
-- **NEXT:** after same-candidate Windows installer is ready.
+- **SUCCESS:** real blur/JPEG/mosaic/scribble/sticker/low-light/multi-ref tests with measured CPU/RAM/backend/output hash/identity and no OOM/network/CUDA/dev tools.
+- **NEXT:** after same-candidate Windows installer.
 
 ---
 
 ## 6. MODEL MASTER REGISTRY
 
-`IMPLEMENTED != TESTED != BENCHMARKED != QUALIFIED != RELEASED`.
+All serious models remain listed even when rejected/blocked. Exact upstream hashes/licenses are taken from project registries/research evidence; unknown fields remain `NOT_VERIFIED` rather than guessed.
 
-Where a digest/license/runtime field has not been re-read in this reconciliation, it is explicitly left `NOT_VERIFIED` or points to the authoritative repository registry/evidence rather than being guessed.
+### Production / established conservative stack
 
-| Model | Project role / damage | Upstream / checkpoint | License / redistribution | Input | CPU / Windows / backend | Measured evidence | Current state | Why selected / not selected | Version / blocks | Evidence |
-|---|---|---|---|---|---|---|---|---|---|---|
-| YuNet | face detection / landmarks source | OpenCV Zoo; exact URL/hash in `app/model_registry.py` | registry-pinned; re-read manifest for exact terms before redistribution change | detector native | CPU OpenCV DNN; production-used | historical V1 | QUALIFIED for PRODUCT_V1 | lightweight deterministic detector | V1+, Blocks 4/11 support | `app/model_registry.py`, V1 release evidence |
-| SFace | identity hard gate | OpenCV Zoo; exact URL/hash in registry | registry-pinned | aligned face | CPU OpenCV FaceRecognizerSF | threshold frozen `0.363` | QUALIFIED for PRODUCT_V1 | safety identity backend | V1+, Block 11 | registry/tests/release evidence |
-| NAFNet | mild deblur / denoise pre-clean | project ONNX registry | exact hash in registry | tiled/general image | CPU/OpenCV DNN | production V1 evidence; Paper Quality challenger role | QUALIFIED for current conservative role | lightweight, not final facial-prior generator | V1+, Blocks 2/3 | registry/release tests |
-| Face Parsing ResNet18 ONNX | 19-class facial parsing | `yakhyo/face-parsing`; model hash registry-pinned | MIT code; asset terms follow upstream/registry | 512 | ONNX Runtime CPU | production active; Paper Quality adapter prepared | QUALIFIED for V1 parsing role | enables component/RefFace maps | Blocks 6/7/8 | registry + parser adapter/tests |
-| Head Pose MobileNetV2 ONNX | pose geometry | registry-pinned | exact terms/hash in registry | face crop | CPU ONNX | production V1 evidence | QUALIFIED for current role | geometry, not generation | Blocks 4/10 | registry/tests |
-| LaMa ONNX | residual non-identity-critical inpainting | registry-pinned | exact terms/hash in registry | masked image | CPU ONNX | V1 constrained use | QUALIFIED only for policy-limited role | must never become evidence for identity-critical facial structure | Block 8 | registry/policy/tests |
-| Real-ESRGAN | optional Paper Quality upscale | official project; exact checkpoint not selected | NOT_VERIFIED for chosen production weight | variable/x2 candidate | CPU likely expensive; Windows NOT_RUN | no CFS qualification | DISCOVERED / FEASIBILITY_ONLY | optional, not default CPU background SR | PRODUCT_V2/4, Block 12 | model matrix |
-| GPEN BFR-512 | fast blind face restoration | `yangxy/GPEN`, BFR-512; source commit/checkpoint recorded in research report | redistribution/license clarity unresolved | 512 aligned | real Linux CPU works; Windows NOT_RUN | SFace `0.95397`; `2.697s`; peak RSS `~1.828GB`; PSNR `28.07`; SSIM `0.7474` on one DEV case | BENCHMARKING / BLOCKED_LICENSE for distribution decision | strong identity on measured case; generative texture can diverge pixel-wise | PRODUCT_V2, Blocks 2/3/8 | `research/GPEN_VERTICAL_SLICE_REPORT.md` |
-| GFPGAN v1.4 | blind face restoration | official GFPGAN v1.4 release asset | exact redistribution terms must be preserved/reverified before product pack | 512 aligned | real Linux CPU works; Windows NOT_RUN | SFace `0.91665`; `2.787s`; peak RSS `~1.666GB`; PSNR `30.65`; SSIM `0.8604` one DEV case | BENCHMARKING | more conservative/pixel-close than GPEN on first comparable case; not enough evidence to choose winner | PRODUCT_V2, Blocks 2/3/8 | `research/GFPGAN_V1_4_VERTICAL_SLICE_REPORT.md` |
-| CodeFormer | severe restoration / controllable fidelity / candidate inpainting | official CodeFormer, `w=0.5` development slice | S-Lab terms block unrestricted commercial redistribution/use unless compatible authorization exists | 512 aligned | Linux CPU slice PASS; Windows NOT_RUN | exact comparative metrics must be read from stored artifact; do not reconstruct from memory | BENCHMARKING / BLOCKED_LICENSE | powerful quality/fidelity control; license and CPU cost matter | PRODUCT_V2, Blocks 2/3/8 | CodeFormer research workflow/artifact |
-| FBCNN | JPEG/double-JPEG specialist | official FBCNN research source/checkpoint | exact redistribution terms to reverify before pack | image/JPEG path | real Linux CPU works; Windows NOT_RUN | QF20: PSNR `34.62→36.78`; SSIM `0.9486→0.9634`; SFace `0.9571→0.9691`; peak RSS `~1.305GB` | BENCHMARKING / current JPEG leader | specialist gain without unnecessary face generation | PRODUCT_V2/4, Block 3 | `research/PHASE7_FBCNN_RESULT.md` |
-| DamageMaskNet small U-Net | localized damage segmentation | CFS-trained research model | CFS code; source images retain their licenses | research 256/ONNX target | CPU/ONNX design; final attempt evidence NOT_VERIFIED | per-class IoU/F1 NOT_VERIFIED | BENCHMARKING / BLOCKED | exact synthetic masks; hypothesis stops after 3 model attempts if quality failure confirmed | PRODUCT_V2/4, Block 6 | DamageMaskNet research scripts/status report |
-| RefFaceInpainting | same-person reference-guided large occlusion | `WuyangLuo/RefFaceInpainting@0f1ad756...`; official generator + ArcFace links | MIT repository; observed checkpoint hashes must be recorded on run | 256 | upstream CUDA-hardcoded; CFS CPU minimal path prepared, NOT_RUN | none yet | FEASIBILITY_ONLY / NOT_RUN | highly specialized to sticker/black-bar/missing-region with reference | PRODUCT_V3/4, Block 8 | manual research workflow + status doc |
-| InstantRestore | personalized multi-reference restoration | official research repo/checkpoints | repository licensing unresolved in current audit | diffusion/SD-style | official implementation CUDA/FP16, 2 UNets + 2 VAEs + CLIP | no CPU CFS run | FEASIBILITY_ONLY / BLOCKED_HARDWARE + license audit | scientifically close to MAIN+multi-ref use case but likely high resource cost | future V3 challenger | `research/INSTANTRESTORE_FEASIBILITY.md` |
-| OSDFace | one-step severe blind restoration challenger | official research implementation | exact redistribution terms NOT_VERIFIED | model-specific | official inference uses CUDA streams/device assumptions | no CPU CFS run | FEASIBILITY_ONLY / BLOCKED_HARDWARE | modern severe blind challenger; port cost must justify gain | future V2/4 challenger | model matrix/status doc |
-| RestoreFormer++ | severe blind restoration challenger | official project | NOT_VERIFIED in this pass | model-specific | CPU/Windows NOT_RUN | none in CFS | DISCOVERED / FEASIBILITY_ONLY | benchmark only after current specialist sequence | future V2/4 | model matrix |
-| VQFR | blind face restoration challenger | official project | NOT_VERIFIED | model-specific | CPU/Windows NOT_RUN | none in CFS | DISCOVERED / FEASIBILITY_ONLY | only promote if quality/resource gain justifies cost | future V2/4 | model matrix |
-| GPEN face inpainting | generative face inpainting challenger | GPEN official | same GPEN licensing concern | typically 1024 variant/path | CPU cost NOT_VERIFIED | none | FEASIBILITY_ONLY | potential missing-region specialist after RefFace | V4, Block 8 | model matrix |
-| RefineFIR | reference-guided architecture teacher | public paper/repo | executable checkpoint path currently inadequate | research | NOT_RUN | none | FEASIBILITY_ONLY | copy-or-not concept useful; runtime not benchmarkable now | V3 teacher | status doc |
-| PerFuSe | personalized restoration teacher/challenger | research paper/project | executable official runtime NOT_VERIFIED | research | NOT_RUN | none | DISCOVERED / FEASIBILITY_ONLY | smartphone/photo-library personalization concept | future V3 | status/model research |
-| RefIPFR | personalized/reference restoration teacher | research | executable official runtime NOT_VERIFIED | research | NOT_RUN | none | DISCOVERED / FEASIBILITY_ONLY | reference-conditioned design ideas | future V3 | status/model research |
+**YuNet** — role: face detection/5-point geometry; upstream OpenCV Zoo; exact URL/hash in `app/model_registry.py`; CPU OpenCV DNN; Windows historically used; state **QUALIFIED for PRODUCT_V1**; blocks 4/11 support; target-PC specific state NOT_VERIFIED.
 
-### Registry integrity note
+**SFace** — role: identity hard gate; OpenCV Zoo; threshold `0.363`; CPU OpenCV FaceRecognizerSF; state **QUALIFIED for PRODUCT_V1**; blocks 7/11 safety; wrong-person references never gain authority through score maximization.
 
-`THIRD_PARTY_MODULES.md` on certified `main` refers to machine-readable files under `models/`, but the reconciled `main/models/` directory contains only `README.md`. The actual active production model catalog/download validation is implemented in `app/model_registry.py` and companion production/runtime registry code. This documentation mismatch must be corrected in a future documentation-only technical change; do not invent missing manifest files.
+**NAFNet** — role: lightweight deblur/denoise/pre-clean; project ONNX registry; CPU/OpenCV DNN; state **QUALIFIED for current conservative role**; blocks 2/3; not considered a missing-identity generator.
+
+**Face Parsing ResNet18 ONNX** — role: 19-class semantic face parsing; `yakhyo/face-parsing`; MIT code; registry-pinned model hash; 512 ONNX Runtime CPU; state **QUALIFIED for current parsing role**; blocks 6/7/8.
+
+**Head Pose MobileNetV2 ONNX** — role: pose geometry; CPU ONNX; state **QUALIFIED for current role**; blocks 4/10.
+
+**LaMa ONNX** — role: residual non-identity-critical inpainting only; CPU ONNX; state **QUALIFIED only under constrained policy**; never evidence for eye/nose/lip identity structure; block 8.
+
+### Paper Quality / specialist candidates
+
+**GPEN BFR-512**
+- role: fast blind face restoration; input 512 aligned;
+- upstream: `yangxy/GPEN`; exact source/checkpoint evidence in research report;
+- license/weight redistribution: unresolved for product distribution;
+- CPU: real Linux DEV PASS; Windows/EliteBook NOT_RUN;
+- measured DEV: SFace `0.95397`, PSNR `28.07`, SSIM `0.7474`, `~2.697s`, peak RSS `~1.828GB`;
+- supported damage: severe blind face degradation/mixed blur;
+- risk: generative texture/identity-detail hallucination;
+- state: **BENCHMARKING / BLOCKED_LICENSE for distribution decision**;
+- version/blocks: PRODUCT_V2, 2/3/8;
+- evidence: `research/GPEN_VERTICAL_SLICE_REPORT.md`.
+
+**GFPGAN v1.4**
+- role: blind real-world face restoration; input 512 aligned;
+- official v1.4 release asset; redistribution terms must be preserved/reverified;
+- Linux CPU DEV PASS; Windows/EliteBook NOT_RUN;
+- measured comparable DEV: SFace `0.91665`, PSNR `30.65`, SSIM `0.8604`, `~2.787s`, peak RSS `~1.666GB`;
+- state: **BENCHMARKING**; no one-image winner claim;
+- blocks 2/3/8; evidence `research/GFPGAN_V1_4_VERTICAL_SLICE_REPORT.md`.
+
+**CodeFormer**
+- role: severe restoration / controllable fidelity / potential face inpainting;
+- official `w=0.5` aligned CPU slice executed;
+- S-Lab terms are a production redistribution/commercial blocker unless compatible authorization exists;
+- Linux CPU real slice PASS under resource governor; Windows/EliteBook NOT_RUN;
+- exact PSNR/SSIM/RAM/time must be recovered from artifact, never reconstructed from memory;
+- state: **BENCHMARKING / BLOCKED_LICENSE**; blocks 2/3/8.
+
+**FBCNN**
+- role: blind JPEG/double-JPEG specialist;
+- real Linux CPU DEV QF20 result: PSNR `34.62→36.78`, SSIM `0.9486→0.9634`, SFace `0.9571→0.9691`, peak RSS `~1.305GB`;
+- Windows/EliteBook NOT_RUN; double-JPEG/social-media breadth incomplete;
+- state: **BENCHMARKING / current JPEG leader**; block 3; evidence `research/PHASE7_FBCNN_RESULT.md`.
+
+**DamageMaskNet small U-Net**
+- role: 12-class localized damage segmentation (`HEALTHY` + 11 corruption classes);
+- CFS research training; exact synthetic masks; FairFace + ControlFace bank;
+- intended CPU ONNX; attempt-3 IoU/F1/parity/RAM/runtime NOT_VERIFIED;
+- state: **BENCHMARKING / BLOCKED**; block 6; if attempt 3 is true model/data FAIL, U-Net hypothesis ends.
+
+**RefFaceInpainting**
+- role: same-person reference-guided large facial occlusion; 256;
+- upstream `WuyangLuo/RefFaceInpainting@0f1ad75677cc8fae4ae14d878e4c6cfce9365f28`; MIT repository; official generator/ArcFace links;
+- upstream CUDA-hardcoded; CFS prepared minimal CPU path loads only `UnetG + ArcFace resnet101` and patches one device allocation without changing weights/math;
+- CFS runtime result: NOT_RUN; Windows/EliteBook NOT_RUN;
+- state: **FEASIBILITY_ONLY / NOT_RUN**; block 8; evidence manual workflow/status report.
+
+**InstantRestore** — role: personalized multi-reference restoration; official implementation uses two UNets + two VAEs + CLIP and CUDA/FP16 assumptions; license unresolved in current audit; CPU/Windows/EliteBook NOT_RUN; state **FEASIBILITY_ONLY / BLOCKED_HARDWARE + license audit**; future V3 challenger.
+
+**OSDFace** — role: modern one-step severe blind challenger; official inference has CUDA/device-stream assumptions; CPU/Windows NOT_RUN; state **FEASIBILITY_ONLY / BLOCKED_HARDWARE**.
+
+**RestoreFormer++** — role severe blind challenger; exact production checkpoint/license/backend not selected in this pass; no CFS CPU evidence; state **DISCOVERED / FEASIBILITY_ONLY**.
+
+**VQFR** — role blind restoration challenger; no CFS CPU/Windows evidence; state **DISCOVERED / FEASIBILITY_ONLY**.
+
+**GPEN face inpainting** — role missing-region challenger; same GPEN licensing concern, high-resolution CPU cost unverified; state **FEASIBILITY_ONLY**.
+
+**RefineFIR** — reference-guided architecture teacher; public executable/checkpoint path inadequate for a fair CFS runtime benchmark; state **FEASIBILITY_ONLY**; useful copy-or-not concept.
+
+**PerFuSe** and **RefIPFR** — personalized/reference architecture teachers; official executable runtime suitable for current CFS benchmark NOT_VERIFIED; state **DISCOVERED / FEASIBILITY_ONLY**.
+
+**Real-ESRGAN** — optional Paper Quality x2 upscale challenger; no current CFS qualification; CPU cost/identity/background tradeoff unmeasured; state **FEASIBILITY_ONLY**; block 12.
+
+### Registry integrity issue
+
+Certified `THIRD_PARTY_MODULES.md` refers to machine-readable catalog files under `models/`, but reconciled `main/models/` contains only `README.md`. Active production catalog/download validation is in `app/model_registry.py` and companion runtime/production registries. This stale documentation must be corrected explicitly; do not invent missing manifests.
 
 ---
 
 ## 7. CURRENT MODEL EVIDENCE
 
-### DEVELOPMENT — measured, not production qualification
+### DEVELOPMENT only
 
-| Model | Case / scope | Identity | PSNR | SSIM | Runtime | Peak RSS | Interpretation |
+| Model | Scope | SFace | PSNR | SSIM | Time | Peak RSS | Status |
 |---|---|---:|---:|---:|---:|---:|---|
-| GPEN BFR-512 | one comparable aligned DEV face | SFace `0.95397` | `28.07` | `0.7474` | `~2.697s` @512 Linux CPU | `~1.828GB` | strong identity / sharper generative texture; not a production winner from one image. |
-| GFPGAN v1.4 | same comparable aligned DEV face | SFace `0.91665` | `30.65` | `0.8604` | `~2.787s` Linux CPU | `~1.666GB` | closer pixel/structure on this case; not enough evidence for winner. |
-| FBCNN | JPEG QF20 DEV | SFace `0.9571→0.9691` | `34.62→36.78` | `0.9486→0.9634` | see evidence artifact | `~1.305GB` | current measured JPEG leader; broaden before qualification. |
-| CodeFormer w=0.5 | aligned DEV slice | real SFace gate PASS | exact artifact required | exact artifact required | exact artifact required | exact artifact required | do not restate guessed metrics. |
+| GPEN BFR-512 | one aligned comparable DEV face | `0.95397` | `28.07` | `0.7474` | `~2.697s` @512 Linux CPU | `~1.828GB` | BENCHMARKING |
+| GFPGAN v1.4 | same comparable DEV face | `0.91665` | `30.65` | `0.8604` | `~2.787s` | `~1.666GB` | BENCHMARKING |
+| FBCNN | JPEG QF20 | `0.9571→0.9691` | `34.62→36.78` | `0.9486→0.9634` | artifact/report | `~1.305GB` | JPEG leader in DEV |
+| CodeFormer w=0.5 | aligned DEV slice | real identity gate PASS | artifact required | artifact required | artifact required | artifact required | BENCHMARKING / license blocked |
 
-No Linux DEV number above is a Windows or EliteBook result.
+These are not Windows, validation, holdout or EliteBook measurements.
 
 ---
 
 ## 8. 13-BLOCK ARCHITECTURE
 
-| # | Block | Current certified function/model | Current authority / provenance | Main current limitation | Proposed / research change | Version target | Implementation / test / benchmark state | Resource / dependency | Next action |
+| # | Block | Current function/model | Authority/provenance | Current failure/quality limit | Future change/model | Version | Implementation/test/benchmark | Resource/deps | Next action |
 |---:|---|---|---|---|---|---|---|---|---|
-| 1 | IMPORT | deterministic OpenCV/Pillow import; MAIN + refs | input bytes are observed | input quality varies | retain deterministic import; richer source/hash metadata | V2/V5 | baseline RELEASED | low | no generator here. |
-| 2 | DEBLUR | NAFNet mild deblur under conservative policy | generated/model output cannot become observed evidence | severe facial blur may need facial prior | route from common checkpoint to NAFNet or accepted GPEN/GFPGAN/CodeFormer candidate, never blind chain | V2/V4 | candidate infrastructure BENCHMARKING | one heavy model at a time | broaden blind-restorer benchmark. |
-| 3 | ENHANCE | NAFNet/general conservative enhancement | healthy MAIN has priority | no specialist JPEG route in V1 | FBCNN for severe JPEG; Zero-DCE++ only if low-light detector proves need | V2/V4 | FBCNN BENCHMARKING; low-light specialist not qualified | <=80% | expand JPEG families. |
-| 4 | LANDMARKS | YuNet/production face analysis; pose model support | measured geometry only | hard pose/partial damage can reduce confidence | optional MediaPipe/3DDFA only if benchmarked; never invent landmarks | V2/4 | current V1 qualified | low/moderate | preserve deterministic geometry. |
-| 5 | ALIGN | deterministic similarity/partial affine/RANSAC | no identity synthesis | limited by landmarks | retain; common aligned checkpoint for candidate A/B | V2 | implemented in research slices | low | standardize benchmark alignment. |
-| 6 | OCCLUSION_MASK | face parsing + existing occlusion heuristics | mask describes repair authority, not identity evidence | weak explicit classification of mosaic/JPEG/etc. | DamageMaskNet 12-class localized segmentation + exact confidence/component mapping | V2/V4 | IMPLEMENTED research; training result NOT_VERIFIED | lightweight ONNX target | recover attempt-3 evidence. |
-| 7 | REGION_SELECT | `component_bank`, `reference_memory`, observed geometry/reliability | only same-person valid observed reference can donate; exact source index | legacy whole-reference logic insufficient for best-per-component personalization | Personalized Reference Bank; rank 13 components independently; robust full-ref consensus | V3 | IMPLEMENTED research; workflow NOT_VERIFIED | low/moderate | validate 0/1/9, partial/wrong/low-quality cases. |
-| 8 | INPAINT | observed-reference repair first; constrained LaMa for suitable residuals | observed same-person > inferred; identity-critical LaMa prohibited as evidence | no qualified high-quality generative missing-detail specialist | reference-first wrapper; RefFace/CodeFormer/GPEN candidates only in Paper mode, GENERATED provenance | V2/3/4 | reference-first IMPLEMENTED; RefFace PREPARED NOT_RUN | potentially heavy | resolve DamageMaskNet then RefFace attempt 1/3. |
-| 9 | FUSION | deterministic/regional fusion | MAIN/observed reference authority dominates | whole-face candidates can hide component tradeoffs | deterministic component-aware fusion: healthy MAIN > observed ref > accepted generated within authority | V2/4 | IMPLEMENTED research; latest workflow NOT_VERIFIED | low | validate seams/geometry/provenance. |
-| 10 | FRONTALIZE | geometry-only conservative frontalization | no hidden-side synthesis in conservative mode | hidden regions remain unresolved | Paper mode may synthesize hidden region only as GENERATED | V4 | planning | moderate | keep modes separate. |
-| 11 | IDENTITY_CHECK | SFace hard gate `0.363`; conservative reference/identity policies | wrong-person no anchor/donor; partial local only | Track A current hardening rejects some legitimate same-person cases | robust accepted-full-reference aggregation; optional second backend only after benchmark | V1.1/V3 | Track A BLOCKED; research framework implemented | low/moderate | fix current preflight/bridge regressions without lowering 0.363. |
-| 12 | UPSCALE | Lanczos conservative | deterministic | limited perceptual SR | optional Real-ESRGAN x2 only if CPU/identity/background benchmark justifies | V2/4 | FEASIBILITY_ONLY | potentially heavy | defer until restoration winners. |
-| 13 | EXPORT | deterministic final image + project evidence | exact provenance mandatory | research needs richer generated/source/timing reports | export generated mask, per-component source, model-selection, identity, damage, timings, RAM, hashes | V2/V5 | partially implemented research | low | unify after router qualification. |
+| 1 | IMPORT | deterministic OpenCV/Pillow, MAIN + refs | imported bytes observed | source quality varies | richer source/hash metadata; no learned import | V2/V5 | V1 RELEASED | low | preserve deterministic import |
+| 2 | DEBLUR | NAFNet mild deblur | model output not observed evidence | severe blur may need facial prior | common checkpoint -> NAFNet or accepted GPEN/GFPGAN/CodeFormer, never blind chain | V2/V4 | research BENCHMARKING | one heavy model | broaden BFR validation |
+| 3 | ENHANCE | conservative NAFNet/general enhancement | healthy MAIN priority | no V1 JPEG specialist | FBCNN when JPEG detected; low-light specialist only if detected/qualified | V2/V4 | FBCNN BENCHMARKING | <=80% | broaden JPEG families |
+| 4 | LANDMARKS | YuNet + pose support | measured geometry only | severe damage/pose reduces confidence | MediaPipe/3DDFA only if measured | V2/V4 | V1 qualified | low/moderate | no invented landmarks |
+| 5 | ALIGN | deterministic similarity/affine/RANSAC | geometry only | landmark quality | one common aligned candidate checkpoint | V2 | implemented | low | standardize A/B |
+| 6 | OCCLUSION_MASK | face parsing + heuristics | repair mask, not identity | damage-family discrimination weak | DamageMaskNet 12-class + confidence/component | V2/V4 | implemented pipeline; training result NOT_VERIFIED | lightweight ONNX target | recover attempt 3 |
+| 7 | REGION_SELECT | component bank/reference memory | same-person observed only | legacy ranking not sufficiently personalized | 13-component Personalized Reference Bank | V3 | prototype implemented; workflow NOT_VERIFIED | low/moderate | validate 0/1/9 refs |
+| 8 | INPAINT | observed reference first; constrained LaMa residuals | observed > inferred; identity-critical LaMa prohibited | no qualified generative missing-detail specialist | RefFace/CodeFormer/GPEN candidate only in Paper mode | V2/V3/V4 | reference-first implemented; RefFace PREPARED | heavy candidate | resolve DamageMaskNet then RefFace |
+| 9 | FUSION | deterministic/regional | healthy MAIN > observed same-person | component tradeoffs | deterministic component-aware fusion; generated only in remaining authority | V2/V4 | research implemented, latest workflow NOT_VERIFIED | low | validate seams/provenance |
+| 10 | FRONTALIZE | geometry-only conservative | no hidden-side synthesis | unresolved hidden region | Paper mode may synthesize only as GENERATED | V4 | planned | moderate | keep modes separate |
+| 11 | IDENTITY_CHECK | SFace `0.363` + hardening | wrong-person never anchor/donor | V1.1 legitimate transfer regressions under validation | direct MAIN edge + face-local bridge; robust full-ref aggregation later | V1.1/V3 | **new direct-transfer patch VALIDATING** | low/moderate | evaluate `3e919f7a...` |
+| 12 | UPSCALE | Lanczos | deterministic | limited perceptual SR | optional Real-ESRGAN x2 if benchmark wins | V2/V4 | feasibility only | potentially heavy | defer |
+| 13 | EXPORT | deterministic image/evidence | exact provenance | richer Paper reports needed | generated mask, component source map, selection/identity/damage/timing/RAM/hashes | V2/V5 | partial research | low | unify after router qualification |
 
 ---
 
 ## 9. PHOTO AND INPUT CONTRACT
 
-### MAIN photo
+### MAIN
 
-CFS is intended to handle, independently or in combination:
+Target corruption domain includes: low resolution, smartphone/social-media recompression, JPEG/double JPEG, defocus/motion/mixed blur, noise, pixelation, block mosaic, scribble, sticker, black bar, opaque mask/block, partially/fully covered eye, covered mouth/nose, missing component, crop/partial face, low light/uneven exposure and mixed/unknown real-world degradation.
 
-- low resolution; smartphone compression; old social-media downloads;
-- JPEG artifacts; double JPEG; recompression; resize+JPEG;
-- defocus blur; motion blur; mixed blur; noise;
-- pixelation; block mosaic;
-- scribbles; stickers; black bars; opaque masks/blocks;
-- partially/fully covered eye; covered mouth; covered nose; missing facial component;
-- crop; partial face; low light; uneven exposure;
-- mixed/unknown real-world degradation.
+MAIN remains the target canvas/pose/frame in Conservative Mode.
 
-MAIN defines the target canvas/pose/frame in conservative policy. A better-looking reference may be a donor/analysis anchor but may not silently replace MAIN geometry.
+### REFERENCES
 
-### REFERENCE photos
+Contract: MAIN + 0–9 references. A reference may be full, partial, eye/mouth/nose-only, side angle, different expression/light/resolution, blurred/compressed/occluded, useless or wrong-person.
 
-Input contract: MAIN + **0–9 references**.
+- accepted **FULL same-person** -> may be global anchor and component donor if direct/approved identity evidence and geometry allow;
+- accepted **PARTIAL same-person** -> component-local authority only;
+- **wrong-person** -> never anchor, observed donor or identity-score improver.
 
-References may be full face, partial face, eye-only, mouth-only, nose-only, side angle, different expression/lighting/resolution, blurred/compressed/occluded, unusable or wrong-person distractors.
+Image quality eligibility is separate from identity eligibility.
 
-Identity eligibility is separate from image quality:
+### RESEARCH / GROUND TRUTH
 
-- accepted **FULL same-person** reference -> may become a global identity anchor and component donor according to geometry/quality;
-- accepted **PARTIAL same-person** reference -> component-local authority only, never global identity anchor;
-- **wrong-person** reference -> never global anchor, never observed-pixel donor, never allowed to improve final identity score.
-
-### GROUND TRUTH / RESEARCH photos
-
-Research clean images must have source/license/provenance and file hash. Synthetic degradation must store seed, parameters and exact mask where applicable. Identity partitions must be explicit. Final holdouts are excluded from training/tuning.
+Store source/license, identity, original resolution/hash, partition, degradation parameters/seed, exact damage mask where generated and derivative hashes. Final holdout identities/images are never training/tuning data.
 
 ---
 
 ## 10. DATASET CONSTRUCTION
 
-### Large Paper Quality bank target
+Paper Quality planning target: approximately **300–400** representative face images/cases initially, with explicitly documented female-domain proportion when intentionally emphasized. Do not silently bias.
 
-- target scale: approximately **300–400 identity/case examples** initially, expanded when statistical evidence requires;
-- target domain: real intended face-restoration usage, with explicit female-domain proportion rather than silent bias;
-- partition by identity: TRAIN / DEVELOPMENT / VALIDATION / FINAL_HOLDOUT;
-- forbidden identity leakage across protected partitions.
+Protected identity partitions: `TRAIN`, `DEVELOPMENT`, `VALIDATION`, `FINAL_HOLDOUT`; forbidden identity leakage across protected splits.
 
-For every source/example record:
+Per source/example record: `source, usage/license basis, download date, identity_id, file hash, original resolution, domain/gender label when intentionally used, split, degradation, severity, seed, exact mask, reference relationships`.
 
-`source, license/usage basis, download date, identity_id, original hash, resolution, domain/gender label if intentionally used, split, degradation family, severity, seed, exact mask, reference relationships, generated derivative hashes`.
-
-### Current research banks
-
-- `research/face-restoration-v2`: early dataset/degradation specification (~400-case planning, historical 50/50 domain concept); branch superseded as active architecture but assets preserved.
-- DamageMaskNet current bank: FairFace real faces + ControlFace10K multi-view identities, synthetic exact masks, ControlFace identity-disjoint validation.
-- V4 holdout is **not** part of Paper Quality training/validation.
+Current data assets:
+- early `research/face-restoration-v2` dataset/degradation specification (historical/superseded active branch, not deleted);
+- DamageMaskNet mixed FairFace real + ControlFace multi-view bank with identity-disjoint ControlFace validation;
+- frozen V4 holdout excluded from Track B training/validation.
 
 ---
 
 ## 11. COMPONENT-BY-COMPONENT RECONSTRUCTION
 
 Canonical components:
+`LEFT_EYE`, `RIGHT_EYE`, `LEFT_EYEBROW`, `RIGHT_EYEBROW`, `NOSE`, `PHILTRUM`, `MOUTH_LIPS`, `LEFT_CHEEK`, `RIGHT_CHEEK`, `CHIN`, `JAW`, `FOREHEAD`, `FACE_CONTOUR`.
 
-1. LEFT_EYE
-2. RIGHT_EYE
-3. LEFT_EYEBROW
-4. RIGHT_EYEBROW
-5. NOSE
-6. PHILTRUM
-7. MOUTH_LIPS
-8. LEFT_CHEEK
-9. RIGHT_CHEEK
-10. CHIN
-11. JAW
-12. FOREHEAD
-13. FACE_CONTOUR
+Per component track: MAIN visibility/damage, best/alternate observed refs, reference confidence/coverage, generated candidate availability, selected source/provenance, identity/geometry consistency and unresolved state.
 
-For each component, the runtime/profile must be able to record:
-
-`MAIN visibility, damage class/confidence, best observed reference, alternates, reference confidence, generated candidates, selected source, provenance, identity consistency, geometry consistency, unresolved state`.
-
-Authority invariant: observed same-person information outranks generated inference. A failed high-priority semantic component is not silently filled by a broad cheek/jaw donor.
+Observed same-person evidence outranks generated inference. A failed eye/nose/mouth target cannot be silently recovered later by a broad cheek/jaw donor.
 
 ---
 
 ## 12. DAMAGE ROUTING
 
-| Damage | Detector | Primary route | Secondary route | Reference-first? | Generative allowed in Paper mode? | Specialist candidate | Fallback / abstention |
+| Damage | Detector | Primary | Secondary | Ref-first? | Generative? | Specialist | Fallback/abstention |
 |---|---|---|---|---|---|---|---|
-| HEALTHY | DamageMaskNet/heuristics | preserve MAIN | none | N/A | NO by default | none | unchanged MAIN |
-| DEFOCUS_BLUR | damage detector/blur metric | NAFNet or validated deblur | blind face candidate if severe | if observed component is better | YES | NAFNet + BFR challenger | conservative unresolved/rollback if gates fail |
-| MOTION_BLUR | detector/blur metric | NAFNet/deblur candidate | blind face candidate if severe | yes where useful | YES | NAFNet/BFR | rollback/abstain |
-| NOISE | noise metric | NAFNet-SIDD/current winner | specialist after benchmark | optional | YES only if necessary | NAFNet | preserve healthy detail |
-| JPEG | JPEG detector | FBCNN | then face candidate only if residual facial damage warrants | optional | YES after specialist | **FBCNN** current leader | no unnecessary heavy model |
-| DOUBLE_JPEG | JPEG detector | FBCNN candidate | BFR only if needed | optional | YES | FBCNN | validation pending |
-| PIXELATION | DamageMaskNet | observed component reconstruction | generated candidate | YES | YES | reference bank + BFR | unresolved/abstain Conservative |
-| BLOCK_MOSAIC | DamageMaskNet | observed component reconstruction | generated face/component candidate | YES | YES | reference bank / future specialist | unresolved if no evidence Conservative |
-| SCRIBBLE | DamageMaskNet exact/learned mask | observed reference repair | RefFace/generative component | YES | YES | RefFace if qualified | conservative unresolved |
-| STICKER | DamageMaskNet | observed reference repair | RefFace/generative component | YES | YES | RefFace if qualified | conservative unresolved |
-| OPAQUE_BLOCK | DamageMaskNet | observed reference repair | reference-conditioned inpainting | YES | YES | RefFace if qualified | safe abstention when zero evidence |
-| BLACK_BAR | DamageMaskNet | observed reference repair | reference-conditioned inpainting | YES | YES | RefFace if qualified | safe abstention Conservative |
-| PARTIAL_OCCLUSION | DamageMaskNet/parser | observed repair where valid | generated candidate if Paper mode | YES | YES | RefFace/other qualified | unresolved/rollback |
-| MISSING_COMPONENT | DamageMaskNet/component visibility | observed component bank | generated component | YES | YES | RefFace/CodeFormer/etc. after qualification | unresolved Conservative |
-| LOW_LIGHT | detector/exposure | deterministic/light specialist only if genuinely low light | Zero-DCE++ candidate after audit | optional | YES if qualified | Zero-DCE++ feasibility | no blanket brightening |
-| MIXED_DAMAGE | multi-label damage map/router | specialist sequence from common checkpoint | minimal additional models | depends on component | YES | dynamic router | never blindly chain all BFR models |
+| HEALTHY | damage map/heuristics | preserve MAIN | none | N/A | no default | none | unchanged MAIN |
+| DEFOCUS_BLUR | blur/damage metric | NAFNet/validated deblur | BFR if severe | when better observed component | Paper only | NAFNet/BFR | rollback/unresolved |
+| MOTION_BLUR | damage metric | deblur | BFR if severe | yes | Paper only | NAFNet/BFR | rollback |
+| NOISE | noise metric | NAFNet/current winner | specialist if measured | optional | only if needed | NAFNet | preserve healthy detail |
+| JPEG | JPEG detector | FBCNN | face candidate only if residual damage | optional | after specialist | **FBCNN** | avoid heavy model when unnecessary |
+| DOUBLE_JPEG | JPEG detector | FBCNN | BFR only if residual warrants | optional | yes | FBCNN | validation pending |
+| PIXELATION | DamageMaskNet | observed component reconstruction | generated candidate | YES | Paper yes | reference bank/BFR | unresolved Conservative |
+| BLOCK_MOSAIC | DamageMaskNet | observed component reconstruction | generated component | YES | Paper yes | reference bank/future specialist | unresolved Conservative |
+| SCRIBBLE | DamageMaskNet | observed repair | RefFace/generated | YES | Paper yes | RefFace if qualified | unresolved Conservative |
+| STICKER | DamageMaskNet | observed repair | RefFace/generated | YES | Paper yes | RefFace if qualified | unresolved Conservative |
+| OPAQUE_BLOCK | DamageMaskNet | observed repair | reference-conditioned inpaint | YES | Paper yes | RefFace if qualified | safe abstention at zero evidence |
+| BLACK_BAR | DamageMaskNet | observed repair | reference-conditioned inpaint | YES | Paper yes | RefFace if qualified | safe abstention Conservative |
+| PARTIAL_OCCLUSION | parser/DamageMaskNet | observed repair | generated candidate | YES | Paper yes | qualified ref specialist | rollback/unresolved |
+| MISSING_COMPONENT | component visibility | observed component bank | generated component | YES | Paper yes | RefFace/BFR if qualified | unresolved Conservative |
+| LOW_LIGHT | exposure detector | conservative correction | Zero-DCE++ only if qualified | optional | Paper yes | Zero-DCE++ feasibility | no blanket brightening |
+| MIXED_DAMAGE | multi-class map | specialist routing | minimal additional candidates | depends | Paper yes | dynamic router | never blind-chain all generators |
 
 ---
 
-## 13. DECISION LOG — NEW DIRECTIONS
+## 13. DECISION LOG — engineering outcomes, not private reasoning
 
 ### DEC-20260819-001 — Canonical meta ledger
-- **DATE:** 2026-08-19
-- **PROPOSAL:** maintain canonical `PROJECT_MASTER_STATE.md` on `meta/project-state`.
-- **PROBLEM:** project state had become dependent on chat memory and branch-local reports.
-- **AFFECTED:** all versions/tracks.
-- **EVIDENCE:** multiple branches, stale V1 release docs, diverged research branches, current hotfix/research state.
-- **BENEFIT:** auditable continuity and exact SHA history.
-- **RISK:** stale ledger if update protocol is ignored.
-- **ALTERNATIVE:** branch-local reports only; rejected as fragmented.
-- **REVERSAL CONDITION:** only if replaced by an equally canonical machine+human state system with migration.
-- **STATUS:** ACCEPTED.
+- **Proposal:** `PROJECT_MASTER_STATE.md` on `meta/project-state` is canonical.
+- **Problem:** project state was fragmented across chats/branches.
+- **Evidence:** multiple diverged branches, stale V1 docs, active hotfix/research state.
+- **Benefit:** auditable continuity.
+- **Risk:** ledger drift if update protocol ignored.
+- **Status:** ACCEPTED.
 
 ### DEC-20260819-002 — Advanced research branch is active architecture
-- **PROPOSAL:** treat `research/paper-quality-local-v2` as active Paper Quality architecture; preserve early `research/face-restoration-v2` as superseded research history.
-- **EVIDENCE:** early branch ~2 commits of dataset/degradation work; advanced branch ~83 commits of model/runtime architecture; branches diverged and are not a literal merge.
-- **RISK:** useful early assets could be forgotten.
-- **MITIGATION:** explicit review/port, never fake merge status.
-- **STATUS:** ACCEPTED.
+- `research/paper-quality-local-v2` is active; early `research/face-restoration-v2` is preserved but superseded as active architecture. They are not falsely described as merged/superset.
+- **Status:** ACCEPTED.
 
-### DEC-20260819-003 — 80% whole-PC budget + one heavy model
-- **PROPOSAL:** <=80% logical CPU, <=80% process/system RAM, one heavy model resident at a time.
-- **PROBLEM:** target is 16GB Windows laptop, CPU-first.
-- **BENEFIT:** preserves Windows/UI headroom and avoids simultaneous model memory spikes.
-- **REVERSAL:** only measured target-PC evidence can justify a versioned change.
-- **STATUS:** ACCEPTED.
+### DEC-20260819-003 — 80% total-PC resource contract
+- <=80% logical CPU; <=80% process/system RAM; one heavy model resident.
+- **Reversal:** only measured target-PC evidence supports a versioned change.
+- **Status:** ACCEPTED.
 
 ### DEC-20260819-004 — Evidence authority outranks generated quality
-- **PROPOSAL:** healthy MAIN > verified same-person observed reference > accepted generated candidate.
-- **PROBLEM:** generative BFR may look better while hallucinating identity/detail.
-- **STATUS:** ACCEPTED; core provenance rule.
+- healthy MAIN > verified same-person observed reference > accepted generated candidate.
+- **Status:** ACCEPTED.
 
-### DEC-20260819-005 — Replace Wikimedia-dependent DamageMaskNet acquisition with mixed source bank
-- **PROBLEM:** attempt 1 HTTP 403, attempt 2 HTTP 429 before training.
-- **CHOSEN:** FairFace real + ControlFace multi-view source bank with hashes/splits; U-Net hypothesis unchanged for attempt 3.
-- **RISK:** dataset-domain shift; must validate per class.
-- **STATUS:** ACCEPTED for attempt 3.
+### DEC-20260819-005 — DamageMaskNet mixed source bank
+- Wikimedia attempt 1 HTTP403 and attempt 2 HTTP429 were acquisition failures; attempt 3 changed acquisition to FairFace + ControlFace while keeping U-Net hypothesis/hyperparameters.
+- **Status:** ACCEPTED for attempt 3.
 
-### DEC-20260819-006 — RefFace is next large-occlusion specialist after DamageMaskNet gate
-- **PROBLEM:** sticker/black-bar/missing component with same-person reference needs specialized reference-conditioned generation.
-- **EVIDENCE:** official RefFace code/checkpoints, MIT repo; prepared minimal CPU path strips inference-useless discriminators and patches one device-hardcoded allocation without changing weights/architecture.
-- **ALTERNATIVES:** generic CodeFormer everywhere, InstantRestore, OSDFace, GPEN inpainting.
-- **WHY CHOSEN:** more task-specialized and plausibly lighter than diffusion/multi-UNet alternatives.
-- **REVERSAL:** identity/resource/quality failure in measured attempt series.
-- **STATUS:** ACCEPTED / BLOCKED BY SEQUENCE.
+### DEC-20260819-006 — RefFace next large-occlusion specialist after DamageMaskNet gate
+- selected for task specificity; generic CodeFormer-everywhere, heavier InstantRestore/OSDFace and GPEN inpainting remain alternatives/challengers.
+- **Status:** ACCEPTED / BLOCKED BY SEQUENCE.
 
-### DEC-20260819-007 — V3 consumed; V4 one-shot remains untouched
-- **PROBLEM:** prevent benchmark leakage/tuning.
-- **EVIDENCE:** V3 39/40 and consumed; V4 freeze exists, no consumed/request marker.
-- **STATUS:** ACCEPTED safety protocol.
+### DEC-20260819-007 — V3 consumed; V4 untouched one-shot
+- V3 never rerun/tuned. V4 freeze exists but no consumption/request marker.
+- **Status:** ACCEPTED safety protocol.
+
+### DEC-20260819-008 — Separate ranking cluster from component-transfer identity authority
+- **DATE:** 2026-08-19
+- **PROPOSAL:** preserve the preflight connected SFace component for ranking only; persist observed-reference component-transfer authority only when the existing preflight SFace matrix contains a direct MAIN(0)↔REF edge at `>=0.363`.
+- **PROBLEM:** the largest single-link cluster can exclude MAIN or propagate A-B-C even though MAIN-C is below threshold; at the same time, a legitimate direct MAIN↔REF proof was being discarded if that ref was not in the selected ranking component.
+- **AFFECTED VERSION/TRACK:** PRODUCT_V1_1 / Track A.
+- **AFFECTED BLOCKS:** preflight, reference eligibility/ALIGN, IDENTITY_CHECK; same-canvas evidence contract.
+- **MODELS:** SFace only; no model/checkpoint/threshold change.
+- **EVIDENCE:** previous same-HEAD hidden/targeted regressions expected component-transfer acceptance/persistence and a same-canvas identity-bridge list; existing V4 direct-edge tests explicitly prohibit transitive authority.
+- **EXPECTED BENEFIT:** recover legitimate same-person donor eligibility without reopening reference-only/transitive trust.
+- **RISKS:** treating ranking-cluster membership as authority would reintroduce wrong-person/transitive risk; explicitly prohibited by this decision.
+- **ALTERNATIVES:** lower SFace threshold (rejected); trust majority/reference-only cluster (rejected); weaken face-local same-canvas proof (rejected).
+- **REVERSAL:** evidence shows direct-MAIN persistence itself violates wrong-person/provenance gates.
+- **STATUS:** VALIDATING at `3e919f7a...`.
 
 ---
 
 ## 14. EXPERIMENT LOG
 
-### EXP-20260817-001 — GPEN BFR-512 vertical slice
-- **HYPOTHESIS:** GPEN can provide useful paper-quality CPU restoration while preserving identity.
-- **ATTEMPTS:** 2 effective setup attempts; first blocked by missing environment dependency before model execution; second real inference PASS.
-- **DATASET/SPLIT:** DEVELOPMENT, no final holdout.
-- **BACKEND:** Linux CPU, batch 1, aligned 512.
-- **RESULT:** real output; SFace `0.95397`, `~2.697s`, `~1.828GB`, PSNR `28.07`, SSIM `0.7474`.
-- **CONCLUSION:** BENCHMARKING, not qualified; broaden data/license/Windows evidence.
-- **ARTIFACT:** `research/GPEN_VERTICAL_SLICE_REPORT.md` + workflow artifact.
+### EXP-20260817-001 — GPEN BFR-512
+- DEVELOPMENT Linux CPU, aligned 512; real inference after setup dependency fix.
+- SFace `0.95397`; `~2.697s`; peak RSS `~1.828GB`; PSNR `28.07`; SSIM `0.7474`.
+- **Conclusion:** BENCHMARKING, not production-qualified.
 
-### EXP-20260817-002 — GFPGAN v1.4 vertical slice
-- **HYPOTHESIS:** v1.4 offers strong real-world restoration in same common aligned comparison.
-- **ATTEMPTS:** initial technical run succeeded but alignment mismatch invalidated A/B; corrected comparable run succeeded.
-- **RESULT:** SFace `0.91665`, `~2.787s`, `~1.666GB`, PSNR `30.65`, SSIM `0.8604`.
-- **CONCLUSION:** BENCHMARKING; one case cannot choose winner.
+### EXP-20260817-002 — GFPGAN v1.4
+- first output technically ran but alignment mismatch invalidated A/B; corrected comparable run succeeded.
+- SFace `0.91665`; `~2.787s`; peak RSS `~1.666GB`; PSNR `30.65`; SSIM `0.8604`.
+- **Conclusion:** BENCHMARKING; no one-image winner.
 
-### EXP-20260817-003 — CodeFormer w=0.5 CPU vertical slice
-- **HYPOTHESIS:** official `w=0.5` severe-restoration candidate can run locally under resource governor.
-- **ATTEMPT 1:** packaging/import failure before model inference (`basicsr.version`).
-- **ATTEMPT 2:** real CPU inference PASS under 80% governor.
-- **METRICS:** exact comparative metrics must be read from stored artifact before restating.
-- **CONCLUSION:** BENCHMARKING; license blocker remains.
+### EXP-20260817-003 — CodeFormer w=0.5 CPU
+- attempt 1 packaging/import failure (`basicsr.version`) before real model inference;
+- attempt 2 real CPU PASS under 80% governor;
+- exact numerical artifact must be recovered before comparative restatement.
+- **Conclusion:** BENCHMARKING / license blocker.
 
 ### EXP-20260817-004 — FBCNN JPEG QF20
-- **HYPOTHESIS:** specialist JPEG cleanup improves fidelity/identity before any generative face model.
-- **ATTEMPT:** real Linux CPU PASS.
-- **RESULT:** PSNR `34.62→36.78`, SSIM `0.9486→0.9634`, SFace `0.9571→0.9691`, peak RSS `~1.305GB`.
-- **CONCLUSION:** current JPEG leader in DEV; broader JPEG family validation required.
+- real CPU PASS; PSNR `34.62→36.78`, SSIM `0.9486→0.9634`, SFace `0.9571→0.9691`, peak RSS `~1.305GB`.
+- **Conclusion:** current DEV JPEG leader; broaden.
 
-### EXP-20260818-005 — DamageMaskNet U-Net attempt 1/3
-- **HYPOTHESIS:** lightweight U-Net can segment exact synthetic target damages.
-- **RESULT:** INFRASTRUCTURE FAIL before training: Wikimedia HTTP 403.
-- **DECISION:** fix acquisition only; preserve hypothesis.
+### EXP-20260818-005 — DamageMaskNet attempt 1/3
+- **Result:** INFRASTRUCTURE FAIL before training, Wikimedia HTTP403.
 
-### EXP-20260818-006 — DamageMaskNet U-Net attempt 2/3
-- **RESULT:** INFRASTRUCTURE FAIL before training: sources began verifying, then Wikimedia HTTP 429.
-- **DECISION:** do not change U-Net; move acquisition to mixed open-source bank.
+### EXP-20260818-006 — DamageMaskNet attempt 2/3
+- **Result:** INFRASTRUCTURE FAIL before training, Wikimedia HTTP429 after verified sources.
 
-### EXP-20260818-007 — DamageMaskNet U-Net attempt 3/3
-- **DATA:** FairFace + ControlFace mixed source bank; identity-disjoint ControlFace validation; same U-Net hypothesis/hyperparameters.
-- **RESULT:** **NOT_VERIFIED** — run was triggered but final evidence is not exposed through the available Actions interface.
-- **DECISION:** do not launch attempt 4 for observability. Recover existing evidence. If actual model/data quality failure, U-Net hypothesis is exhausted and must stop/reassess.
+### EXP-20260818-007 — DamageMaskNet attempt 3/3
+- FairFace + ControlFace acquisition; same U-Net hypothesis.
+- **Result:** NOT_VERIFIED because final run evidence is inaccessible through current interface.
+- **Decision:** no attempt 4 for observability.
 
-### EXP-20260819-008 — RefFaceInpainting CPU vertical slice
-- **STATUS:** PREPARED / NOT_RUN.
-- **ATTEMPT:** 0/3 consumed.
-- **INPUT PLAN:** two ControlFace views of same identity, exact opaque facial mask, CFS parser/YuNet/SFace.
-- **BACKEND:** CPU, minimal `UnetG + ArcFace resnet101`, one device-neutral allocation patch.
-- **ACCEPTANCE:** 80% resource contract, SFace >=0.363, exact MAIN outside mask, GENERATED provenance, hashes/runtime/RAM.
-- **NEXT:** run attempt 1 only after DamageMaskNet gate resolution.
+### EXP-20260819-008 — RefFace CPU vertical slice
+- **Status:** PREPARED / NOT_RUN; attempt `0/3` consumed.
+- Plan: two same-identity ControlFace views, exact opaque face mask, CFS parser/YuNet/SFace, minimal CPU `UnetG + ArcFace resnet101`, 80% resource contract, exact MAIN outside mask, GENERATED provenance.
+
+### EXP-20260819-009 — Track A direct component-transfer authority repair
+- **Hypothesis:** direct preflight MAIN↔REF SFace evidence must survive ranking-component selection without allowing transitive cluster authority.
+- **Attempt:** 1/3 for this specific implementation hypothesis.
+- **Start HEAD:** `3645c8c39653d04616167e881adaf28d2b93cd45`.
+- **Technical HEAD:** `3e919f7a1cc54e1bdb00607c2bbeece1d3392724`.
+- **Changes:** `PreflightCandidate.accepted_for_component_transfer`; direct-MAIN matrix extraction; persisted `reference_component_transfer_accepted`; V2 audit accepts explicit direct-transfer evidence; same-canvas face-local bridge writes old and canonical alias keys; new regression test locks A-B-C non-transitivity.
+- **Threshold/model change:** NONE; SFace remains `0.363`.
+- **Result:** NOT_VERIFIED pending new-head test/CI evidence.
+- **Next:** inspect targeted/full test result before attempt 2.
 
 ---
 
 ## 15. QUALITY SCOREBOARD
 
-Never combine these scopes into one overall number.
+Keep scopes separate.
 
-### DEVELOPMENT
-
-- GPEN, GFPGAN, FBCNN measurements: see Section 7.
-- CodeFormer real slice PASS; exact numerical artifact recovery required for comparison.
-- wrong-person/provenance for production safety remain governed by hard gates; Paper Quality broad DEV scoreboard not complete.
+### DEV
+GPEN/GFPGAN/FBCNN values are recorded in Section 7; CodeFormer exact artifact recovery required. Broad BFR validation incomplete.
 
 ### VALIDATION
-
-- Broad identity-disjoint blind-restorer validation: INCOMPLETE.
-- DamageMaskNet validation: NOT_VERIFIED for attempt 3.
-- Personalized reference bank validation: framework exists; latest workflow result NOT_VERIFIED.
+DamageMaskNet attempt 3 NOT_VERIFIED; Personalized Reference Bank framework exists but latest workflow evidence NOT_VERIFIED; broad selector calibration not run.
 
 ### HOLDOUT
-
-- V1 final historical: certified 40/40.
-- V3: consumed `39/40`, failure SFace `0.360 < 0.363`.
+- V1 historical certification: 40/40.
+- V3 consumed: 39/40, SFace failure `0.360 < 0.363`.
 - V4: frozen, NOT_RUN, UNCONSUMED.
 
 ### REAL-WORLD
-
-- Female-domain historical and current stress runs exist.
-- Current hotfix same-HEAD female workflow: FAIL at lightweight report validation after benchmark execution.
-- No claim of current hotfix real-world readiness.
+Prior hotfix head Female-domain workflow FAIL after benchmark execution at report validation. New head state NOT_VERIFIED.
 
 ### TARGET-PC
+HP EliteBook 1030 G3: Paper Quality NOT_RUN.
 
-- HP EliteBook 1030 G3: NOT_RUN for Paper Quality acceptance.
-
-Metrics to maintain per scope: SFace/identity, PSNR, SSIM, LPIPS, NIQE when useful, healthy MAE, recovery per damage family, wrong-person observed pixels, provenance violations, generated/reference-supported/unresolved fractions, component geometry drift, runtime and peak RAM.
+Scoreboard dimensions to maintain: SFace/identity, PSNR, SSIM, LPIPS, NIQE where useful, healthy MAE, damage recovery, wrong-person observed pixels, provenance violations, generated/reference-supported/unresolved fraction, component geometry, runtime and RAM.
 
 ---
 
 ## 16. TARGET HARDWARE
 
-Primary deployment target:
+Primary: **HP EliteBook 1030 G3, 16 GB RAM, Windows**. Exact CPU/GPU must be detected at runtime.
 
-- **Machine family:** HP EliteBook 1030 G3
-- **RAM:** 16 GB
-- **OS:** Windows
-- **Exact CPU/GPU:** detect at runtime; do not assume SKU.
-- **Architecture:** CPU-first.
-- **Optional acceleration:** OpenVINO / compatible Intel iGPU / other backend only after actual support + output parity benchmark.
-- **CUDA:** not required and must not be required.
-- **Resource contract:** <=80% logical processors, <=80% process RAM, <=80% whole-system RAM, max one heavy restoration model resident.
+- CPU-first; no CUDA requirement.
+- Optional OpenVINO/Intel acceleration only after actual support and output parity tests.
+- <=80% logical processors.
+- <=80% process RAM and <=80% whole-system RAM.
+- maximum one heavy restoration model resident.
 
-Every serious model must eventually record real target-PC load time, inference time, peak RAM, backend, output hash and identity result. Linux CPU timing is never relabeled as target-hardware evidence.
+Every serious model eventually needs real target-PC: CPU/RAM/Windows/backend, model load seconds, inference seconds, peak RAM, output hash, identity result. Linux CPU numbers are never relabeled as EliteBook evidence.
 
 ---
 
 ## 17. RELEASE SAFETY RULES
 
-Frozen/current safety invariants unless an explicitly approved versioned policy supersedes them with evidence:
+Frozen/current invariants:
 
-- **SFace threshold:** `0.363`.
-- **Wrong-person observed contribution:** `0 pixels`.
-- **Provenance violations:** `0`.
-- **Healthy/outside repair MAE:** `<=8.0` where the existing frozen release protocol applies.
-- Calibration remains independent.
+- SFace threshold `0.363`.
+- wrong-person observed contribution `0 pixels`.
+- provenance violations `0`.
+- healthy/outside repair MAE `<=8.0` where the frozen release policy applies.
+- independent calibration remains valid.
 
-Forbidden shortcuts:
-
-- threshold-shopping;
-- benchmark-shopping/cherry-picking;
-- rerunning/tuning consumed holdouts;
-- deleting difficult cases;
-- representing generated pixels as observed evidence;
-- using raw wrong-person references to improve identity score;
-- auto-merge/force-push certified history;
-- fabricated Actions results, RAM, speed, hashes or output images.
+Forbidden: threshold shopping, cherry-picking, consumed-holdout rerun/tuning, difficult-case removal, generated-as-observed provenance, raw wrong-person score maximization, auto-merge, certified-history force push, fabricated CI/RAM/speed/hash/output.
 
 ---
 
 ## 18. PROVENANCE CLASSES
 
-Minimum canonical provenance vocabulary:
-
+Canonical minimum:
 - `MAIN_OBSERVED`
 - `OBSERVED_REFERENCE`
 - `SYMMETRY_INFERRED`
 - `GENERATED_MODEL_INFERRED`
 - `UNRESOLVED`
 
-Generated content never changes class merely because it passes identity or resembles a reference.
+Identity similarity never changes provenance class.
 
 ---
 
 ## 19. TRACK A — PRODUCT_V1_1 OPERATIONAL RELEASE
 
-Current exact head: `3645c8c39653d04616167e881adaf28d2b93cd45`.
+### Previous exact head — preserved failure evidence
 
-Same-HEAD state:
+`3645c8c39653d04616167e881adaf28d2b93cd45`
 
-- **Release Quality:** FAIL. Targeted regressions: `4 failed, 195 passed`.
-  - `test_main_source_zero_never_changes_after_preflight`: legitimate reference expected component-transfer acceptance but got False.
-  - `test_component_transfer_acceptance_is_persisted_for_all_blocks`: expected `[True]`, got `[False]`.
-  - `test_final_identity_reuses_preflight_acceptance_instead_of_requiring_main_bridge`: expected accepted identity but got reason `main_not_in_accepted_sface_cluster`.
-  - `test_restores_imported_primary_when_selected_anchor_is_verified_same_canvas`: expected identity-bridge matched reference `[1]`, got `[]`.
-- **Windows:** FAIL on same HEAD; full Python-test stage failed. Exact nested assertion/count must be re-read before claiming more detail.
-- **Female-domain:** FAIL on same HEAD. Benchmark execution reached completion; lightweight 300–400-case report validation failed. Exact nested assertion is NOT_VERIFIED in this reconciliation.
+- Release Quality targeted suite: **4 failed, 195 passed**.
+- `test_main_source_zero_never_changes_after_preflight`: expected legitimate reference `accepted_for_component_transfer=True`, observed False.
+- `test_component_transfer_acceptance_is_persisted_for_all_blocks`: expected `[True]`, observed `[False]`.
+- `test_final_identity_reuses_preflight_acceptance_instead_of_requiring_main_bridge`: expected accepted identity; observed reason `main_not_in_accepted_sface_cluster`.
+- `test_restores_imported_primary_when_selected_anchor_is_verified_same_canvas`: expected face-local identity bridge list `[1]`, observed `[]`.
+- Windows: FAIL during Python-test stage; exact nested assertion NOT_VERIFIED in this ledger.
+- Female-domain: benchmark execution completed, lightweight report validation FAIL; exact nested assertion NOT_VERIFIED.
 
-Immediate policy:
+### Current exact head
 
-1. inspect current `app/preflight.py`, `app/identity_anchor_v4_policy.py`, `app/identity_anchor_v4_hardening.py`, `app/primary_anchor_policy.py`, `app/face_resilience_binding_policy.py` and the four failing tests;
-2. distinguish legitimate same-person evidence from reference-only/transitive/wrong-person rescue;
-3. fix root cause without lowering SFace or weakening fail-closed behavior;
-4. targeted tests -> full pytest -> same-HEAD Windows/Female/Release Quality;
-5. no V3 execution; no V4 execution until pre-final sequence is valid.
+`3e919f7a1cc54e1bdb00607c2bbeece1d3392724`
+
+Technical change:
+
+1. `app/preflight.py`
+   - adds `accepted_for_component_transfer` independently of `accepted_identity` ranking membership;
+   - computes it **only** from the existing pairwise SFace matrix using a direct MAIN source-0 edge at the unchanged frozen threshold;
+   - persists per-reference transfer flags and authority source IDs;
+   - A-B-C transitive linking does not confer C authority.
+2. `app/face_domain_guard_v2_policy.py`
+   - preserves explicit direct preflight component-transfer acceptance through the existing identity-eligibility audit/firewall.
+3. `app/primary_anchor_policy.py`
+   - retains strict face-local identity proof;
+   - writes both `identity_bridge_original_reference_indices` and `identity_bridge_matched_original_reference_indices` from the **same strict face-local list**, never the broad whole-canvas list.
+4. `tests/test_preflight_component_transfer_authority.py`
+   - regression locks direct-only A-B-C behavior, direct transfer persistence and same-canvas alias equality.
+
+**Current test/CI state:** NOT_VERIFIED. Do not claim this fixes all four failures until same-head evidence exists.
+
+**Next exact action:** read the new-head targeted test result once available. If it fails, diagnose only the remaining failure and keep this hypothesis within its 3-attempt limit. Then full pytest and same-head Windows/Female/Release Quality. No V3/V4 execution.
 
 ---
 
 ## 20. TRACK B — PAPER QUALITY
 
-Active branch: `research/paper-quality-local-v2@645862d1b8ff3c1d7abe7df6cee0e17e4f2d68dd`.
+Active: `research/paper-quality-local-v2@645862d1b8ff3c1d7abe7df6cee0e17e4f2d68dd`.
 
-This is a real ML research track, not documentation-only. Model states must converge to `QUALIFIED`, `REJECTED`, or a documented blocker after sufficient evidence rather than remaining indefinitely optional.
-
-Current implemented/researched layers:
-
-- 80% resource governor + one-heavy-model lifecycle;
-- GPEN/GFPGAN/CodeFormer/FBCNN vertical slices;
-- damage taxonomy and DamageMaskNet pipeline;
-- 13-component component bank including FACE_CONTOUR;
+Current research layers:
+- 80% governor + one-heavy-model lifecycle;
+- real GPEN/GFPGAN/CodeFormer/FBCNN CPU slices;
+- damage taxonomy + DamageMaskNet pipeline;
+- 13 components including FACE_CONTOUR;
 - Personalized Reference Bank;
-- reference-first repair with original source-index provenance;
+- reference-first observed repair with original source-index provenance;
 - hard-gated candidate selector framework;
 - deterministic component-aware fusion;
-- yakhyo 19-class parser adapter;
-- RefFace CPU vertical slice prepared but manual-only/NOT_RUN.
+- 19-class CFS parser adapter;
+- RefFace CPU vertical slice prepared/manual-only/NOT_RUN.
+
+Models must eventually converge to QUALIFIED, REJECTED or a documented blocker; not remain indefinitely optional.
 
 ---
 
 ## 21. CURRENT PAPER QUALITY BLOCKER
 
-**DamageMaskNet attempt 3 evidence recovery.**
+Recover the already-triggered DamageMaskNet attempt 3 **without rerunning/tuning**.
 
-Do not trigger attempt 4 merely because evidence is inconvenient to retrieve.
+- **PASS:** record per-class IoU/F1, ONNX parity, RAM/runtime and source-bank hashes; decide whether U-Net remains valid.
+- **INFRASTRUCTURE FAIL:** correct infrastructure only; do not silently change data/model hypothesis.
+- **MODEL/DATA QUALITY FAIL:** attempt 3 exhausts the three-attempt U-Net hypothesis; stop and document a new lightweight segmentation hypothesis rather than micro-tuning.
 
-Classify recovered attempt 3 as:
-
-### A. PASS
-Read and record:
-- IoU per class;
-- F1 per class;
-- ONNX parity;
-- RAM;
-- runtime;
-- source-bank hashes/split evidence.
-
-Then decide whether lightweight U-Net remains valid and scale DEVELOPMENT/VALIDATION appropriately.
-
-### B. INFRASTRUCTURE FAIL
-Correct acquisition/infrastructure only. Do not silently alter model/data hypothesis.
-
-### C. MODEL/DATA QUALITY FAIL
-If attempt 3 genuinely reaches training/evaluation and fails quality, the three-attempt U-Net hypothesis is consumed. Stop it and create a new documented hypothesis for the next lightweight architecture (e.g. MobileNetV3 segmentation head / lightweight DeepLab), rather than micro-tuning indefinitely.
-
-After this blocker is resolved, run RefFaceInpainting CPU vertical slice **attempt 1/3**, provided prerequisites still hold.
+Only after this gate: RefFace CPU attempt 1/3.
 
 ---
 
 ## 22. SPECIALIST MODEL STRATEGY
 
-Long-term routing:
-
-`INPUT -> detect/align -> damage classification -> reference analysis -> identity anchors -> specialist route -> candidates -> component evaluation -> identity/geometry/quality hard gates -> evidence-aware deterministic fusion -> final identity -> provenance/export`
-
-Principles:
+`INPUT -> detect/align -> damage classification -> reference analysis -> identity anchors -> specialist route -> candidates -> component evaluation -> identity/geometry/quality gates -> evidence-aware deterministic fusion -> final identity -> provenance/export`
 
 - JPEG -> FBCNN candidate.
-- Blur -> dedicated deblur or appropriate BFR, not automatic generator chaining.
-- Opaque occlusion + valid same-person reference -> observed-reference reconstruction first; RefFace-like specialist only if qualified.
-- Unsupported missing detail -> Paper Quality generation only when enabled; mark GENERATED.
+- Blur -> dedicated deblur / measured BFR, not automatic chaining.
+- Opaque loss + same-person ref -> observed evidence first; RefFace-like generation only if qualified.
+- Unsupported missing detail -> Paper Quality generated inference when enabled.
 - Observed reference detail -> evidence-first.
-- Never run GPEN -> GFPGAN -> CodeFormer serially simply because all exist.
+- Never GPEN→GFPGAN→CodeFormer blindly.
 
 ---
 
 ## 23. MODEL SELECTION POLICY
 
-For GPEN/GFPGAN/CodeFormer and future blind restorers:
-
-- use multiple identity-disjoint DEVELOPMENT/VALIDATION faces;
-- evaluate per degradation family, not a single average;
-- measure identity, geometry, artifact rate, component fidelity, healthy-region preservation, PSNR/SSIM/LPIPS and runtime/RAM;
-- keep final holdout untouched while selecting weights/models;
-- identity remains a hard gate before weighted quality ranking;
-- record why the winner won;
-- remove models whose measured incremental benefit does not justify RAM/runtime/dependency/license cost.
+Blind-restoration winners require multiple identity-disjoint DEV/VALIDATION images and per-degradation reporting. Measure identity, perceptual quality, geometry, artifacts, healthy preservation, PSNR/SSIM/LPIPS, runtime/RAM. Final holdouts are never used to select weights/models. Identity is a hard gate before weighted ranking. Remove complexity that does not earn measured benefit.
 
 ---
 
-## 24. HISTORICAL RECORD — append-only important states/pushes
+## 24. HISTORICAL RECORD — append-only
 
 ### HIST-20260815-001 — PRODUCT_V1 certified merge
-- **Technical branch/candidate:** `release/v1-certified@f476c6f04b57b658fd152a0a82e5b50cb5afbdbc`
-- **Resulting main:** `2767513f95dde2d417e7c6f1faf2357149a1a32f`
-- **Evidence:** merge commit records Windows #1195, Female-domain #463, Release Quality #13 certification.
-- **Models/objectives:** baseline production stack; OBJ-001.
-- **Decision:** freeze as certified PRODUCT_V1 regression base.
+- candidate `release/v1-certified@f476c6f04b57b658fd152a0a82e5b50cb5afbdbc` -> `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- merge commit records Windows #1195, Female #463, Release Quality #13.
+- decision: immutable PRODUCT_V1 regression base.
 
-### HIST-20260818-002 — Track A current blocked hotfix state
-- **Branch:** `hotfix/real-world-restoration-v1.1`
-- **Technical HEAD:** `3645c8c39653d04616167e881adaf28d2b93cd45`
-- **Tests/workflows:** Release Quality FAIL (`4 failed, 195 passed` targeted); Windows FAIL; Female-domain FAIL.
-- **Affected objective:** OBJ-002.
-- **V3:** consumed, no rerun.
-- **V4:** frozen/unexecuted/unconsumed.
-- **Next:** fix legitimate identity/preflight bridge regression without safety relaxation.
+### HIST-20260818-002 — Track A blocked hotfix snapshot
+- branch/head `hotfix/real-world-restoration-v1.1@3645c8c39653d04616167e881adaf28d2b93cd45`.
+- Release Quality FAIL (`4 failed, 195 passed` targeted); Windows FAIL; Female FAIL.
+- V3 consumed/no rerun; V4 frozen/unexecuted/unconsumed.
+- objective: OBJ-002.
 
 ### HIST-20260818-003 — Advanced Paper Quality research snapshot
-- **Branch:** `research/paper-quality-local-v2`
-- **Technical HEAD:** `645862d1b8ff3c1d7abe7df6cee0e17e4f2d68dd`
-- **State:** real DEV model evidence + research routing/fusion infrastructure; DamageMaskNet attempt 3 NOT_VERIFIED; RefFace PREPARED/NOT_RUN.
-- **Models:** GPEN, GFPGAN v1.4, CodeFormer, FBCNN, DamageMaskNet, RefFace and feasibility candidates.
-- **Objectives:** OBJ-004 through OBJ-008.
-- **Next:** recover DamageMaskNet attempt 3 evidence without rerun.
+- `research/paper-quality-local-v2@645862d1b8ff3c1d7abe7df6cee0e17e4f2d68dd`.
+- real DEV model evidence + routing/fusion infrastructure; DamageMaskNet attempt 3 NOT_VERIFIED; RefFace PREPARED/NOT_RUN.
+- objectives OBJ-004..OBJ-008.
 
 ### HIST-20260819-004 — Canonical ledger established
-- **Technical/meta action:** created `meta/project-state` from certified `main@2767513f95dde2d417e7c6f1faf2357149a1a32f` and established this root ledger.
-- **Purpose:** make repository state self-contained for future engineers/sessions.
-- **Tests:** documentation-only action; repository state reconciled before creation.
-- **Next engineering action:** Track A inspect/fix exact current identity/preflight regressions; in parallel, recover existing Track B DamageMaskNet attempt-3 evidence when observable. Every subsequent technical push must be followed by a ledger update.
+- created `meta/project-state` from certified `main@2767513f...`.
+- project state no longer depends on chat memory.
+
+### HIST-20260819-005 — Direct component-transfer authority patch
+- **Timestamp:** 2026-08-19T05:46+02:00.
+- **Technical branch:** `hotfix/real-world-restoration-v1.1`.
+- **Previous HEAD:** `3645c8c39653d04616167e881adaf28d2b93cd45`.
+- **Exact technical HEAD:** `3e919f7a1cc54e1bdb00607c2bbeece1d3392724`.
+- **Files changed:** `app/preflight.py`, `app/face_domain_guard_v2_policy.py`, `app/primary_anchor_policy.py`, `tests/test_preflight_component_transfer_authority.py`.
+- **Models/checkpoints:** NONE changed. SFace threshold remains `0.363`.
+- **Objective affected:** OBJ-002.
+- **Safety intent:** direct MAIN↔REF SFace authority survives ranking selection; ranking clusters remain non-authoritative; face-local same-canvas proof remains strict; no transitive A-B-C trust.
+- **Tests:** new regression definitions committed; GitHub same-head result **NOT_VERIFIED at ledger update time**. Prior failures remain preserved above.
+- **Next action:** evaluate new-head targeted/full tests before any second implementation attempt.
