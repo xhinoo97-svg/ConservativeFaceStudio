@@ -28,8 +28,19 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
+def _history_is_shallow() -> bool:
+    """Return True when ancestry cannot safely prove an introduction commit."""
+    try:
+        return _git("rev-parse", "--is-shallow-repository").strip().lower() == "true"
+    except subprocess.CalledProcessError:
+        # If Git cannot prove complete history, do not pretend that HEAD is origin.
+        return True
+
+
 def _optional_origin(relative: str) -> str:
-    """Return the historical introduction commit when full history is available."""
+    """Return the historical introduction commit only when full history is available."""
+    if _history_is_shallow():
+        return ""
     try:
         additions = [
             line.strip()
