@@ -167,12 +167,18 @@ def _record_same_canvas_evidence(
     imported_primary: np.ndarray | None = None,
     primary_occlusion_seed_present: bool,
 ) -> None:
+    identity_bridge_values = [int(value) for value in identity_bridge_matches]
     workspace.metadata["same_canvas_primary_anchor"] = {
         "applied": bool(applied),
         "matched_original_reference_indices": [int(value) for value in matches],
-        "identity_bridge_original_reference_indices": [int(value) for value in identity_bridge_matches],
+        # Keep the original key for frozen/tracked compatibility and write the explicit
+        # canonical alias expected by downstream release evidence. Both lists contain
+        # only the stricter face-local identity bridge, never the global same-canvas list.
+        "identity_bridge_original_reference_indices": identity_bridge_values,
+        "identity_bridge_matched_original_reference_indices": identity_bridge_values,
         "identity_bridge_requires_face_local_observed_agreement": True,
         "identity_bridge_region": "inner_face_peripheral_band_v1",
+        "identity_bridge_rule": "global_same_canvas_plus_face_peripheral_band_v1",
         "primary_occlusion_seed_present": bool(primary_occlusion_seed_present),
         "preflight_selected_source_index": int(selected),
         "restored_source_index": 0,
