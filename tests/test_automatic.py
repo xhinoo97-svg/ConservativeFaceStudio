@@ -4,7 +4,6 @@ import hashlib
 import json
 import zipfile
 from pathlib import Path
-from types import SimpleNamespace
 
 import cv2
 import numpy as np
@@ -131,19 +130,26 @@ def test_preflight_cannot_mutate_true_import_snapshot(monkeypatch, tmp_path: Pat
         workspace.metadata["preflight_deblurred_all"] = True
         return Result()
 
-    class SyntheticSFaceBackend:
-        name = "synthetic-sface-test-fixture"
-
-        def analyze(self, image):
-            # Autorun plumbing is not a face-recognition test. Provide deterministic,
-            # explicit SFace-like evidence so V4 fail-closed semantics remain active
-            # instead of depending on the deliberately forbidden histogram proxy.
-            return SimpleNamespace(embedding=np.asarray([1.0, 0.0, 0.0], dtype=np.float32))
+    def synthetic_identity(self, block, parameters):
+        # This unit test verifies immutable IMPORT plumbing, not face recognition.
+        # Feed explicit structured SFace evidence through the normal V4 wrapper so
+        # fail-closed semantics remain active without relying on the forbidden proxy.
+        minimum = max(float(parameters.get("minimum", 0.363)), 0.363)
+        return ExecutionResult(
+            block.key,
+            self.workspace.copy_primary(),
+            {
+                "engine": "synthetic-sface-test-fixture",
+                "scores": [1.0],
+                "best": 1.0,
+                "minimum": minimum,
+            },
+        )
 
     monkeypatch.setattr(automatic_module, "preprocess_and_select_front_base", preflight)
     monkeypatch.setattr(automatic_module, "restore_imported_primary_for_same_canvas", lambda workspace, observed: type("D", (), {"applied": False, "reason": "fixture", "matched_reference_count": 0, "original_selected_source_index": 0})())
     monkeypatch.setattr(automatic_module, "apply_observed_restoration_policy", lambda workspace, observed: None)
-    monkeypatch.setattr(execution_module, "choose_backend", lambda prefer_embeddings=True: SyntheticSFaceBackend())
+    monkeypatch.setattr(execution_module.BlockExecutor, "_identity", synthetic_identity)
     model = tmp_path / "nafnet.onnx"
     model.write_bytes(b"fixture")
     workspace = Workspace(primary=source.copy(), metadata={"core_model_paths": {"opencv_nafnet_deblur": str(model)}})
