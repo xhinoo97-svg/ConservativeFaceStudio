@@ -101,3 +101,17 @@ def test_format_duration_handles_minutes_and_hours() -> None:
     assert format_duration(None) == "—"
     assert format_duration(65) == "01:05"
     assert format_duration(3661) == "1:01:01"
+
+
+def test_worker_and_ui_are_wired_to_detailed_timeline() -> None:
+    root = Path(__file__).resolve().parents[1]
+    worker = (root / "app" / "worker.py").read_text(encoding="utf-8")
+    ui = (root / "app" / "main_window.py").read_text(encoding="utf-8")
+
+    assert "progress_detail = Signal(object)" in worker
+    assert "BlockTimingHistory" in worker
+    assert "ProgressTimelineTracker" in worker
+    assert "worker.progress_detail.connect(self._on_progress_detail)" in ui
+    assert "self.progress_timer.setInterval(1000)" in ui
+    assert "QListWidget" in ui
+    assert "format_duration" in ui
