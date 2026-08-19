@@ -8,14 +8,14 @@
 - Repository: `xhinoo97-svg/ConservativeFaceStudio`
 - Canonical state branch: `meta/project-state`
 - Certified base: `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`
-- Last technical branch: `hotfix/real-world-restoration-v1.1`
-- Previous technical HEAD: `60b796581feb7a9c6fecd3a20a95759da4e48aa5`
-- Last technical HEAD: `5240eaecb8943244f5bf7276a0905489d261318b`
-- Active Paper Quality HEAD: `research/paper-quality-local-v2@d4f09f2ba7d6862f2be818c0421073007a26f885`
+- Last Track A branch: `hotfix/real-world-restoration-v1.1`
+- Track A current HEAD: `5240eaecb8943244f5bf7276a0905489d261318b`
+- Active Paper Quality HEAD: `research/paper-quality-local-v2@6ea5d113a1400da97864fcb43c69c53f789605ea`
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #132 at `60b79658...`.
-- Current Track A gate: exact-head CI on `5240eaec...` is **IN_PROGRESS**. This HEAD changes only the legacy IMPORT/preflight ordering test so it no longer depends on the unrelated V4 biometric firewall. SFace `0.363`, face-local identity, provenance, models and holdouts are unchanged.
-- Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns only thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
-- Current Track B blocker retained: recover already-triggered DamageMaskNet attempt-3 evidence without rerun for observability. Upstream qualification work proceeds independently and does not alter V1.1.
+- Current Track A gate: exact-head Windows #1316, Release Quality #133 and Female-domain #583 on `5240eaec...` are all **IN_PROGRESS** at this ledger update. SFace `0.363`, face-local identity, provenance, models and holdouts are unchanged. V4 is not authorized to run.
+- Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
+- Current Track B FBCNN state: official source pinned; thin upstream adapter and fail-closed tests committed; real CPU upstream-adapter workflow wired. New adapter/workflow evidence is **NOT_VERIFIED** until the corresponding Actions run completes and its artifact is inspected.
+- Current Track B blocker retained: recover already-triggered DamageMaskNet attempt-3 evidence without rerun for observability. Upstream qualification proceeds independently and does not alter V1.1.
 
 FORENSIC_MODE_READY: **TRUE for certified PRODUCT_V1 only**  
 PAPER_QUALITY_MODE_READY: **FALSE**  
@@ -34,9 +34,9 @@ CFS is a local Windows face-restoration system for damaged smartphone/social-med
 
 PRODUCT_V1 is certified and immutable. PRODUCT_V1_1 is an operational/safety hotfix isolated from Track B generative models. Track B contains real CPU model evidence and damage/reference/fusion research.
 
-Identity authority is no longer the current blocker. The same-canvas architecture separates **whole-canvas sameness**, which is only geometry/canvas evidence, from the stricter face-local identity bridge. V4 also remains fail-closed: histogram/proxy similarity is not identity authority, direct SFace evidence cannot be propagated transitively, and wrong-person same-canvas donors are blocked.
+Identity authority is no longer the current blocker. The same-canvas architecture separates **whole-canvas sameness**, which is only geometry/canvas evidence, from the stricter face-local identity bridge. V4 remains fail-closed: histogram/proxy similarity is not identity authority, direct SFace evidence cannot be propagated transitively, and wrong-person same-canvas donors are blocked.
 
-Paper Quality no longer treats local CFS reimplementation of published architectures as the default. When an official executable upstream exists, the official repository is pinned and reused; CFS patches only compatibility/integration defects and must still prove the result under its own safety and target-PC gates.
+Paper Quality does not reimplement a published architecture when an official executable upstream exists. The official repository is pinned and reused; CFS patches only compatibility/integration defects and adds safety/resource/package boundaries. Official code is not assumed bug-free and paper-reported quality is not treated as CFS/EliteBook evidence.
 
 ---
 
@@ -47,10 +47,10 @@ Paper Quality no longer treats local CFS reimplementation of published architect
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
-| `hotfix/real-world-restoration-v1.1` | Track A | `5240eaec...` | VALIDATING / ACTIVE | PR #2 OPEN/DRAFT; Windows #1316, Release #133, Female #583 in progress at ledger update | finish same-head prerequisites; never run V4 early |
+| `hotfix/real-world-restoration-v1.1` | Track A | `5240eaec...` | VALIDATING / ACTIVE | PR #2 OPEN/DRAFT; Windows #1316, Release #133, Female #583 all in progress | finish same-head prerequisites; never run V4 early |
 | `research/face-restoration-v2` | early data/degradation research | `757a3f60...` | SUPERSEDED AS ACTIVE ARCHITECTURE | not merged | preserve useful assets |
-| `research/paper-quality-local-v2` | advanced Track B | `d4f09f2b...` | ACTIVE / BENCHMARKING | upstream-first registry/bootstrap added; qualification partly NOT_VERIFIED | validate registry/tests, then qualify pinned upstream models sequentially |
-| `meta/project-state` | canonical ledger | self-SHA omitted | ACTIVE META | docs only | update after every technical push |
+| `research/paper-quality-local-v2` | advanced Track B | `6ea5d113...` | ACTIVE / BENCHMARKING | upstream registry + bootstrap + FBCNN thin adapter + workflow committed; new evidence NOT_VERIFIED | inspect exact FBCNN workflow artifact, pin observed official checkpoint digest, then broader JPEG validation |
+| `meta/project-state` | canonical ledger | self-SHA omitted | ACTIVE META | docs only | update after every meaningful technical push |
 
 ---
 
@@ -71,7 +71,7 @@ Product and holdout versions remain separate.
 
 CALIBRATION_V1 historical 60/60. FINAL_HOLDOUT_V1 historical 40/40. FINAL_HOLDOUT_V2 details not fully re-reconciled. FINAL_HOLDOUT_V3 **CONSUMED** 39/40; mosaic SFace `0.360<0.363`; NEVER rerun/tune. FINAL_HOLDOUT_V4 frozen 40 cases/20 identities, **NOT_RUN/UNCONSUMED**, one-shot only. V5 not created. Female-domain ~300–400 stress cases. Paper Quality DEV/VALIDATION separate. DamageMaskNet bank FairFace+ControlFace TRAIN/VALIDATION only.
 
-V3 is verification-only. V4 may be executed once only after frozen request protocol and all exact same-head prerequisites pass. No V4 request or CONSUMED marker has been authorized by this ledger update.
+V3 is verification-only. V4 may execute once only after frozen request protocol and all exact same-head prerequisites pass. No V4 request or CONSUMED marker has been authorized by this ledger update.
 
 ---
 
@@ -81,13 +81,14 @@ OBJ-001 Preserve V1 — PASS.
 OBJ-002 Restore V1.1 gates — VALIDATING on exact HEAD `5240eaec...`.  
 OBJ-003 Canonical ledger — IN_PROGRESS.  
 OBJ-004 DamageMaskNet — BLOCKED on existing attempt3 evidence.  
-OBJ-005 Broad BFR selection — IN_PROGRESS, now upstream-first.  
-OBJ-006 FBCNN JPEG qualification — IN_PROGRESS, official upstream pinned.  
+OBJ-005 Broad BFR selection — IN_PROGRESS, upstream-first.  
+OBJ-006 FBCNN JPEG qualification — IN_PROGRESS; official source + thin adapter committed, new runtime evidence NOT_VERIFIED.  
 OBJ-007 Personalized Reference Bank validation — IN_PROGRESS.  
 OBJ-008 RefFace CPU — BLOCKED by OBJ-004, 0/3 attempts.  
 OBJ-009 Paper Quality Windows pack — PROPOSED.  
 OBJ-010 HP EliteBook acceptance — PROPOSED.  
-OBJ-011 Official upstream implementation registry — IMPLEMENTED, qualification tests pending on target environments.
+OBJ-011 Official upstream implementation registry — IMPLEMENTED; runtime qualification remains per-model.  
+OBJ-012 Official upstream adapters — IN_PROGRESS; FBCNN is first concrete implementation.
 
 ---
 
@@ -97,7 +98,9 @@ Certified roles: YuNet, SFace `0.363`, NAFNet, Face Parsing ResNet18 ONNX, Head 
 
 Research: GPEN BENCHMARKING/license blocker; GFPGAN1.4 BENCHMARKING; CodeFormer BENCHMARKING/BLOCKED_LICENSE; FBCNN BENCHMARKING/current DEV JPEG leader; DamageMaskNet BENCHMARKING/BLOCKED; RefFace FEASIBILITY_ONLY/NOT_RUN; InstantRestore/OSDFace hardware-blocked feasibility; RestoreFormer++/VQFR/GPEN-inpainting/RefineFIR/PerFuSe/RefIPFR/Real-ESRGAN feasibility until measured.
 
-Official repository registry now exists at `config/upstream-implementations.json` on the Paper Quality branch. Pinned and verified repository baselines at creation: GPEN `yangxy/GPEN@2c736702983368847fb544d234a22ac7cff25802`; GFPGAN `TencentARC/GFPGAN@7552a7791caad982045a7bbe5634bbf1cd5c8679`; CodeFormer `sczhou/CodeFormer@b33cc7d639d6545bfcccc7e0bc6ae51f24e79c2b`; FBCNN `jiaxi-jiang/FBCNN@54d1831927506b3247e2d4d245abb4f4dab1a1cd`; InstantRestore `snap-research/InstantRestore@05891bf7d30ab7290c501272de7a1a4a51b21b4f`. RefineFIR, RefFaceInpainting, OSDFace and RestoreFormer++ repositories are registered but remain `NOT_VERIFIED` until a revision/checkpoint/license/runtime qualification is completed.
+Official repository registry: `config/upstream-implementations.json`. Initial pinned source baselines: GPEN `yangxy/GPEN@2c736702983368847fb544d234a22ac7cff25802`; GFPGAN `TencentARC/GFPGAN@7552a7791caad982045a7bbe5634bbf1cd5c8679`; CodeFormer `sczhou/CodeFormer@b33cc7d639d6545bfcccc7e0bc6ae51f24e79c2b`; FBCNN `jiaxi-jiang/FBCNN@54d1831927506b3247e2d4d245abb4f4dab1a1cd`; InstantRestore `snap-research/InstantRestore@05891bf7d30ab7290c501272de7a1a4a51b21b4f`. RefineFIR, RefFaceInpainting, OSDFace and RestoreFormer++ remain `NOT_VERIFIED` until revision/checkpoint/license/runtime qualification.
+
+FBCNN upstream contract at `6ea5d113...`: official repository source only; Apache-2.0 code; `fbcnn_color.pth` official v1.0 asset; exact source revision fixed. CFS `app/fbcnn_upstream_backend.py` dynamically imports the official `models/network_fbcnn.py`, requires `.cfs-upstream.json`, requires an explicit 64-hex checkpoint SHA-256, rejects non-JPEG/recompression routes, runs CPU-only and marks model-modified pixels `GENERATED_MODEL_INFERRED`. CFS does **not** contain a copied `class FBCNN` architecture.
 
 Registry documentation/package-manifest mismatch from V1 remains separate; never invent missing manifests/hashes.
 
@@ -105,9 +108,11 @@ Registry documentation/package-manifest mismatch from V1 remains separate; never
 
 ## 7. CURRENT MODEL EVIDENCE
 
-Linux CPU DEV only: GPEN SFace `0.95397`, PSNR `28.07`, SSIM `0.7474`, `~2.697s`, `~1.828GB`; GFPGAN1.4 SFace `0.91665`, PSNR `30.65`, SSIM `0.8604`, `~2.787s`, `~1.666GB`; FBCNN QF20 SFace `0.9571→0.9691`, PSNR `34.62→36.78`, SSIM `0.9486→0.9634`, `~1.305GB`; CodeFormer real CPU slice PASS, exact metrics artifact-required.
+Linux CPU DEV historical evidence: GPEN SFace `0.95397`, PSNR `28.07`, SSIM `0.7474`, `~2.697s`, `~1.828GB`; GFPGAN1.4 SFace `0.91665`, PSNR `30.65`, SSIM `0.8604`, `~2.787s`, `~1.666GB`; FBCNN QF20 SFace `0.9571→0.9691`, PSNR `34.62→36.78`, SSIM `0.9486→0.9634`, `~1.305GB`; CodeFormer real CPU slice PASS, exact metrics artifact-required.
 
-These CFS measurements are distinct from paper-reported metrics. An upstream repository being official does not make its paper numbers reproduced on the HP EliteBook; target-PC results remain NOT_RUN until measured.
+The historical FBCNN workflow already used official source SHA `54d18319...`, CPU-only PyTorch and the official `fbcnn_color.pth` asset with expected byte size `287755111`, and emitted the checkpoint SHA-256 into evidence. The new upstream-adapter workflow is intended to reproduce this route through the common CFS backend and recover a digest suitable for later registry pinning; until that new run/artifact is inspected its new evidence is NOT_VERIFIED.
+
+These CFS measurements are distinct from paper-reported metrics. An official repository does not make paper numbers reproduced on the HP EliteBook; target-PC results remain NOT_RUN until measured.
 
 ---
 
@@ -143,7 +148,7 @@ HEALTHY preserve MAIN. BLUR NAFNet/measured BFR. JPEG FBCNN. PIXELATION/MOSAIC o
 
 ## 13. DECISION LOG
 
-DEC-001 canonical ledger ACCEPTED. DEC-002 active Paper Quality branch ACCEPTED. DEC-003 <=80% CPU/process/system RAM + one heavy model ACCEPTED. DEC-004 evidence authority order ACCEPTED. DEC-005 mixed DamageMaskNet bank ACCEPTED. DEC-006 RefFace after DamageMaskNet ACCEPTED/BLOCKED. DEC-007 V3 consumed/V4 untouched ACCEPTED. DEC-008 ranking cluster != identity authority ACCEPTED/CLOSED after 3/3. DEC-009 localized-damage same-canvas edge isolation ACCEPTED as architectural separation: broad canvas is not identity authority; face-local/SFace remains the identity gate. **DEC-010 official-upstream-first model integration — ACCEPTED:** if official executable paper/model code exists, reuse and pin that source rather than reimplementing the architecture. Upstream code is not assumed bug-free; CFS changes are limited to compatibility/adapters/safety/resource/package integration and must pass independent tests.
+DEC-001 canonical ledger ACCEPTED. DEC-002 active Paper Quality branch ACCEPTED. DEC-003 <=80% CPU/process/system RAM + one heavy model ACCEPTED. DEC-004 evidence authority order ACCEPTED. DEC-005 mixed DamageMaskNet bank ACCEPTED. DEC-006 RefFace after DamageMaskNet ACCEPTED/BLOCKED. DEC-007 V3 consumed/V4 untouched ACCEPTED. DEC-008 ranking cluster != identity authority ACCEPTED/CLOSED after 3/3. DEC-009 localized-damage same-canvas edge isolation ACCEPTED: broad canvas is not identity authority; face-local/SFace remains the identity gate. **DEC-010 official-upstream-first model integration — ACCEPTED:** if official executable paper/model code exists, reuse and pin that source rather than reimplementing the architecture. Upstream code is not assumed bug-free; CFS changes are limited to compatibility/adapters/safety/resource/package integration and must pass independent tests. **DEC-011 FBCNN first upstream-adapter qualification — ACCEPTED:** preserve the official PyTorch network and official color checkpoint path; CFS only supplies pinned checkout verification, checkpoint digest gate, JPEG routing, resource/provenance boundary and evidence workflow.
 
 ---
 
@@ -153,15 +158,17 @@ DamageMaskNet 1/3 403 infra fail, 2/3 429 infra fail, 3/3 NOT_VERIFIED; no attem
 
 Identity hypothesis attempts 1–3 closed; targeted suite reached 108/108 PASS at `9b8810ce...` and again on Release Quality #132 at `60b79658...`.
 
-**EXP-20260819-012 DEC-009 attempt1:** `9b8810ce... -> 2fcaeb1b...`; strict Lab + local mismatch dilation + minimum stable-edge support. Release Quality #129 targeted `1 failed,107 passed`. Sole failure `test_shared_background_cannot_become_identity_bridge_when_face_region_differs`: broad same-canvas expected TRUE but matcher returned FALSE because attempt1's stable-edge minimum rejected a shared canvas whose only informative edges were inside the deliberately changed face. Separate face-local test expects FALSE and remains the identity safety boundary. Artifact `9364721505`, digest `37a71c20ca44af86d2a4e6f839246f0d34ba9287563f8082e6641f747978eb0c`.
+**EXP-20260819-012 DEC-009 attempt1:** `9b8810ce... -> 2fcaeb1b...`; strict Lab + local mismatch dilation + minimum stable-edge support. Release Quality #129 targeted `1 failed,107 passed`. Sole failure separated broad same-canvas geometry evidence from face-local identity authority. Artifact `9364721505`, digest `37a71c20ca44af86d2a4e6f839246f0d34ba9287563f8082e6641f747978eb0c`.
 
 **EXP-20260819-013 DEC-009 attempt2:** `2fcaeb1b... -> 49af8cb1...`; strict global Lab rule retained, attempt-1 stable-edge survival requirement removed, face-local identity/SFace/provenance unchanged.
 
-**EXP-20260819-014 Female #580 on `49af8cb1...`:** 76 resolved portraits, 380 executed cases, 125 runtime errors, 22 safe abstentions, 233 completed restorations. Target95 report-only `21/179 = 11.7%`. Error root classes: 77 proxy-not-SFace authority, 41 no biometric anchor, 4 no usable SFace comparisons, only 3 true below-threshold SFace failures. `mosaic_single` was `38/38` runtime error and has zero references by benchmark design. Interpretation: the dominant blocker is lack/propagation of real SFace evidence on severe no-reference cases, not a reason to lower `0.363` or re-enable proxy authority.
+**EXP-20260819-014 Female #580 on `49af8cb1...`:** 76 resolved portraits, 380 executed cases, 125 runtime errors, 22 safe abstentions, 233 completed restorations. Target95 report-only `21/179 = 11.7%`. Error root classes: 77 proxy-not-SFace authority, 41 no biometric anchor, 4 no usable SFace comparisons, only 3 true below-threshold SFace failures. `mosaic_single` was `38/38` runtime error and has zero references by benchmark design. Dominant blocker is lack/propagation of real SFace evidence on severe no-reference cases, not a reason to lower `0.363` or re-enable proxy authority.
 
-**EXP-20260819-015 infrastructure repair series:** `49af8cb1... -> c56e7fbf... -> 60b79658... -> 5240eaec...`. `c56e7fbf...` attempted to isolate an IMPORT test with synthetic SFace evidence; `60b79658...` made V4 frozen-blob history verification shallow-clone safe while preserving exact blob pins. Release Quality #132 on `60b79658...` proved V3 verify-only PASS, V4 freeze/blob verification PASS, targeted identity/source/provenance `108/108 PASS`; full pytest `545 passed, 1 failed`, solely the IMPORT/preflight ordering test still crossing the V4 identity wrapper. `5240eaec...` scopes that test directly to IMPORT-before-preflight ordering, with no production identity change. Same-head CI is IN_PROGRESS at this ledger update.
+**EXP-20260819-015 infrastructure repair series:** `49af8cb1... -> c56e7fbf... -> 60b79658... -> 5240eaec...`. Release Quality #132 on `60b79658...`: V3 verify-only PASS, V4 freeze/blob verification PASS, targeted identity/source/provenance `108/108 PASS`; full pytest `545 passed, 1 failed`, solely the IMPORT/preflight ordering test. `5240eaec...` scopes that test directly to IMPORT-before-preflight ordering, with no production identity change. Exact-head CI remains IN_PROGRESS.
 
-**EXP-20260819-016 upstream-first Track B:** `research/paper-quality-local-v2` advanced to `d4f09f2b...`. Added machine-readable official-upstream registry, offline validator, pinned detached-checkout bootstrap, and tests. Pinned initial baselines: GPEN, GFPGAN, CodeFormer, FBCNN, InstantRestore. Unpinned specialist repositories remain NOT_VERIFIED and cannot bootstrap. No Paper model was promoted to production by this change.
+**EXP-20260819-016 upstream-first Track B:** `research/paper-quality-local-v2` advanced through `a7ffced0... -> b8da2286... -> 2978be94... -> d4f09f2b...`. Added machine-readable official-upstream registry, offline validator, pinned detached-checkout bootstrap and tests. Pinned GPEN, GFPGAN, CodeFormer, FBCNN and InstantRestore. Unpinned specialists remain NOT_VERIFIED and cannot bootstrap. No Paper model promoted to production.
+
+**EXP-20260819-017 FBCNN upstream-adapter integration:** `d4f09f2b... -> dfaf7bd1... -> 0ae6d420... -> 6ea5d113...`. Added `app/fbcnn_upstream_backend.py` with exact official source enforcement, explicit checkpoint SHA-256 firewall, CPU-only inference, JPEG-only routing and generated provenance. Added fail-closed tests for wrong repo/revision/hash/route. Then atomically refactored `research/run_fbcnn_vertical_slice.py` and `.github/workflows/research-fbcnn-vertical-slice.yml` so the benchmark uses the pinned CFS bootstrap + thin official backend rather than local model-loading/inference duplication. Workflow also validates registry/tests, checks official checkpoint byte size `287755111`, discovers and records its SHA-256, enforces SFace identity gate and uploads evidence. Runtime result/artifact **NOT_VERIFIED** at this ledger update.
 
 ---
 
@@ -195,17 +202,19 @@ Previous safety architecture established immutable MAIN, direct/non-transitive S
 
 At `60b796581feb7a9c6fecd3a20a95759da4e48aa5`, Release Quality #132: V3 verification-only PASS; V4 freeze + pinned blob/origin verification PASS; targeted identity/source/provenance `108/108 PASS`; full pytest `545 passed, 1 failed`. The sole failure was a legacy test whose stated purpose is immutable IMPORT ordering but which ran the full pipeline into the V4 biometric firewall.
 
-Current exact technical HEAD `5240eaecb8943244f5bf7276a0905489d261318b`: only `tests/test_automatic.py` was changed from the `60b...` state, scoping `test_preflight_cannot_mutate_true_import_snapshot` to `IMPORT -> preflight` ordering. Production code, SFace threshold, V4 manifests and holdout protocol were not changed. Exact-head Windows #1316, Release Quality #133 and Female #583 were all IN_PROGRESS at ledger update.
+Current exact technical HEAD `5240eaecb8943244f5bf7276a0905489d261318b`: only `tests/test_automatic.py` changed from `60b...`, scoping `test_preflight_cannot_mutate_true_import_snapshot` to `IMPORT -> preflight` ordering. Production code, SFace threshold, V4 manifests and holdout protocol were not changed. Exact-head Windows #1316, Release Quality #133 and Female #583 were all IN_PROGRESS at the latest status check.
 
-Next exact action: wait for those already-selected same-head runs. On any failure, inspect that exact run; do not blind-rerun. If Windows + Release + Female all PASS on the same candidate, only then the V4 certification-request protocol may become eligible. If V4 is eventually consumed FAIL, never rerun it; freeze V5 before tuning.
+Next exact action: do not blind-poll or rerun. Inspect those selected same-head runs when completed. If any fails, classify that exact failure. Only if Windows + Release + Female all PASS on the same candidate may V4 request become eligible. If V4 is eventually consumed FAIL, never rerun it; freeze V5 before tuning.
 
 ---
 
 ## 20. TRACK B — PAPER QUALITY
 
-Active `research/paper-quality-local-v2@d4f09f2ba7d6862f2be818c0421073007a26f885`: real CPU BFR/JPEG evidence, 80% governor, DamageMaskNet pipeline, Personalized Reference Bank, reference-first repair, hard-gated selector, deterministic fusion, parser adapter, RefFace workflow, plus official-upstream registry/bootstrap.
+Active `research/paper-quality-local-v2@6ea5d113a1400da97864fcb43c69c53f789605ea`: real CPU BFR/JPEG evidence, 80% governor, DamageMaskNet pipeline, Personalized Reference Bank, reference-first repair, hard-gated selector, deterministic fusion, parser adapter, RefFace workflow, official-upstream registry/bootstrap and first concrete thin upstream backend (FBCNN).
 
-`config/upstream-implementations.json` encodes the upstream-first contract. `scripts/verify_upstream_implementation_registry.py` rejects malformed/unpinned qualification states. `scripts/bootstrap_pinned_upstream.py` checks out the exact official Git revision detached and research-only; it refuses unpinned models and requires explicit research acceptance. `tests/test_upstream_implementation_registry.py` covers policy, exact FBCNN pin, explicit research opt-in and unpinned refusal. These tests are committed but not yet claimed PASS on the target PC.
+`config/upstream-implementations.json` encodes the upstream-first contract. `scripts/verify_upstream_implementation_registry.py` rejects malformed/unpinned qualification states. `scripts/bootstrap_pinned_upstream.py` checks out exact official Git revisions detached/research-only and refuses unpinned models. `tests/test_upstream_implementation_registry.py` covers registry policy. `tests/test_fbcnn_upstream_backend.py` covers FBCNN source/hash/route fail-closed behavior. These new tests are committed but must not be called PASS until Actions evidence exists.
+
+FBCNN integration now uses official code directly. `research/run_fbcnn_vertical_slice.py` no longer owns a duplicate FBCNN network loader/inference implementation; it calls `FBCNNUpstreamBackend`. The associated workflow bootstraps the exact official checkout and official release checkpoint, then measures real CPU identity/quality/resource evidence. Its first upstream-adapter result is pending/NOT_VERIFIED.
 
 PDF constraints remain: separate global identity from local texture; use correspondence between matching regions; region-adaptive identity guidance for severe BFR; MAIN preserves pose/composition/expression/geometry; unsupported detail remains conservative. Paper-reported metrics and CFS-reproduced metrics remain separate.
 
@@ -215,7 +224,7 @@ PDF constraints remain: separate global identity from local texture; use corresp
 
 Recover DamageMaskNet attempt3 without rerun/tuning. PASS -> per-class IoU/F1, ONNX parity, RAM/runtime. Infrastructure fail -> infrastructure-only. True model/data fail -> U-Net hypothesis ends. Then RefFace attempt1/3.
 
-In parallel, upstream qualification may proceed without altering that observability rule: first FBCNN/GPEN/GFPGAN/CodeFormer on exact pinned source, then InstantRestore if CPU/Windows feasibility is credible. RefineFIR/RefFaceInpainting/OSDFace/RestoreFormer++ remain NOT_VERIFIED until exact revision/checkpoint/license/runtime evidence exists.
+In parallel: complete FBCNN upstream-adapter evidence, pin the observed official checkpoint digest only after artifact verification, then broaden FBCNN validation across single JPEG, double-JPEG/non-aligned and social/smartphone recompression. Next upstream heavy candidates remain GPEN/GFPGAN/CodeFormer, then InstantRestore if CPU/Windows feasibility is credible. RefineFIR/RefFaceInpainting/OSDFace/RestoreFormer++ remain NOT_VERIFIED until exact revision/checkpoint/license/runtime evidence exists.
 
 ---
 
@@ -229,7 +238,7 @@ Architecture implementation rule: official executable upstream first; CFS thin a
 
 ## 23. MODEL SELECTION POLICY
 
-Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; identity hard gate first; measure geometry/artifacts/healthy preservation/PSNR/SSIM/LPIPS/runtime/RAM; never select/tune using final holdout. Official paper metrics are context, not acceptance evidence. A model enters CFS only after its exact source/checkpoint, license, adapter behavior, wrong-person/provenance behavior and target-hardware resource use are measured.
+Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; identity hard gate first; measure geometry/artifacts/healthy preservation/PSNR/SSIM/LPIPS/runtime/RAM; never select/tune using final holdout. Official paper metrics are context, not acceptance evidence. A model enters CFS only after exact source/checkpoint, license, adapter behavior, wrong-person/provenance behavior and target-hardware resource use are measured.
 
 ---
 
@@ -247,5 +256,6 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260819-017 technical push `2fcaeb1b... -> 49af8cb1...`; DEC-009 attempt2; face-local identity/SFace/provenance unchanged.
 - HIST-20260819-018 Female #580 exact artifact on `49af8cb1...`: 380 cases, 125 runtime errors, 22 safe abstentions, Target95 `21/179=11.7%`; dominant failure is lack of real SFace evidence, not threshold shopping.
 - HIST-20260819-019 `c56e7fbf...` fixture attempt; `60b79658...` shallow-safe V4 blob history verification. Release #132: targeted 108/108 PASS, V4 freeze PASS, full pytest 545/546 with sole IMPORT-ordering fixture failure.
-- HIST-20260819-020 `5240eaec...` scopes the IMPORT snapshot test to its actual ordering invariant; same-head CI in progress at ledger update.
+- HIST-20260819-020 `5240eaec...` scopes the IMPORT snapshot test to its actual ordering invariant; exact same-head CI remained in progress at the latest check.
 - HIST-20260819-021 Track B upstream-first series `a7ffced0... -> b8da2286... -> 2978be94... -> d4f09f2b...`: official registry, validation, exact detached bootstrap and offline policy tests. No research model promoted to release.
+- HIST-20260819-022 Track B FBCNN series `d4f09f2b... -> dfaf7bd1... -> 0ae6d420... -> 6ea5d113...`: thin pinned official backend, fail-closed tests and atomic benchmark/workflow refactor. Runtime evidence NOT_VERIFIED at ledger update; no research model promoted to release.
