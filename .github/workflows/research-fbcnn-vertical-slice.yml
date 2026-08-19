@@ -6,13 +6,20 @@ on:
       - research/paper-quality-local-v2
     paths:
       - research/run_fbcnn_vertical_slice.py
-      - .github/workflows/research-fbcnn-vertical-slice.yml
+      - app/fbcnn_upstream_backend.py
+      - app/face_restorer_adapter.py
       - app/resource_budget.py
       - app/core_models.py
       - app/model_registry.py
       - app/opencv_zoo_face.py
       - app/face_analysis.py
       - app/pretrained_values.py
+      - config/upstream-implementations.json
+      - scripts/bootstrap_pinned_upstream.py
+      - scripts/verify_upstream_implementation_registry.py
+      - tests/test_fbcnn_upstream_backend.py
+      - tests/test_upstream_implementation_registry.py
+      - .github/workflows/research-fbcnn-vertical-slice.yml
   workflow_dispatch:
 
 permissions:
@@ -55,7 +62,8 @@ jobs:
             'opencv-python>=4.10,<5' \
             'onnxruntime>=1.20,<2' \
             'Pillow>=10,<12' \
-            'psutil>=5.9,<8'
+            'psutil>=5.9,<8' \
+            pytest
           python - <<'PY'
           import cv2, numpy, onnxruntime, torch, torchvision
           print({
@@ -69,15 +77,34 @@ jobs:
           assert not torch.cuda.is_available()
           PY
 
-      - name: Fetch exact official FBCNN source
+      - name: Verify upstream-first registry and FBCNN guards
         run: |
           set -euo pipefail
-          rm -rf .research/FBCNN
-          git clone --filter=blob:none https://github.com/jiaxi-jiang/FBCNN.git .research/FBCNN
-          git -C .research/FBCNN checkout --detach "$FBCNN_SOURCE_SHA"
-          test "$(git -C .research/FBCNN rev-parse HEAD)" = "$FBCNN_SOURCE_SHA"
+          python scripts/verify_upstream_implementation_registry.py
+          python -m pytest -q \
+            tests/test_upstream_implementation_registry.py \
+            tests/test_fbcnn_upstream_backend.py
 
-      - name: Download official FBCNN color checkpoint
+      - name: Bootstrap exact official FBCNN checkout
+        run: |
+          set -euo pipefail
+          rm -rf .research-upstreams/fbcnn
+          python scripts/bootstrap_pinned_upstream.py fbcnn \
+            --destination .research-upstreams \
+            --accept-research-only
+          test "$(git -C .research-upstreams/fbcnn rev-parse HEAD)" = "$FBCNN_SOURCE_SHA"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path('.research-upstreams/fbcnn/.cfs-upstream.json').read_text())
+          assert p['official_repository'] == 'jiaxi-jiang/FBCNN'
+          assert p['pinned_revision'] == '54d1831927506b3247e2d4d245abb4f4dab1a1cd'
+          assert p['actual_revision'] == p['pinned_revision']
+          assert p['architecture_reimplemented_by_cfs'] is False
+          print(json.dumps(p, indent=2, sort_keys=True))
+          PY
+
+      - name: Download official FBCNN color checkpoint and discover digest
         run: |
           set -euo pipefail
           mkdir -p .research/weights
@@ -88,7 +115,10 @@ jobs:
           test -s "$tmp"
           test "$(stat -c%s "$tmp")" -eq 287755111
           mv "$tmp" "$dst"
-          sha256sum "$dst" | tee .research/fbcnn-checkpoint-sha256.txt
+          FBCNN_WEIGHT_SHA256="$(sha256sum "$dst" | awk '{print $1}')"
+          test "${#FBCNN_WEIGHT_SHA256}" -eq 64
+          echo "FBCNN_WEIGHT_SHA256=$FBCNN_WEIGHT_SHA256" >> "$GITHUB_ENV"
+          printf '%s  %s\n' "$FBCNN_WEIGHT_SHA256" "$dst" | tee .research/fbcnn-checkpoint-sha256.txt
 
       - name: Download development source and verify hash
         run: |
@@ -97,33 +127,39 @@ jobs:
           curl --fail --location --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 180 "$DEV_SOURCE_URL" -o .research/input/A_lady_at_front_day.jpg
           test "$(sha256sum .research/input/A_lady_at_front_day.jpg | awk '{print $1}')" = "$DEV_SOURCE_SHA256"
 
-      - name: Execute real FBCNN CPU JPEG specialist slice
+      - name: Execute real pinned-upstream FBCNN CPU JPEG specialist slice
         run: |
           set -euo pipefail
           python research/run_fbcnn_vertical_slice.py \
             --input .research/input/A_lady_at_front_day.jpg \
             --expected-input-sha256 "$DEV_SOURCE_SHA256" \
-            --fbcnn-root .research/FBCNN \
+            --fbcnn-root .research-upstreams/fbcnn \
             --checkpoint .research/weights/fbcnn_color.pth \
+            --expected-checkpoint-sha256 "$FBCNN_WEIGHT_SHA256" \
             --source-sha "$FBCNN_SOURCE_SHA" \
             --jpeg-quality 20 \
             --threads 4 \
-            --output research-results/fbcnn-color-q20-v1
+            --output research-results/fbcnn-color-q20-v2-upstream-adapter
 
       - name: Verify evidence bundle
         run: |
           set -euo pipefail
-          test -s research-results/fbcnn-color-q20-v1/report.json
-          test -s research-results/fbcnn-color-q20-v1/restored_fbcnn_color.png
-          test -s research-results/fbcnn-color-q20-v1/comparison.png
+          test -s research-results/fbcnn-color-q20-v2-upstream-adapter/report.json
+          test -s research-results/fbcnn-color-q20-v2-upstream-adapter/restored_fbcnn_color.png
+          test -s research-results/fbcnn-color-q20-v2-upstream-adapter/comparison.png
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
-          r = json.loads(Path('research-results/fbcnn-color-q20-v1/report.json').read_text())
+          r = json.loads(Path('research-results/fbcnn-color-q20-v2-upstream-adapter/report.json').read_text())
           assert r['source']['final_holdout_used'] is False
           assert r['source']['degradation'] == 'single_jpeg'
           assert r['source']['jpeg_quality'] == 20
           assert r['model']['device'] == 'cpu'
+          assert r['model']['official_source_commit'] == '54d1831927506b3247e2d4d245abb4f4dab1a1cd'
+          assert r['model']['architecture_reimplemented_by_cfs'] is False
+          assert r['model']['checkpoint_sha256_observed'] == os.environ['FBCNN_WEIGHT_SHA256']
+          assert r['model']['provenance_class'] == 'GENERATED_MODEL_INFERRED'
           assert r['resource_budget']['max_total_pc_fraction'] == 0.80
           assert r['resource_budget']['max_parallel_heavy_models'] == 1
           assert r['metrics']['sface_identity_gate_pass'] is True
@@ -135,8 +171,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: fbcnn-color-q20-real-cpu-${{ github.run_number }}
+          name: fbcnn-color-q20-upstream-adapter-${{ github.run_number }}
           if-no-files-found: warn
           path: |
-            research-results/fbcnn-color-q20-v1/**
+            research-results/fbcnn-color-q20-v2-upstream-adapter/**
             .research/fbcnn-checkpoint-sha256.txt
+            .research-upstreams/fbcnn/.cfs-upstream.json

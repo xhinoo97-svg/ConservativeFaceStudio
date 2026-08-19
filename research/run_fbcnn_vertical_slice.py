@@ -4,7 +4,6 @@ import argparse
 import gc
 import json
 import platform
-import sys
 import time
 from pathlib import Path
 
@@ -16,6 +15,8 @@ from run_gfpgan14_vertical_slice_exact import exact_phase3_alignment
 
 from app.core_models import ensure_core_pretrained_models
 from app.face_analysis import cosine_similarity
+from app.face_restorer_adapter import GENERATED_MODEL_INFERRED, RestorationContext
+from app.fbcnn_upstream_backend import FBCNNUpstreamBackend, PINNED_REVISION
 from app.opencv_zoo_face import OpenCVZooFaceEngine
 from app.pretrained_values import FACE_MODEL_DEFAULTS
 from app.resource_budget import (
@@ -39,49 +40,12 @@ def jpeg_degrade(clean_bgr: np.ndarray, quality: int) -> np.ndarray:
     return degraded
 
 
-def load_model(root: Path, checkpoint: Path):
-    import torch
-
-    sys.path.insert(0, str(root))
-    from models.network_fbcnn import FBCNN
-
-    model = FBCNN(
-        in_nc=3,
-        out_nc=3,
-        nc=[64, 128, 256, 512],
-        nb=4,
-        act_mode='R',
-    )
-    payload = torch.load(checkpoint, map_location='cpu')
-    if not isinstance(payload, dict):
-        raise RuntimeError('FBCNN checkpoint is not a state_dict mapping')
-    model.load_state_dict(payload, strict=True)
-    model.eval().to('cpu')
-    for parameter in model.parameters():
-        parameter.requires_grad = False
-    return model
-
-
-def infer(model, image_bgr: np.ndarray) -> tuple[np.ndarray, float]:
-    import torch
-
-    rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-    tensor = torch.from_numpy(np.ascontiguousarray(rgb.transpose(2, 0, 1))).unsqueeze(0)
-    with torch.inference_mode():
-        output, qf_raw = model(tensor)
-    output = output.squeeze(0).detach().cpu().float().clamp(0.0, 1.0)
-    restored_rgb = (output.numpy().transpose(1, 2, 0) * 255.0).round().astype(np.uint8)
-    restored_bgr = cv2.cvtColor(restored_rgb, cv2.COLOR_RGB2BGR)
-    predicted_quality = float((1.0 - qf_raw.detach().cpu().float().reshape(-1)[0].item()) * 100.0)
-    return restored_bgr, predicted_quality
-
-
 def write_comparison(path: Path, clean: np.ndarray, degraded: np.ndarray, restored: np.ndarray, qf: int) -> None:
     panels: list[np.ndarray] = []
     for label, image in (
         ('CLEAN GT', clean),
         (f'JPEG QF={qf}', degraded),
-        ('FBCNN COLOR', restored),
+        ('FBCNN OFFICIAL', restored),
     ):
         panel = image.copy()
         cv2.rectangle(panel, (0, 0), (512, 42), (0, 0, 0), -1)
@@ -97,11 +61,15 @@ def main() -> int:
     parser.add_argument('--expected-input-sha256', required=True)
     parser.add_argument('--fbcnn-root', required=True, type=Path)
     parser.add_argument('--checkpoint', required=True, type=Path)
+    parser.add_argument('--expected-checkpoint-sha256', required=True)
     parser.add_argument('--source-sha', required=True)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--jpeg-quality', type=int, default=20)
     parser.add_argument('--threads', type=int, default=4)
     args = parser.parse_args()
+
+    if args.source_sha != PINNED_REVISION:
+        raise RuntimeError(f'Unexpected FBCNN source SHA: {args.source_sha} != {PINNED_REVISION}')
 
     budget = detect_resource_budget(0.80)
     apply_resource_budget(budget)
@@ -120,6 +88,11 @@ def main() -> int:
     input_sha = common.sha256_path(args.input)
     if input_sha.lower() != args.expected_input_sha256.lower():
         raise RuntimeError(f'Development source SHA mismatch: {input_sha}')
+    checkpoint_sha = common.sha256_path(args.checkpoint)
+    if checkpoint_sha.lower() != args.expected_checkpoint_sha256.lower():
+        raise RuntimeError(
+            f'FBCNN checkpoint SHA mismatch: {checkpoint_sha} != {args.expected_checkpoint_sha256}'
+        )
 
     clean = cv2.imread(str(args.input), cv2.IMREAD_COLOR)
     if clean is None:
@@ -141,29 +114,44 @@ def main() -> int:
     assert_memory_within_budget(
         budget,
         stage='fbcnn_preload',
-        reserve_bytes=int(args.checkpoint.stat().st_size) * 4,
+        reserve_bytes=1_500_000_000,
     )
     resource_before_load = resource_snapshot(budget)
 
+    backend = FBCNNUpstreamBackend(
+        args.fbcnn_root,
+        args.checkpoint,
+        expected_checkpoint_sha256=args.expected_checkpoint_sha256,
+    )
     baseline = common._rss_mb()
     load_start = time.perf_counter()
     with common.PeakRSSSampler() as load_sampler:
-        model = load_model(args.fbcnn_root, args.checkpoint)
+        backend.load()
     load_seconds = time.perf_counter() - load_start
     assert_memory_within_budget(budget, stage='fbcnn_postload')
     resource_after_load = resource_snapshot(budget)
 
-    _warm, _ = infer(model, degraded_aligned)
+    context = RestorationContext(
+        damage_class='single_jpeg',
+        severity='heavy',
+        metadata={'jpeg_detected': True},
+    )
+    _warm = backend.restore(degraded_aligned, context)
     assert_memory_within_budget(budget, stage='fbcnn_post_warmup')
     infer_start = time.perf_counter()
     with common.PeakRSSSampler() as infer_sampler:
-        restored, predicted_quality = infer(model, degraded_aligned)
+        candidate = backend.restore(degraded_aligned, context)
     infer_seconds = time.perf_counter() - infer_start
     assert_memory_within_budget(budget, stage='fbcnn_post_inference')
     resource_after_inference = resource_snapshot(budget)
 
+    restored = candidate.image
     if restored.shape != degraded_aligned.shape or restored.dtype != np.uint8:
         raise RuntimeError(f'Invalid FBCNN output: {restored.shape} {restored.dtype}')
+    if candidate.provenance_class != GENERATED_MODEL_INFERRED:
+        raise RuntimeError(f'Invalid FBCNN provenance: {candidate.provenance_class}')
+    if candidate.model_version != PINNED_REVISION:
+        raise RuntimeError(f'FBCNN candidate revision drift: {candidate.model_version}')
 
     restored_path = args.output / 'restored_fbcnn_color.png'
     cv2.imwrite(str(restored_path), restored)
@@ -178,15 +166,16 @@ def main() -> int:
     identity_restored = float(cosine_similarity(clean_obs.embedding, restored_obs.embedding))
     identity_pass = identity_restored >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
 
+    predicted_quality = float(candidate.quality_metrics['predicted_jpeg_quality_factor'])
     report = {
-        'experiment': 'fbcnn_color_jpeg_specialist_vertical_slice_v1',
+        'experiment': 'fbcnn_color_jpeg_specialist_vertical_slice_v2_upstream_adapter',
         'qualification_scope': 'development_host_cpu_only',
         'production_qualified': False,
         'production_blockers': [
             'Windows installer execution not tested',
             'HP EliteBook 1030 G3 not measured',
             'single development JPEG case insufficient for production qualification',
-            'official GitHub asset provides no expected SHA-256 digest; observed digest only',
+            'checkpoint SHA-256 is run-observed discovery until promoted into the CFS registry',
         ],
         'source': {
             'dataset': 'cfs-face-smartphone-v1 development/calibration source bank',
@@ -196,19 +185,23 @@ def main() -> int:
             'jpeg_quality': int(args.jpeg_quality),
         },
         'model': {
-            'key': 'fbcnn_color',
+            'key': candidate.model_key,
+            'backend': candidate.backend,
             'official_repository': 'https://github.com/jiaxi-jiang/FBCNN',
             'official_source_commit': args.source_sha,
+            'architecture_reimplemented_by_cfs': False,
             'checkpoint_source': 'https://github.com/jiaxi-jiang/FBCNN/releases/download/v1.0/fbcnn_color.pth',
             'checkpoint_bytes': int(args.checkpoint.stat().st_size),
-            'checkpoint_sha256_observed': common.sha256_path(args.checkpoint),
-            'checkpoint_sha256_expected_upstream': None,
+            'checkpoint_sha256_observed': checkpoint_sha,
+            'checkpoint_sha256_runtime_expected': args.expected_checkpoint_sha256.lower(),
             'license': 'Apache-2.0',
             'device': 'cpu',
             'torch_version': torch.__version__,
             'requested_threads': int(args.threads),
             'effective_threads': int(effective_threads),
-            'predicted_input_quality_factor': float(predicted_quality),
+            'predicted_input_quality_factor': predicted_quality,
+            'provenance_class': candidate.provenance_class,
+            'generated_pixels': int(np.count_nonzero(candidate.generated_mask)),
         },
         'resource_budget': {
             'max_total_pc_fraction': 0.80,
@@ -246,7 +239,7 @@ def main() -> int:
             'restored': restored_path.name,
             'restored_sha256': common.sha256_path(restored_path),
             'comparison': 'comparison.png',
-            'comparison_restored_label': 'FBCNN COLOR',
+            'comparison_restored_label': 'FBCNN OFFICIAL',
         },
         'host': {
             'platform': platform.platform(),
@@ -255,7 +248,8 @@ def main() -> int:
         },
     }
 
-    del model
+    backend.unload()
+    del backend
     gc.collect()
     assert_memory_within_budget(budget, stage='fbcnn_post_unload')
     report['rss_mb']['post_unload_gc'] = common._rss_mb()
