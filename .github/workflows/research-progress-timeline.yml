@@ -28,5 +28,8 @@ jobs:
         run: python -m py_compile app/progress_timeline.py app/worker.py app/main_window.py
       - name: Test timing privacy ETA and UI wiring
         run: |
-          python -m pip install 'pytest>=8,<9'
+          python -m pip install \
+            'pytest>=8,<9' \
+            'numpy>=1.26,<3' \
+            'opencv-python>=4.10,<5'
           python -m pytest -q tests/test_progress_timeline.py
