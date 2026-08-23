@@ -5,21 +5,21 @@
 ## OWNER DASHBOARD
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
-- CURRENT ACTIVE BRANCH: `hotfix/real-world-restoration-v1.1` for Track A; `research/paper-quality-local-v2` for isolated Track B research.
-- CURRENT TECHNICAL HEAD: Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; Track B `1591fa3cebaa44a3ef80a6a2178ed85fd1ae2d66`.
-- CURRENT PHASE: Track A V4 one-shot consumed FAIL before the first case; candidate `b6ce7ebd...` is NO-GO and may not be rerun. Track B benchmark/research infrastructure.
-- CURRENT MAIN OBJECTIVE: preserve the consumed V4 record and design an independent V5 certification lineage without weakening identity, provenance or holdout safety.
-- WHAT WAS JUST COMPLETED: V4 Final Certification #1 consumed the one-shot authority for candidate `b6ce7ebd...`. Pre-consumption gates passed, including calibration 60/60; after the persistent STARTED marker, the runner failed before case 1 with `TypeError: build_freeze() missing 1 required positional argument: 'contract_payload'`. Final marker state is `CONSUMED_FAIL`.
-- WHAT IS BEING WORKED ON: Track A failure evidence is frozen and reconciled; no retry, rerun or candidate repair is allowed from V4. Track B research continues independently.
-- WHAT IS BLOCKING PROGRESS: V4 is irrevocably consumed with 0/40 cases completed, so `b6ce7ebd...` cannot be certified. Any future certification requires a new independently frozen, identity-disjoint V5 candidate/holdout lineage. Track B DamageMaskNet attempt 3 remains evidence-unrecoverable from the available Actions index.
-- WHAT MODEL IS CURRENTLY BEING TESTED: Track A uses the certified local YuNet/SFace/NAFNet/parser/pose/LaMa pack; Track B's newest measured candidate integration is the official pinned FBCNN adapter, still `NOT_VERIFIED` for its new workflow.
+- CURRENT ACTIVE BRANCH: `hotfix/real-world-restoration-v1.1` preserves consumed Track A evidence; `protocol/v5-certification-hardening` contains DEV-only runner hardening; `research/paper-quality-local-v2` is the active isolated Track B research branch.
+- CURRENT TECHNICAL HEAD: Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; protocol hardening `268188c5a2540455ff804383cb583b16546b62f1`; Track B `7dfeb0a855f3f7c0840693bb2c03c25bc498d4eb`.
+- CURRENT PHASE: V4 remains permanently consumed FAIL/NO-GO. The generic future one-shot runner is hardened on synthetic DEV fixtures; Track B is qualifying the official FBCNN compression specialist and replacing an inadequate DamageMaskNet hypothesis.
+- CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
+- WHAT WAS JUST COMPLETED: protocol DEV hardening passed 558/558 tests and remote run `32673504579`. DamageMaskNet attempt 3 evidence was recovered and classified MODEL/DATA QUALITY FAIL. FBCNN completed a six-profile public DEV compression matrix with 6/6 restoration PASS, zero wrong-person pixels and zero provenance violations in run `32674085939`.
+- WHAT IS BEING WORKED ON: repair the remaining Track B timeline workflow dependency, then benchmark a replacement lightweight damage-localization architecture. RefFace remains NOT_RUN until an adequate mask exists.
+- WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
+- WHAT MODEL IS CURRENTLY BEING TESTED: official FBCNN at pinned upstream `54d18319...`, checkpoint SHA-256 `8b0e4ef2...`; its public single-identity DEV matrix passes, but it is not production qualified.
 - WHY THAT MODEL: SFace is the frozen identity authority; FBCNN is the current DEV JPEG specialist leader and is isolated from V1.1.
 - CURRENT BEST MODEL PER DAMAGE TYPE: mild blur/denoise NAFNet; JPEG FBCNN in DEV only; severe blind face GPEN in DEV identity evidence; opaque/reference-supported loss observed same-person component transfer; unqualified classes preserve MAIN/rollback/abstain.
-- CURRENT QUALITY RESULT: V4 final quality was not measured because 0/40 cases ran. Female #584 remains recoverable mean `81.3055`, Target95 report-only `21/304 = 6.91%`; quality target not achieved.
+- CURRENT QUALITY RESULT: FBCNN public DEV compression matrix 6/6 PASS across JPEG QF10/20/40, double-JPEG, social resize/recompression and mosquito-edge stress. This is one identity and is not Target95 evidence. V4 final quality remains NOT_MEASURED; Female #584 Target95 report-only remains `21/304 = 6.91%`.
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: preserve `CONSUMED_FAIL`; do not rerun V4 or modify/delete its marker. Define a new V5 protocol with an independently frozen identity-disjoint holdout and repair the generic runner interface before freezing any new candidate.
+- NEXT EXACT STEP: add the demonstrated `onnxruntime` dependency to the Track B progress-timeline workflow, push and verify it; then benchmark the next lightweight damage-localization architecture on the unchanged DEVELOPMENT contract. Do not create or execute V5.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -32,12 +32,14 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Certified base: `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`
 - Last Track A branch: `hotfix/real-world-restoration-v1.1`
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
-- Active Paper Quality HEAD: `research/paper-quality-local-v2@1591fa3cebaa44a3ef80a6a2178ed85fd1ae2d66`
+- Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
+- Active Paper Quality HEAD: `research/paper-quality-local-v2@7dfeb0a855f3f7c0840693bb2c03c25bc498d4eb`
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
-- Current Track B FBCNN state: official source pinned; thin upstream adapter and fail-closed tests committed; real CPU upstream-adapter workflow wired. New adapter/workflow evidence is **NOT_VERIFIED** until the corresponding Actions run completes and its artifact is inspected.
-- Current Track B blocker retained: recover already-triggered DamageMaskNet attempt-3 evidence without rerun for observability. Upstream qualification proceeds independently and does not alter V1.1.
+- Current protocol state: generic `build_freeze` supports both legacy one-argument and generic cases+contract providers by signature binding before execution; synthetic one-shot success and failure-before/after-marker ordering is verified. No V5 exists and no final holdout was accessed.
+- Current Track B FBCNN state: **DEVELOPMENT MATRIX PASS, NOT PRODUCTION QUALIFIED**. Run `32674085939`, artifact `9502200502`, SHA-256 `365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842`; 6/6 profiles PASS.
+- Current Track B DamageMaskNet state: attempt 3 evidence recovered from run `32087249287`, artifact `9307331508`, SHA-256 `e3b7aa05...`. Infrastructure/export/parity PASS; macro-F1 `0.173198` and macro-IoU `0.113028`, with six damage classes at F1 zero. Small U-Net hypothesis stopped as MODEL/DATA QUALITY FAIL.
 
 FORENSIC_MODE_READY: **TRUE for certified PRODUCT_V1 only**
 PAPER_QUALITY_MODE_READY: **FALSE**
@@ -70,8 +72,9 @@ Paper Quality does not reimplement a published architecture when an official exe
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
+| `protocol/v5-certification-hardening` | future protocol DEV hardening only | `268188c5...` | TEST_PASS / no V5 | run `32673504579` SUCCESS; 558/558; artifact `9502021996` | transfer by traceable commit to a future candidate only after quality prerequisites |
 | `research/face-restoration-v2` | early data/degradation research | `757a3f60...` | SUPERSEDED AS ACTIVE ARCHITECTURE | not merged | preserve useful assets |
-| `research/paper-quality-local-v2` | advanced Track B | `1591fa3c...` | ACTIVE / BENCHMARKING | FBCNN upstream adapter plus six commits of per-block progress/timeline/ETA telemetry; no workflow run indexed on the latest HEAD | recover existing DamageMaskNet attempt-3 evidence; keep FBCNN evidence NOT_VERIFIED |
+| `research/paper-quality-local-v2` | advanced Track B | `7dfeb0a8...` | ACTIVE / BENCHMARKING | FBCNN run `32674085939` SUCCESS; DamageMask runtime `32674085927` SUCCESS; timeline `32674085920` FAIL on missing runtime dependency | fix timeline dependency, then replace failed mask architecture |
 | `meta/project-state` | canonical ledger | self-SHA omitted | ACTIVE META | docs only | update after every meaningful technical push |
 
 ---
@@ -102,15 +105,16 @@ V3 is verification-only. V4 is consumed and closed. Its marker must not be modif
 OBJ-001 Preserve V1 — PASS.  
 OBJ-002 Restore V1.1 gates — VALIDATING on exact HEAD `5240eaec...`.  
 OBJ-003 Canonical ledger — IN_PROGRESS.  
-OBJ-004 DamageMaskNet — BLOCKED on existing attempt3 evidence.  
+OBJ-004 DamageMaskNet — MODEL/DATA QUALITY FAIL; small U-Net hypothesis STOPPED.
 OBJ-005 Broad BFR selection — IN_PROGRESS, upstream-first.  
-OBJ-006 FBCNN JPEG qualification — IN_PROGRESS; official source + thin adapter committed, new runtime evidence NOT_VERIFIED.  
+OBJ-006 FBCNN JPEG qualification — DEVELOPMENT MATRIX PASS 6/6; multi-identity/Windows/offline qualification IN_PROGRESS.
 OBJ-007 Personalized Reference Bank validation — IN_PROGRESS.  
 OBJ-008 RefFace CPU — BLOCKED by OBJ-004, 0/3 attempts.  
 OBJ-009 Paper Quality Windows pack — PROPOSED.  
 OBJ-010 HP EliteBook acceptance — PROPOSED.  
 OBJ-011 Official upstream implementation registry — IMPLEMENTED; runtime qualification remains per-model.  
 OBJ-012 Official upstream adapters — IN_PROGRESS; FBCNN is first concrete implementation.
+OBJ-013 Future one-shot protocol hardening — DEV TEST_PASS; V5 NOT_CREATED/NOT_AUTHORIZED.
 
 ---
 
@@ -118,7 +122,7 @@ OBJ-012 Official upstream adapters — IN_PROGRESS; FBCNN is first concrete impl
 
 Certified roles: YuNet, SFace `0.363`, NAFNet, Face Parsing ResNet18 ONNX, Head Pose MobileNetV2 ONNX, constrained LaMa ONNX.
 
-Research: GPEN BENCHMARKING/license blocker; GFPGAN1.4 BENCHMARKING; CodeFormer BENCHMARKING/BLOCKED_LICENSE; FBCNN BENCHMARKING/current DEV JPEG leader; DamageMaskNet BENCHMARKING/BLOCKED; RefFace FEASIBILITY_ONLY/NOT_RUN; InstantRestore/OSDFace hardware-blocked feasibility; RestoreFormer++/VQFR/GPEN-inpainting/RefineFIR/PerFuSe/RefIPFR/Real-ESRGAN feasibility until measured.
+Research: GPEN BENCHMARKING/license blocker; GFPGAN1.4 BENCHMARKING; CodeFormer BENCHMARKING/BLOCKED_LICENSE; FBCNN DEVELOPMENT_MATRIX_PASS/current compression leader; DamageMaskNet small U-Net STOPPED_MODEL_DATA_FAIL; RefFace FEASIBILITY_ONLY/NOT_RUN; InstantRestore/OSDFace hardware-blocked feasibility; RestoreFormer++/VQFR/GPEN-inpainting/RefineFIR/PerFuSe/RefIPFR/Real-ESRGAN feasibility until measured.
 
 Official repository registry: `config/upstream-implementations.json`. Initial pinned source baselines: GPEN `yangxy/GPEN@2c736702983368847fb544d234a22ac7cff25802`; GFPGAN `TencentARC/GFPGAN@7552a7791caad982045a7bbe5634bbf1cd5c8679`; CodeFormer `sczhou/CodeFormer@b33cc7d639d6545bfcccc7e0bc6ae51f24e79c2b`; FBCNN `jiaxi-jiang/FBCNN@54d1831927506b3247e2d4d245abb4f4dab1a1cd`; InstantRestore `snap-research/InstantRestore@05891bf7d30ab7290c501272de7a1a4a51b21b4f`. RefineFIR, RefFaceInpainting, OSDFace and RestoreFormer++ remain `NOT_VERIFIED` until revision/checkpoint/license/runtime qualification.
 
@@ -132,7 +136,9 @@ Registry documentation/package-manifest mismatch from V1 remains separate; never
 
 Linux CPU DEV historical evidence: GPEN SFace `0.95397`, PSNR `28.07`, SSIM `0.7474`, `~2.697s`, `~1.828GB`; GFPGAN1.4 SFace `0.91665`, PSNR `30.65`, SSIM `0.8604`, `~2.787s`, `~1.666GB`; FBCNN QF20 SFace `0.9571→0.9691`, PSNR `34.62→36.78`, SSIM `0.9486→0.9634`, `~1.305GB`; CodeFormer real CPU slice PASS, exact metrics artifact-required.
 
-The historical FBCNN workflow already used official source SHA `54d18319...`, CPU-only PyTorch and the official `fbcnn_color.pth` asset with expected byte size `287755111`, and emitted the checkpoint SHA-256 into evidence. The new upstream-adapter workflow is intended to reproduce this route through the common CFS backend and recover a digest suitable for later registry pinning; until that new run/artifact is inspected its new evidence is NOT_VERIFIED.
+FBCNN evidence is now recovered and extended. The official source is `jiaxi-jiang/FBCNN@54d1831927506b3247e2d4d245abb4f4dab1a1cd`, Apache-2.0; official checkpoint `fbcnn_color.pth` is `287755111` bytes with SHA-256 `8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8`. Run `32674085939` executed six public DEV profiles: all 6 PASS; errors 0; rollbacks 0; abstentions 0; wrong-person pixels 0; provenance violations 0. Artifact `9502200502`, archive SHA-256 `365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842`. This does not qualify production because only one public identity was used and Windows/offline/EliteBook were not tested.
+
+DamageMaskNet attempt 3 produced real checkpoint SHA-256 `e3b05272782aded20f209ddd39a3ac847cf4f3a90e5e3f02b63cae90474e2b7d` and ONNX SHA-256 `64e032d8693edc55d69a0a77d8665034d4edbeff43a93b6a622c4639a0d018c7`; ONNX argmax parity was exact and first CPU inference `0.01282s`. Mask quality failed: macro-F1 `0.173198`, macro-IoU `0.113028`; BLUR, MOTION_BLUR, PIXELATION, BLOCK_MOSAIC, JPEG_ARTIFACT and STICKER all had F1 zero.
 
 These CFS measurements are distinct from paper-reported metrics. An official repository does not make paper numbers reproduced on the HP EliteBook; target-PC results remain NOT_RUN until measured.
 
@@ -170,13 +176,13 @@ HEALTHY preserve MAIN. BLUR NAFNet/measured BFR. JPEG FBCNN. PIXELATION/MOSAIC o
 
 ## 13. DECISION LOG
 
-DEC-001 canonical ledger ACCEPTED. DEC-002 active Paper Quality branch ACCEPTED. DEC-003 <=80% CPU/process/system RAM + one heavy model ACCEPTED. DEC-004 evidence authority order ACCEPTED. DEC-005 mixed DamageMaskNet bank ACCEPTED. DEC-006 RefFace after DamageMaskNet ACCEPTED/BLOCKED. DEC-007 V3 consumed/V4 untouched ACCEPTED. DEC-008 ranking cluster != identity authority ACCEPTED/CLOSED after 3/3. DEC-009 localized-damage same-canvas edge isolation ACCEPTED: broad canvas is not identity authority; face-local/SFace remains the identity gate. **DEC-010 official-upstream-first model integration — ACCEPTED:** if official executable paper/model code exists, reuse and pin that source rather than reimplementing the architecture. Upstream code is not assumed bug-free; CFS changes are limited to compatibility/adapters/safety/resource/package integration and must pass independent tests. **DEC-011 FBCNN first upstream-adapter qualification — ACCEPTED:** preserve the official PyTorch network and official color checkpoint path; CFS only supplies pinned checkout verification, checkpoint digest gate, JPEG routing, resource/provenance boundary and evidence workflow.
+DEC-001 canonical ledger ACCEPTED. DEC-002 active Paper Quality branch ACCEPTED. DEC-003 <=80% CPU/process/system RAM + one heavy model ACCEPTED. DEC-004 evidence authority order ACCEPTED. DEC-005 mixed DamageMaskNet bank ACCEPTED. DEC-006 RefFace after adequate DamageMaskNet/replacement mask ACCEPTED/BLOCKED. DEC-007 V3/V4 consumed and immutable ACCEPTED. DEC-008 ranking cluster != identity authority ACCEPTED/CLOSED after 3/3. DEC-009 localized-damage same-canvas edge isolation ACCEPTED. **DEC-010 official-upstream-first model integration — ACCEPTED. DEC-011 FBCNN thin upstream adapter — ACCEPTED; DEVELOPMENT matrix PASS, production qualification pending. DEC-012 future one-shot lifecycle — ACCEPTED on synthetic DEV only:** preflight completes before consumption, marker is immediately before first case access, and failures after marker are terminal. **DEC-013 DamageMaskNet small U-Net — STOPPED:** recovered attempt 3 is a model/data quality failure; no tuning or rerun of this hypothesis.
 
 ---
 
 ## 14. EXPERIMENT LOG
 
-DamageMaskNet 1/3 403 infra fail, 2/3 429 infra fail, 3/3 NOT_VERIFIED; no attempt4 for observability. RefFace PREPARED/NOT_RUN.
+DamageMaskNet 1/3 403 infra fail, 2/3 429 infra fail, 3/3 MODEL/DATA QUALITY FAIL; small U-Net hypothesis stopped. Historical later path-triggered runs already existed before this audit and were not launched or used for tuning. RefFace PREPARED/NOT_RUN because mask quality is inadequate.
 
 Identity hypothesis attempts 1–3 closed; targeted suite reached 108/108 PASS at `9b8810ce...` and again on Release Quality #132 at `60b79658...`.
 
@@ -199,6 +205,12 @@ Identity hypothesis attempts 1–3 closed; targeted suite reached 108/108 PASS a
 **EXP-20260819-016 upstream-first Track B:** `research/paper-quality-local-v2` advanced through `a7ffced0... -> b8da2286... -> 2978be94... -> d4f09f2b...`. Added machine-readable official-upstream registry, offline validator, pinned detached-checkout bootstrap and tests. Pinned GPEN, GFPGAN, CodeFormer, FBCNN and InstantRestore. Unpinned specialists remain NOT_VERIFIED and cannot bootstrap. No Paper model promoted to production.
 
 **EXP-20260819-017 FBCNN upstream-adapter integration:** `d4f09f2b... -> dfaf7bd1... -> 0ae6d420... -> 6ea5d113...`. Added `app/fbcnn_upstream_backend.py` with exact official source enforcement, explicit checkpoint SHA-256 firewall, CPU-only inference, JPEG-only routing and generated provenance. Added fail-closed tests for wrong repo/revision/hash/route. Then atomically refactored `research/run_fbcnn_vertical_slice.py` and `.github/workflows/research-fbcnn-vertical-slice.yml` so the benchmark uses the pinned CFS bootstrap + thin official backend rather than local model-loading/inference duplication. Workflow also validates registry/tests, checks official checkpoint byte size `287755111`, discovers and records its SHA-256, enforces SFace identity gate and uploads evidence. Runtime result/artifact **NOT_VERIFIED** at this ledger update.
+
+**EXP-20260823-022 protocol hardening DEV:** branch `protocol/v5-certification-hardening@268188c5...`, direct child of Track A `77687b3b...`; generic freeze signature adapter, callback-driven one-shot lifecycle, synthetic DEV runner, failure injection and exact entrypoint tests. Local and remote full suite `558/558`; run `32673504579` SUCCESS; artifact `9502021996`, SHA-256 `e1265e92164a83b5d5a066d4fdd6635df3d023af4ebf4d9895a618ece78c6930`. No V5 or holdout created/executed.
+
+**EXP-20260823-023 DamageMask attempt 3 recovery:** run `32087249287` and artifact `9307331508` were recovered without rerun. Archive SHA-256 `e3b7aa05...`; checkpoint/ONNX hashes above; export, loader, CPU inference and parity PASS. Per-class mask quality failed materially, so the hypothesis is STOPPED and RefFace remains gated.
+
+**EXP-20260823-024 FBCNN compression DEV matrix:** Track B `7dfeb0a8...`, run `32674085939` SUCCESS. Six profiles completed and all passed identity, PSNR, SSIM, provenance and wrong-person guardrails. QF10 block-heavy PSNR `30.8117->33.6059`, SFace `0.8504->0.8954`; QF20 `34.6184->36.7801`, `0.9571->0.9691`; QF40 `38.6756->39.7644`, `0.9837->0.9877`; double-JPEG `32.6772->35.1038`, `0.9074->0.9371`; social recompression `33.5442->35.1728`, `0.9513->0.9561`; mosquito stress `31.8589->34.1065`, `0.8900->0.9139`. Single-identity DEV only; production NOT_QUALIFIED.
 
 ---
 
@@ -240,11 +252,11 @@ Next exact action: preserve V4 `CONSUMED_FAIL` and its artifacts; never rerun or
 
 ## 20. TRACK B — PAPER QUALITY
 
-Active `research/paper-quality-local-v2@1591fa3cebaa44a3ef80a6a2178ed85fd1ae2d66`: real CPU BFR/JPEG evidence, 80% governor, DamageMaskNet pipeline, Personalized Reference Bank, reference-first repair, hard-gated selector, deterministic fusion, parser adapter, RefFace workflow, official-upstream registry/bootstrap, first concrete thin upstream backend (FBCNN), and per-block progress/model timeline/ETA telemetry.
+Active `research/paper-quality-local-v2@7dfeb0a855f3f7c0840693bb2c03c25bc498d4eb`: real CPU BFR/JPEG evidence, 80% governor, Personalized Reference Bank, reference-first repair, hard-gated selector, deterministic fusion, parser adapter, gated RefFace workflow, official-upstream registry/bootstrap, FBCNN DEV matrix and per-block progress/model timeline/ETA telemetry.
 
-`config/upstream-implementations.json` encodes the upstream-first contract. `scripts/verify_upstream_implementation_registry.py` rejects malformed/unpinned qualification states. `scripts/bootstrap_pinned_upstream.py` checks out exact official Git revisions detached/research-only and refuses unpinned models. `tests/test_upstream_implementation_registry.py` covers registry policy. `tests/test_fbcnn_upstream_backend.py` covers FBCNN source/hash/route fail-closed behavior. These new tests are committed but must not be called PASS until Actions evidence exists.
+`config/upstream-implementations.json` encodes the upstream-first contract. Registry/bootstrap and FBCNN source/hash/route/matrix tests pass locally and in run `32674085939`. Local full Track B pytest is `557/557 PASS`; test isolation no longer leaves a fake `app.reference_inpainting` module in the shared process.
 
-FBCNN integration now uses official code directly. `research/run_fbcnn_vertical_slice.py` no longer owns a duplicate FBCNN network loader/inference implementation; it calls `FBCNNUpstreamBackend`. The associated workflow bootstraps the exact official checkout and official release checkpoint, then measures real CPU identity/quality/resource evidence. Its first upstream-adapter result is pending/NOT_VERIFIED.
+FBCNN integration uses official code directly and has public DEV evidence for five compression families. DamageMask runtime workflow `32674085927` is SUCCESS after adding its declared ONNX Runtime dependency. Progress timeline workflow `32674085920` remains infrastructure FAIL because its narrow environment also omitted ONNX Runtime; no production or model quality failure is implicated.
 
 PDF constraints remain: separate global identity from local texture; use correspondence between matching regions; region-adaptive identity guidance for severe BFR; MAIN preserves pose/composition/expression/geometry; unsupported detail remains conservative. Paper-reported metrics and CFS-reproduced metrics remain separate.
 
@@ -252,9 +264,9 @@ PDF constraints remain: separate global identity from local texture; use corresp
 
 ## 21. CURRENT PAPER QUALITY BLOCKER
 
-Recover DamageMaskNet attempt3 without rerun/tuning. PASS -> per-class IoU/F1, ONNX parity, RAM/runtime. Infrastructure fail -> infrastructure-only. True model/data fail -> U-Net hypothesis ends. Then RefFace attempt1/3.
+Fix the demonstrated progress-timeline workflow dependency, then benchmark the next lightweight damage-localization architecture against the unchanged DEVELOPMENT taxonomy/data contract. The small U-Net is stopped; do not tune it. RefFace remains NOT_RUN until the replacement mask passes.
 
-In parallel: complete FBCNN upstream-adapter evidence, pin the observed official checkpoint digest only after artifact verification, then broaden FBCNN validation across single JPEG, double-JPEG/non-aligned and social/smartphone recompression. Next upstream heavy candidates remain GPEN/GFPGAN/CodeFormer, then InstantRestore if CPU/Windows feasibility is credible. RefineFIR/RefFaceInpainting/OSDFace/RestoreFormer++ remain NOT_VERIFIED until exact revision/checkpoint/license/runtime evidence exists.
+In parallel: broaden the now-passing FBCNN DEV matrix to multiple identity-disjoint DEVELOPMENT/VALIDATION identities, then Windows/offline/EliteBook. Next upstream heavy candidates remain GPEN/GFPGAN/CodeFormer, then InstantRestore if CPU/Windows feasibility is credible. RefineFIR/RefFaceInpainting/OSDFace/RestoreFormer++ remain NOT_VERIFIED until exact revision/checkpoint/license/runtime evidence exists.
 
 ---
 
@@ -294,6 +306,8 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260823-025 Track A `5240eaec... -> b6ce7ebd...`: structured immutable-MAIN identity rollback; exact tree `51369b53...`; local targeted `33/33 PASS`, full pytest `547/547 PASS`; exact-head CI started; V3/V4 not executed by this push.
 - HIST-20260823-026 Track A exact-head qualification complete on `b6ce7ebd...`: Windows #1317 SUCCESS, Release #134 SUCCESS, Female #584 SUCCESS; female `380/380` cases and zero runtime errors; Release calibration `60/60`, exact V4 candidate freeze created; final V4 holdout NOT_RUN/UNCONSUMED.
 - HIST-20260823-027 V4 one-shot consumed FAIL: request `d847798e...`, run `32656139686`, STARTED `d03d97c6...`, final marker `77687b3b...`; pre-gates/calibration PASS, then runner interface TypeError before case 1; 0/40, no rerun, candidate NO-GO; artifact `9497756063`, SHA-256 `62ad4233...`.
+- HIST-20260823-028 protocol hardening branch `268188c5...`: synthetic one-shot lifecycle and generic freeze adapter remote PASS; V5 not created.
+- HIST-20260823-029 Track B `1591fa3c... -> 7dfeb0a8...`: DamageMask attempt 3 recovered/failed quality; FBCNN six-profile DEV matrix PASS; runtime CI repaired; timeline CI still missing ONNX Runtime.
 
 ---
 
@@ -353,6 +367,36 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - INSTALLER EVIDENCE RETAINED: Windows artifact `ConservativeFaceStudio-Setup-Windows-x64`, ID `9496542126`, archive SHA-256 `f61b577553d33ffea63fae2bdd072c5953eb789399e89b4bf0dd38e929043212`, internal EXE SHA-256 `52784ae70f215e34fb81f8b56bd885bfb1ba34a7573e795d6d6b5be3bc3e2999`; clean Windows and user PC NOT_RUN.
 - CLASSIFICATION: candidate `b6ce7ebd...` NO-GO; V4 closed/consumed; OPERATIONAL_RELEASE_READY FALSE; QUALITY_COMPLETE FALSE.
 - NEXT EXACT ACTION: preserve all V4 evidence and marker; do not merge PR #2 as certified; do not rerun V4. Create a new independent V5 holdout/candidate lineage only after the generic runner interface is repaired and tested before freeze.
+
+### PUSH-20260823-004
+
+- DATE/TIME UTC: `2026-08-23`.
+- TECHNICAL BRANCH: `protocol/v5-certification-hardening`.
+- BASE/PREVIOUS HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`.
+- NEW REMOTE HEAD: `268188c5a2540455ff804383cb583b16546b62f1`.
+- COMMITS INCLUDED: `Harden generic one-shot certification runner`.
+- FILES MODIFIED/ADDED: generic frozen-benchmark adapter; generic one-shot lifecycle; synthetic DEV runner; production baseline entrypoint integration; unit/E2E tests; DEV-only workflow.
+- TESTS: targeted `11/11 PASS`; full pytest local and remote `558/558 PASS`; compile and diff checks PASS.
+- WORKFLOW: `Protocol V5 hardening DEV`, run `32673504579`, SUCCESS; every job step passed.
+- ARTIFACT: `protocol-v5-hardening-32673504579`, ID `9502021996`, archive SHA-256 `e1265e92164a83b5d5a066d4fdd6635df3d023af4ebf4d9895a618ece78c6930`.
+- PROTOCOL RESULT: success path writes STARTED immediately before first synthetic case access; injected pre-marker failure remains PRECONSUMPTION_FAIL with no marker/case access; injected post-marker failure is terminal CONSUMED_FAIL with no case access.
+- HOLDOUT/V5 EFFECT: none. V3/V4 evidence unchanged; no V5 request, benchmark, candidate or holdout was created or executed.
+- NEXT EXACT ACTION: transfer the tested fix to any future candidate by traceable commit only after quality prerequisites; continue Track B research meanwhile.
+
+### PUSH-20260823-005
+
+- DATE/TIME UTC: `2026-08-23`.
+- TECHNICAL BRANCH: `research/paper-quality-local-v2`.
+- PREVIOUS HEAD: `1591fa3cebaa44a3ef80a6a2178ed85fd1ae2d66`.
+- NEW REMOTE HEAD: `7dfeb0a855f3f7c0840693bb2c03c25bc498d4eb`.
+- COMMITS INCLUDED: `30eaf364...` research CI isolation; `ca985fe9...` recovered-model audit; `7dfeb0a8...` FBCNN compression matrix.
+- FILES MODIFIED/ADDED: three research workflows, Paper Quality status, DEV requirements, FBCNN matrix/runner/summarizer, FBCNN tests and reference-first test isolation.
+- TESTS: targeted `36/36 PASS`; final full local pytest `557/557 PASS`; compile and diff checks PASS.
+- WORKFLOWS: FBCNN matrix run `32674085939` SUCCESS; DamageMask runtime run `32674085927` SUCCESS; progress-timeline run `32674085920` FAILURE on missing `onnxruntime` in its narrow environment.
+- FBCNN RESULT: 6/6 public DEV profiles PASS; 0 errors; 0 rollbacks; 0 abstentions; 0 wrong-person pixels; 0 provenance violations. This is not production/Target95 evidence.
+- FBCNN ARTIFACT: `fbcnn-compression-dev-matrix-4`, ID `9502200502`, archive SHA-256 `365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842`.
+- DAMAGEMASK ATTEMPT 3: recovered without rerun from run `32087249287`, artifact `9307331508`; real checkpoint/ONNX and CPU parity PASS, mask quality MODEL/DATA FAIL. Small U-Net hypothesis STOPPED; RefFace remains NOT_RUN.
+- NEXT EXACT ACTION: add ONNX Runtime to the progress-timeline workflow and verify the exact new HEAD; then benchmark the next lightweight mask architecture without changing the frozen taxonomy/acceptance contract.
 
 ---
 
