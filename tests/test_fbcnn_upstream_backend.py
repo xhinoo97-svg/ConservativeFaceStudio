@@ -89,6 +89,7 @@ def test_fbcnn_accepts_only_jpeg_or_explicit_recompression_routes() -> None:
     )
     assert not _damage_route_allowed(RestorationContext(damage_class="blur", severity="heavy"))
     assert not _damage_route_allowed(RestorationContext(damage_class="mosaic", severity="heavy"))
+    assert not _damage_route_allowed(RestorationContext(damage_class="healthy", severity="none"))
 
 
 def test_fbcnn_adapter_is_thin_and_does_not_embed_upstream_network() -> None:

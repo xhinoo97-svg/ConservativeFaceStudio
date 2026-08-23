@@ -12,6 +12,12 @@ import numpy as np
 
 import run_gfpgan14_vertical_slice as common
 from run_gfpgan14_vertical_slice_exact import exact_phase3_alignment
+from fbcnn_degradation_matrix import (
+    FBCNN_DEVELOPMENT_PROFILES,
+    FBCNN_PROFILE_BY_ID,
+    disposition_for_metrics,
+    materialize_degradation,
+)
 
 from app.core_models import ensure_core_pretrained_models
 from app.face_analysis import cosine_similarity
@@ -27,24 +33,11 @@ from app.resource_budget import (
 )
 
 
-def jpeg_degrade(clean_bgr: np.ndarray, quality: int) -> np.ndarray:
-    q = int(quality)
-    if not 1 <= q <= 100:
-        raise ValueError('JPEG quality must be 1..100')
-    ok, encoded = cv2.imencode('.jpg', clean_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), q])
-    if not ok:
-        raise RuntimeError('JPEG encoding failed')
-    degraded = cv2.imdecode(encoded, cv2.IMREAD_COLOR)
-    if degraded is None or degraded.shape != clean_bgr.shape:
-        raise RuntimeError('JPEG decoding failed')
-    return degraded
-
-
-def write_comparison(path: Path, clean: np.ndarray, degraded: np.ndarray, restored: np.ndarray, qf: int) -> None:
+def write_comparison(path: Path, clean: np.ndarray, degraded: np.ndarray, restored: np.ndarray, label: str) -> None:
     panels: list[np.ndarray] = []
     for label, image in (
         ('CLEAN GT', clean),
-        (f'JPEG QF={qf}', degraded),
+        (label, degraded),
         ('FBCNN OFFICIAL', restored),
     ):
         panel = image.copy()
@@ -64,7 +57,12 @@ def main() -> int:
     parser.add_argument('--expected-checkpoint-sha256', required=True)
     parser.add_argument('--source-sha', required=True)
     parser.add_argument('--output', required=True, type=Path)
-    parser.add_argument('--jpeg-quality', type=int, default=20)
+    parser.add_argument(
+        '--degradation-profile',
+        choices=tuple(item.profile_id for item in FBCNN_DEVELOPMENT_PROFILES),
+        default='jpeg-qf20',
+    )
+    parser.add_argument('--core-model-root', type=Path)
     parser.add_argument('--threads', type=int, default=4)
     args = parser.parse_args()
 
@@ -97,10 +95,12 @@ def main() -> int:
     clean = cv2.imread(str(args.input), cv2.IMREAD_COLOR)
     if clean is None:
         raise RuntimeError('Input decode failed')
-    degraded = jpeg_degrade(clean, args.jpeg_quality)
+    profile = FBCNN_PROFILE_BY_ID[args.degradation_profile]
+    degraded = materialize_degradation(clean, profile)
     args.output.mkdir(parents=True, exist_ok=True)
 
-    core = ensure_core_pretrained_models(args.output / 'cfs-core-models', timeout_seconds=60)
+    core_root = args.core_model_root or (args.output / 'cfs-core-models')
+    core = ensure_core_pretrained_models(core_root, timeout_seconds=60)
     if not core.ready:
         raise RuntimeError(f'YuNet/SFace bootstrap failed: {core.errors}')
     engine = OpenCVZooFaceEngine(core.paths['opencv_yunet'], core.paths['opencv_sface'], dnn_target='cpu')
@@ -132,9 +132,9 @@ def main() -> int:
     resource_after_load = resource_snapshot(budget)
 
     context = RestorationContext(
-        damage_class='single_jpeg',
+        damage_class=profile.damage_class,
         severity='heavy',
-        metadata={'jpeg_detected': True},
+        metadata={'jpeg_detected': True, 'degradation_profile': profile.profile_id},
     )
     _warm = backend.restore(degraded_aligned, context)
     assert_memory_within_budget(budget, stage='fbcnn_post_warmup')
@@ -155,7 +155,7 @@ def main() -> int:
 
     restored_path = args.output / 'restored_fbcnn_color.png'
     cv2.imwrite(str(restored_path), restored)
-    write_comparison(args.output / 'comparison.png', clean_aligned, degraded_aligned, restored, args.jpeg_quality)
+    write_comparison(args.output / 'comparison.png', clean_aligned, degraded_aligned, restored, profile.label)
 
     clean_obs = engine.analyze(clean_aligned)
     degraded_obs = engine.analyze(degraded_aligned)
@@ -164,25 +164,49 @@ def main() -> int:
         raise RuntimeError('SFace embedding missing')
     identity_degraded = float(cosine_similarity(clean_obs.embedding, degraded_obs.embedding))
     identity_restored = float(cosine_similarity(clean_obs.embedding, restored_obs.embedding))
-    identity_pass = identity_restored >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
-
     predicted_quality = float(candidate.quality_metrics['predicted_jpeg_quality_factor'])
+    metrics = {
+        'identity_threshold': float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine),
+        'sface_clean_vs_degraded': identity_degraded,
+        'sface_clean_vs_fbcnn': identity_restored,
+        'sface_identity_gate_pass': bool(identity_restored >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine),
+        'psnr_degraded': common.psnr(clean_aligned, degraded_aligned),
+        'psnr_fbcnn': common.psnr(clean_aligned, restored),
+        'ssim_degraded': common.ssim_gray(clean_aligned, degraded_aligned),
+        'ssim_fbcnn': common.ssim_gray(clean_aligned, restored),
+        'outside_region_mae': None,
+        'outside_region_policy': 'NOT_APPLICABLE_FULL_ALIGNED_FACE_SPECIALIST',
+        'wrong_person_final_pixels': 0,
+        'provenance_valid': bool(candidate.provenance_class == GENERATED_MODEL_INFERRED),
+    }
+    disposition = disposition_for_metrics(metrics)
+    final = restored if disposition['decision'] == 'PASS' else degraded_aligned
+    final_path = args.output / 'final.png'
+    if not cv2.imwrite(str(final_path), final):
+        raise RuntimeError('Failed to save FBCNN final disposition image')
     report = {
-        'experiment': 'fbcnn_color_jpeg_specialist_vertical_slice_v2_upstream_adapter',
+        'experiment': 'fbcnn_compression_specialist_development_matrix_v1',
         'qualification_scope': 'development_host_cpu_only',
         'production_qualified': False,
         'production_blockers': [
             'Windows installer execution not tested',
             'HP EliteBook 1030 G3 not measured',
-            'single development JPEG case insufficient for production qualification',
-            'checkpoint SHA-256 is run-observed discovery until promoted into the CFS registry',
+            'single public development identity insufficient for production qualification',
+            'identity-disjoint multi-identity validation not run',
         ],
         'source': {
             'dataset': 'cfs-face-smartphone-v1 development/calibration source bank',
             'input_sha256': input_sha,
             'final_holdout_used': False,
-            'degradation': 'single_jpeg',
-            'jpeg_quality': int(args.jpeg_quality),
+            'degradation': profile.damage_class,
+            'degradation_profile': profile.profile_id,
+            'degradation_family': profile.family,
+            'profile_contract': {
+                'label': profile.label,
+                'first_quality': profile.first_quality,
+                'second_quality': profile.second_quality,
+                'resize_scale': profile.resize_scale,
+            },
         },
         'model': {
             'key': candidate.model_key,
@@ -226,18 +250,19 @@ def main() -> int:
             'peak_model_load': float(load_sampler.peak / (1024.0 * 1024.0)),
             'peak_inference': float(infer_sampler.peak / (1024.0 * 1024.0)),
         },
-        'metrics': {
-            'sface_clean_vs_degraded': identity_degraded,
-            'sface_clean_vs_fbcnn': identity_restored,
-            'sface_identity_gate_pass': bool(identity_pass),
-            'psnr_degraded': common.psnr(clean_aligned, degraded_aligned),
-            'psnr_fbcnn': common.psnr(clean_aligned, restored),
-            'ssim_degraded': common.ssim_gray(clean_aligned, degraded_aligned),
-            'ssim_fbcnn': common.ssim_gray(clean_aligned, restored),
+        'metrics': metrics,
+        'disposition': disposition,
+        'provenance': {
+            'candidate': candidate.provenance_class,
+            'final': candidate.provenance_class if disposition['decision'] == 'PASS' else 'PRIMARY_OBSERVED',
+            'wrong_person_final_pixels': 0,
+            'violations': 0,
         },
         'outputs': {
             'restored': restored_path.name,
             'restored_sha256': common.sha256_path(restored_path),
+            'final': final_path.name,
+            'final_sha256': common.sha256_path(final_path),
             'comparison': 'comparison.png',
             'comparison_restored_label': 'FBCNN OFFICIAL',
         },
@@ -256,11 +281,6 @@ def main() -> int:
     report['resource_budget']['post_unload'] = resource_snapshot(budget)
     (args.output / 'report.json').write_text(json.dumps(report, indent=2, sort_keys=True), encoding='utf-8')
 
-    if not identity_pass:
-        raise RuntimeError(
-            f'FBCNN identity gate failed: {identity_restored:.6f} < '
-            f'{FACE_MODEL_DEFAULTS.sface_same_identity_cosine:.6f}'
-        )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 

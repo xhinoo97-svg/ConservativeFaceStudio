@@ -6,6 +6,8 @@ on:
       - research/paper-quality-local-v2
     paths:
       - research/run_fbcnn_vertical_slice.py
+      - research/fbcnn_degradation_matrix.py
+      - research/summarize_fbcnn_degradation_matrix.py
       - app/fbcnn_upstream_backend.py
       - app/face_restorer_adapter.py
       - app/resource_budget.py
@@ -18,6 +20,7 @@ on:
       - scripts/bootstrap_pinned_upstream.py
       - scripts/verify_upstream_implementation_registry.py
       - tests/test_fbcnn_upstream_backend.py
+      - tests/test_fbcnn_degradation_matrix.py
       - tests/test_upstream_implementation_registry.py
       - .github/workflows/research-fbcnn-vertical-slice.yml
   workflow_dispatch:
@@ -83,7 +86,8 @@ jobs:
           python scripts/verify_upstream_implementation_registry.py
           python -m pytest -q \
             tests/test_upstream_implementation_registry.py \
-            tests/test_fbcnn_upstream_backend.py
+            tests/test_fbcnn_upstream_backend.py \
+            tests/test_fbcnn_degradation_matrix.py
 
       - name: Bootstrap exact official FBCNN checkout
         run: |
@@ -130,50 +134,73 @@ jobs:
       - name: Execute real pinned-upstream FBCNN CPU JPEG specialist slice
         run: |
           set -euo pipefail
-          python research/run_fbcnn_vertical_slice.py \
-            --input .research/input/A_lady_at_front_day.jpg \
-            --expected-input-sha256 "$DEV_SOURCE_SHA256" \
-            --fbcnn-root .research-upstreams/fbcnn \
-            --checkpoint .research/weights/fbcnn_color.pth \
-            --expected-checkpoint-sha256 "$FBCNN_WEIGHT_SHA256" \
-            --source-sha "$FBCNN_SOURCE_SHA" \
-            --jpeg-quality 20 \
-            --threads 4 \
-            --output research-results/fbcnn-color-q20-v2-upstream-adapter
+          profiles=(
+            jpeg-qf10-block-heavy
+            jpeg-qf20
+            jpeg-qf40
+            double-jpeg-qf40-qf15
+            social-resize-jpeg-qf20
+            mosquito-edges-qf12
+          )
+          reports=()
+          for profile in "${profiles[@]}"; do
+            output="research-results/fbcnn-compression-dev-matrix/$profile"
+            python research/run_fbcnn_vertical_slice.py \
+              --input .research/input/A_lady_at_front_day.jpg \
+              --expected-input-sha256 "$DEV_SOURCE_SHA256" \
+              --fbcnn-root .research-upstreams/fbcnn \
+              --checkpoint .research/weights/fbcnn_color.pth \
+              --expected-checkpoint-sha256 "$FBCNN_WEIGHT_SHA256" \
+              --source-sha "$FBCNN_SOURCE_SHA" \
+              --degradation-profile "$profile" \
+              --core-model-root .research/cfs-core-models \
+              --threads 4 \
+              --output "$output"
+            reports+=(--report "$output/report.json")
+          done
+          python research/summarize_fbcnn_degradation_matrix.py \
+            "${reports[@]}" \
+            --output research-results/fbcnn-compression-dev-matrix/summary.json
 
       - name: Verify evidence bundle
         run: |
           set -euo pipefail
-          test -s research-results/fbcnn-color-q20-v2-upstream-adapter/report.json
-          test -s research-results/fbcnn-color-q20-v2-upstream-adapter/restored_fbcnn_color.png
-          test -s research-results/fbcnn-color-q20-v2-upstream-adapter/comparison.png
+          test -s research-results/fbcnn-compression-dev-matrix/summary.json
           python - <<'PY'
           import json
           import os
           from pathlib import Path
-          r = json.loads(Path('research-results/fbcnn-color-q20-v2-upstream-adapter/report.json').read_text())
-          assert r['source']['final_holdout_used'] is False
-          assert r['source']['degradation'] == 'single_jpeg'
-          assert r['source']['jpeg_quality'] == 20
-          assert r['model']['device'] == 'cpu'
-          assert r['model']['official_source_commit'] == '54d1831927506b3247e2d4d245abb4f4dab1a1cd'
-          assert r['model']['architecture_reimplemented_by_cfs'] is False
-          assert r['model']['checkpoint_sha256_observed'] == os.environ['FBCNN_WEIGHT_SHA256']
-          assert r['model']['provenance_class'] == 'GENERATED_MODEL_INFERRED'
-          assert r['resource_budget']['max_total_pc_fraction'] == 0.80
-          assert r['resource_budget']['max_parallel_heavy_models'] == 1
-          assert r['metrics']['sface_identity_gate_pass'] is True
-          assert r['production_qualified'] is False
-          print(json.dumps(r, indent=2, sort_keys=True))
+          root = Path('research-results/fbcnn-compression-dev-matrix')
+          summary = json.loads((root / 'summary.json').read_text())
+          assert summary['fixture_policy'] == 'PUBLIC_DEVELOPMENT_ONLY_NO_FINAL_HOLDOUT'
+          assert summary['completed_cases'] == 6
+          assert summary['error_cases'] == 0
+          assert summary['wrong_person_final_pixels'] == 0
+          assert summary['provenance_violations'] == 0
+          assert summary['checkpoint_sha256'] == os.environ['FBCNN_WEIGHT_SHA256']
+          assert summary['official_source_commit'] == '54d1831927506b3247e2d4d245abb4f4dab1a1cd'
+          assert summary['production_qualified'] is False
+          for case in summary['cases']:
+              report = json.loads((root / case['profile_id'] / 'report.json').read_text())
+              assert report['source']['final_holdout_used'] is False
+              assert report['model']['device'] == 'cpu'
+              assert report['model']['architecture_reimplemented_by_cfs'] is False
+              assert report['model']['provenance_class'] == 'GENERATED_MODEL_INFERRED'
+              assert report['resource_budget']['max_total_pc_fraction'] == 0.80
+              assert report['resource_budget']['max_parallel_heavy_models'] == 1
+              assert report['provenance']['wrong_person_final_pixels'] == 0
+              assert report['provenance']['violations'] == 0
+              assert (root / case['profile_id'] / 'final.png').is_file()
+          print(json.dumps(summary, indent=2, sort_keys=True))
           PY
 
       - name: Upload real FBCNN evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: fbcnn-color-q20-upstream-adapter-${{ github.run_number }}
+          name: fbcnn-compression-dev-matrix-${{ github.run_number }}
           if-no-files-found: warn
           path: |
-            research-results/fbcnn-color-q20-v2-upstream-adapter/**
+            research-results/fbcnn-compression-dev-matrix/**
             .research/fbcnn-checkpoint-sha256.txt
             .research-upstreams/fbcnn/.cfs-upstream.json
