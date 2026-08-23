@@ -7,9 +7,10 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import app.automatic as automatic_module
 
 from app.automatic import AutomaticPipelineRunner
-from app.execution import ExecutionResult, Workspace
+from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.pipeline import BlockKind, default_pipeline
 
 
@@ -103,6 +104,56 @@ def test_automatic_pipeline_exports_every_block(tmp_path: Path) -> None:
         assert hashlib.sha256(provenance_bytes).hexdigest() == attachments[result.provenance.name]["sha256"]
 
 
+def test_deterministic_upscale_is_not_rejected_as_identity_synthesis(tmp_path: Path) -> None:
+    source = sample_image()
+    runner = AutomaticPipelineRunner(Workspace(primary=source.copy()))
+    _install_synthetic_landmark_handler(runner)
+    result = runner.run(tmp_path / "upscaled.png", upscale=2)
+    upscale = next(item for item in result.results if item.block == "upscale")
+    assert upscale.image.shape[:2] == (source.shape[0] * 2, source.shape[1] * 2)
+    assert upscale.details.get("rolled_back") is not True
+    assert upscale.details["identity_guardrail"]["engine"] == "deterministic-transform-consistency"
+
+
+def test_preflight_cannot_mutate_true_import_snapshot(monkeypatch, tmp_path: Path) -> None:
+    """The immutable IMPORT snapshot must exist before preflight is allowed to mutate MAIN.
+
+    This is deliberately a block-ordering test, not an identity test. Running the full
+    13-block pipeline here would make its result depend on the V4 biometric firewall,
+    which is covered independently by dedicated SFace/fail-closed suites.
+    """
+    source = sample_image()
+
+    class Result:
+        selected_source_index = 0
+        identity_cluster_size = 1
+        reason = "fixture"
+        candidates = ()
+
+    def preflight(workspace, model_paths):
+        workspace.primary = np.full_like(workspace.primary, 77)
+        workspace.metadata["preflight_deblurred_all"] = True
+        return Result()
+
+    monkeypatch.setattr(automatic_module, "preprocess_and_select_front_base", preflight)
+    monkeypatch.setattr(automatic_module, "restore_imported_primary_for_same_canvas", lambda workspace, observed: type("D", (), {"applied": False, "reason": "fixture", "matched_reference_count": 0, "original_selected_source_index": 0})())
+    monkeypatch.setattr(automatic_module, "apply_observed_restoration_policy", lambda workspace, observed: None)
+
+    model = tmp_path / "nafnet.onnx"
+    model.write_bytes(b"fixture")
+    workspace = Workspace(primary=source.copy(), metadata={"core_model_paths": {"opencv_nafnet_deblur": str(model)}})
+    runner = AutomaticPipelineRunner(workspace)
+
+    import_block = next(item for item in default_pipeline() if item.kind is BlockKind.IMPORT)
+    imported = runner.executor.execute(import_block)
+    runner._run_preflight_after_import()
+
+    assert np.array_equal(imported.image, source)
+    assert np.array_equal(workspace.primary, np.full_like(source, 77))
+    assert workspace.metadata.get("preflight_completed") is True
+    assert workspace.metadata.get("preflight_main_changed_pixels", 0) > 0
+
+
 def test_automatic_pipeline_uses_references_without_confirmation(tmp_path: Path) -> None:
     primary = sample_image()
     matrix = np.float32([[1, 0, 2], [0, 1, -1]])
@@ -166,3 +217,37 @@ def test_guardrail_preserves_verified_partial_reference_transfer() -> None:
     assert guard["accepted"] is True
     assert guard["engine"] == "trusted-observed-reference-provenance"
     assert guard["trusted_observed_reference_transfer"] is True
+
+
+def test_final_identity_failure_rolls_back_to_immutable_main_and_exports(
+    tmp_path: Path, monkeypatch
+) -> None:
+    primary = sample_image()
+    workspace = Workspace(primary=primary.copy())
+    runner = AutomaticPipelineRunner(workspace)
+    _install_synthetic_landmark_handler(runner)
+    original_execute = runner.executor.execute
+
+    def fail_identity(block, **parameters):
+        if block.kind is BlockKind.IDENTITY_CHECK:
+            runner.executor.workspace.primary[:] = 219
+            raise BlockExecutionError(
+                "Controllo identità senza confronto SFace reale: "
+                "il fallback proxy non è autorità V4"
+            )
+        return original_execute(block, **parameters)
+
+    monkeypatch.setattr(runner.executor, "execute", fail_identity)
+    result = runner.run(tmp_path / "rollback.png", upscale=1)
+
+    final = cv2.imread(str(result.final_image), cv2.IMREAD_COLOR)
+    assert np.array_equal(final, primary)
+    identity = next(item for item in result.results if item.block == "identity_check")
+    assert identity.details["status"] == "ROLLBACK"
+    assert identity.details["identity_safe"] is True
+    assert identity.details["restoration_effective"] is False
+    assert identity.details["wrong_person_final_pixels"] == 0
+    assert runner.executor.workspace.metadata["zero_recovery_is_restoration_pass"] is False
+    assert np.count_nonzero(runner.executor.workspace.provenance_map) == 0
+    assert len(runner.executor.block_artifacts.snapshots) == 13
+    assert runner.executor.history.can_redo is False

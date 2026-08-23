@@ -19,9 +19,20 @@ jobs:
     env:
       PYTHONPATH: ${{ github.workspace }}
       QT_QPA_PLATFORM: offscreen
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact candidate checkout
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          $expected = $env:CANDIDATE_SHA.Trim().ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Female-domain checkout mismatch: $actual != $expected" }
+          Write-Host "Exact candidate SHA: $actual"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -46,11 +57,18 @@ jobs:
         shell: pwsh
         run: |
           python scripts/run_female_domain_benchmark_80.py --output female-domain-benchmark --cache .benchmark-cache/female-domain --limit 80 --size 320 --profile quick --require-sources 60
-          $report = Get-Content female-domain-benchmark/female-domain-benchmark.json -Raw | ConvertFrom-Json
+          $path = 'female-domain-benchmark/female-domain-benchmark.json'
+          $report = Get-Content $path -Raw | ConvertFrom-Json
+          $report | Add-Member -NotePropertyName source_head -NotePropertyValue $env:CANDIDATE_SHA -Force
+          $report | Add-Member -NotePropertyName quick_profile_cases_per_portrait -NotePropertyValue 5 -Force
+          $report | Add-Member -NotePropertyName minimum_required_portraits -NotePropertyValue 60 -Force
+          $report | ConvertTo-Json -Depth 100 | Set-Content $path -Encoding utf8
           $summary = $report.summary
+          Write-Host "candidate=$env:CANDIDATE_SHA"
           Write-Host "resolved portraits=$($report.portrait_count)/$($report.requested_portrait_count)"
           Write-Host "resolution errors=$($summary.source_resolution_error_count)"
-          Write-Host "completed cases=$($summary.completed_cases)"
+          Write-Host "restoration completions=$($summary.completed_cases)"
+          Write-Host "executed cases=$(@($report.cases).Count)"
           Write-Host "recoverable mean=$($summary.mean_score_recoverable)"
           Write-Host "target95=$($summary.target95_pass_count)/$($summary.target95_applicable_count)"
           Write-Host "mean damage reference coverage=$($summary.mean_damage_reference_coverage)"
@@ -97,6 +115,9 @@ jobs:
           $path = 'female-domain-benchmark/female-domain-benchmark.json'
           if (!(Test-Path $path)) { throw "Female-domain benchmark report missing" }
           $report = Get-Content $path -Raw | ConvertFrom-Json
+          if ($report.source_head -ne $env:CANDIDATE_SHA) { throw "Female-domain report SHA mismatch" }
+          if ([int]$report.portrait_count -lt 60) { throw "Female-domain benchmark resolved fewer than 60 portraits" }
+          if (@($report.cases).Count -lt 300) { throw "Female-domain benchmark executed fewer than 300 cases" }
           $errors = @($report.cases | Where-Object { $_.error })
           $failed95 = @($report.cases | Where-Object { $_.target95_applicable -eq $true -and $_.target95_passed -ne $true })
           Write-Host "runtime errors=$($errors.Count)"

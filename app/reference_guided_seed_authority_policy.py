@@ -68,11 +68,20 @@ def preserve_imported_primary_outside_verified_authority(workspace) -> tuple[np.
         return image.copy(), 0
 
     outside = np.ones(image.shape[:2], dtype=bool) if authority is None else authority == 0
+    # A non-zero reference provenance code is itself stronger, pixel-level repair
+    # authority: it can only be written after source eligibility, identity and
+    # geometry validation.  Block 07/09 may legitimately discover observed donor
+    # pixels outside the earlier, deliberately narrow same-canvas seed.  Treating
+    # only that seed as authoritative made block 11 restore those verified pixels
+    # from MAIN and silently erase successful multi-reference reconstruction.
+    provenance = workspace.provenance_map
+    if isinstance(provenance, np.ndarray) and provenance.shape == image.shape[:2]:
+        verified_reference = (provenance >= 1) & (provenance <= 9)
+        outside &= ~verified_reference
     changed = outside & np.any(image != anchor, axis=2)
     restored = int(np.count_nonzero(changed))
     result = image.copy()
     result[outside] = anchor[outside]
-    provenance = workspace.provenance_map
     if isinstance(provenance, np.ndarray) and provenance.shape == image.shape[:2]:
         provenance[outside] = 0
     return result, restored

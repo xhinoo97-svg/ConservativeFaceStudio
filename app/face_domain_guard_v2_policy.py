@@ -4,10 +4,10 @@ from __future__ import annotations
 
 This policy does not add identity inference.  It records whether the *existing*
 preflight YuNet/SFace observation produced an embedding and preserves that
-per-source result through alignment.  A source explicitly rejected by the
-preflight identity cluster can never recover observed-donor eligibility merely
-because geometric alignment succeeds.  Sources without global identity evidence
-remain eligible only through the existing strict partial/component path.
+per-source result through alignment.  Direct MAIN-to-reference SFace component-
+transfer authority is persisted separately from the single-link ranking component.
+Sources without global identity evidence remain eligible only through the existing
+strict partial/component path.
 """
 
 from functools import wraps
@@ -28,7 +28,10 @@ def _candidate_status(item: dict[str, Any]) -> str:
         return value
     available = item.get("identity_embedding_available")
     if available is True:
-        return IDENTITY_ACCEPTED if bool(item.get("accepted_identity", False)) else IDENTITY_REJECTED
+        accepted = bool(item.get("accepted_identity", False)) or bool(
+            item.get("accepted_for_component_transfer", False)
+        )
+        return IDENTITY_ACCEPTED if accepted else IDENTITY_REJECTED
     return PARTIAL_IDENTITY_UNKNOWN
 
 
@@ -152,7 +155,10 @@ def _install_preflight_identity_audit() -> None:
             available = bool(availability[index])
             item["identity_embedding_available"] = available
             if available:
-                status = IDENTITY_ACCEPTED if bool(item.get("accepted_identity", False)) else IDENTITY_REJECTED
+                accepted = bool(item.get("accepted_identity", False)) or bool(
+                    item.get("accepted_for_component_transfer", False)
+                )
+                status = IDENTITY_ACCEPTED if accepted else IDENTITY_REJECTED
             else:
                 status = PARTIAL_IDENTITY_UNKNOWN
             item["identity_eligibility"] = status
@@ -161,7 +167,7 @@ def _install_preflight_identity_audit() -> None:
             except (TypeError, ValueError):
                 pass
         workspace.metadata["preflight_identity_eligibility"] = eligibility
-        workspace.metadata["preflight_identity_eligibility_policy"] = "same-inference-audit-v2"
+        workspace.metadata["preflight_identity_eligibility_policy"] = "direct-main-transfer-or-ranking-identity-v3"
         return result
 
     preflight.preprocess_and_select_front_base = audited_preprocess

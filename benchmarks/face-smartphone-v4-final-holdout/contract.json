@@ -1,0 +1,57 @@
+{
+  "benchmark_id": "cfs-face-smartphone-v4-final-holdout",
+  "benchmark_status": "FROZEN_INDEPENDENT_FINAL_HOLDOUT_BEFORE_CANDIDATE_MODIFICATION",
+  "canvas_size": 384,
+  "case_count": 40,
+  "category_counts": {
+    "black_paint_scribble": 4,
+    "extreme_low_evidence": 2,
+    "face_blur_censor": 8,
+    "face_mosaic_pixelation": 8,
+    "mixed_smartphone": 4,
+    "natural_facial_occluder": 4,
+    "opaque_graphic_face_occlusion": 10
+  },
+  "evaluation_priority": [
+    "identity_preservation",
+    "main_geometry_preservation",
+    "observed_evidence_fidelity",
+    "provenance_correctness",
+    "face_damage_recovery",
+    "undamaged_region_preservation",
+    "artifact_minimization",
+    "visual_attractiveness"
+  ],
+  "frozen_guardrails": {
+    "calibration_required": "60/60",
+    "outside_region_mae_max": 8.0,
+    "provenance_valid_required": true,
+    "sface_same_identity_minimum": 0.363,
+    "wrong_person_final_pixels_max": 0
+  },
+  "holdout_policy": "One execution only after a candidate source tree is frozen. A failed V4 is consumed and cannot be rerun for certification.",
+  "identity_count": 20,
+  "identity_policy": "19 female primary-domain selfie identities plus one non-primary safety control; identity registry disjoint from V1/V2/V3.",
+  "ordinary_damage_face_overlap_target": 0.95,
+  "predeclared_abstention_policy": "Opaque or extreme cases with zero adequate same-person evidence may ABSTAIN; abstention is not restoration PASS.",
+  "primary_domain_identity_count": 19,
+  "primary_domain_identity_ratio": 0.95,
+  "reference_count_range": [
+    0,
+    9
+  ],
+  "release_ready": false,
+  "runner_policy": {
+    "changed_manifest_refused": true,
+    "mismatched_candidate_tree_refused": true,
+    "overwrite_refused": true,
+    "second_execution_refused": true,
+    "unfrozen_candidate_refused": true
+  },
+  "split_counts": {
+    "final_holdout": 40
+  },
+  "target95_policy": "FROZEN_APPLICABILITY_BEFORE_CANDIDATE_EXECUTION",
+  "tuning_started": false,
+  "version": 1
+}

@@ -1,0 +1,141 @@
+name: Freeze V4 Final Holdout
+
+on:
+  push:
+    branches:
+      - hotfix/real-world-restoration-v1.1
+    paths:
+      - .github/workflows/freeze-v4-final-holdout.yml
+      - scripts/discover_face_smartphone_v4_sources.py
+      - scripts/freeze_face_smartphone_v4_final_holdout.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: freeze-v4-final-holdout
+  cancel-in-progress: false
+
+jobs:
+  freeze-v4:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout triggering commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install benchmark dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'numpy>=1.26,<3' \
+            'opencv-python-headless>=4.10,<5' \
+            'remotezip==0.12.3' \
+            'requests>=2.31,<3'
+
+      - name: Validate freeze tooling syntax
+        run: |
+          python -m py_compile scripts/discover_face_smartphone_v4_sources.py
+          python -m py_compile scripts/freeze_face_smartphone_v4_final_holdout.py
+
+      - name: Refuse pre-existing V4 freeze
+        shell: bash
+        run: |
+          test ! -e benchmarks/face-smartphone-v4-final-holdout/freeze.json
+          test ! -e benchmarks/face-smartphone-v4-final-holdout/cases.json
+          test ! -e benchmarks/face-smartphone-v4-final-holdout/sources.json
+
+      - name: Discover independent ControlFace10K V4 sources
+        run: python scripts/discover_face_smartphone_v4_sources.py
+
+      - name: Freeze V4 without executing it
+        run: python scripts/freeze_face_smartphone_v4_final_holdout.py
+
+      - name: Verify deterministic freeze
+        run: python scripts/freeze_face_smartphone_v4_final_holdout.py --verify
+
+      - name: Check V4 contract invariants
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('benchmarks/face-smartphone-v4-final-holdout')
+          sources = json.loads((root / 'sources.json').read_text(encoding='utf-8'))
+          cases = json.loads((root / 'cases.json').read_text(encoding='utf-8'))
+          contract = json.loads((root / 'contract.json').read_text(encoding='utf-8'))
+          freeze = json.loads((root / 'freeze.json').read_text(encoding='utf-8'))
+          assert len(sources['sources']) == 20
+          assert len(sources['identity_registry']) == 20
+          assert len({x['identity_key'] for x in sources['identity_registry']}) == 20
+          assert len({x['clean_source_sha256'] for x in sources['sources']}) == 20
+          assert sum(x['subject_domain'] == 'female' for x in sources['sources']) == 19
+          assert sources['dataset_license'] == 'CC BY 4.0'
+          assert sources['dataset_revision'] == 'a03589de1a9e028b2d16fa1eb0e019a6930e817c'
+          assert all(x.get('archive_member') for x in sources['sources'])
+          assert len(cases['cases']) == 40
+          assert contract['frozen_guardrails']['sface_same_identity_minimum'] == 0.363
+          assert contract['frozen_guardrails']['outside_region_mae_max'] == 8.0
+          assert contract['frozen_guardrails']['wrong_person_final_pixels_max'] == 0
+          assert freeze['frozen_before_candidate_modification'] is True
+          assert freeze['production_pipeline_changed_by_freeze'] is False
+          assert all(float(c['face_overlap_ratio']) >= 0.95 for c in cases['cases'] if c['damage_type'] != 'extreme_low_evidence')
+          print('V4 contract invariants: PASS')
+          PY
+
+      - name: Commit immutable V4 manifests locally
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmarks/face-smartphone-v4-final-holdout/sources.json \
+                  benchmarks/face-smartphone-v4-final-holdout/cases.json \
+                  benchmarks/face-smartphone-v4-final-holdout/contract.json \
+                  benchmarks/face-smartphone-v4-final-holdout/freeze.json
+          git diff --cached --quiet && { echo 'No V4 freeze files generated'; exit 1; }
+          git commit -m 'Freeze independent V4 final holdout'
+
+      - name: Rebase only across non-production non-freeze branch advances
+        shell: bash
+        env:
+          FREEZE_BASE_SHA: ${{ github.sha }}
+          TARGET_BRANCH: hotfix/real-world-restoration-v1.1
+        run: |
+          set -euo pipefail
+          git fetch origin "$TARGET_BRANCH"
+          remote_head="$(git rev-parse "origin/$TARGET_BRANCH")"
+          if [ "$remote_head" != "$FREEZE_BASE_SHA" ]; then
+            protected_paths=(
+              app
+              scripts/discover_face_smartphone_v4_sources.py
+              scripts/freeze_face_smartphone_v4_final_holdout.py
+              benchmarks/face-smartphone-v1/sources.json
+              benchmarks/face-smartphone-v2-final-holdout/sources.json
+              benchmarks/face-smartphone-v3-final-holdout/sources.json
+            )
+            if ! git diff --quiet "$FREEZE_BASE_SHA..$remote_head" -- "${protected_paths[@]}"; then
+              echo 'Protected production/freeze inputs changed while V4 was being frozen; refusing rebase.'
+              git diff --name-only "$FREEZE_BASE_SHA..$remote_head" -- "${protected_paths[@]}"
+              exit 1
+            fi
+            git rebase "origin/$TARGET_BRANCH"
+          fi
+
+      - name: Reverify freeze after any safe rebase
+        run: |
+          python scripts/freeze_face_smartphone_v4_final_holdout.py --verify
+          git diff --exit-code -- benchmarks/face-smartphone-v4-final-holdout
+
+      - name: Push immutable V4 manifests
+        shell: bash
+        run: git push origin HEAD:hotfix/real-world-restoration-v1.1

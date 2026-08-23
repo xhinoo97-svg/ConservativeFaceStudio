@@ -320,6 +320,22 @@ def evaluate_scenario(clean: np.ndarray, scenario: Scenario, output_dir: Path, *
     target95_passed = bool(conservative_score >= 95.0) if target95_applicable else None
     abstained = all(item.details.get("generated_pixels", 0) in (0, None) for item in result.results if item.block == "inpaint")
     abstention_correct = bool(abstained) if scenario.opaque_without_evidence else None
+    identity_result = next(
+        (item for item in reversed(result.results) if item.block == "identity_check"),
+        None,
+    )
+    identity_details = {} if identity_result is None else dict(identity_result.details)
+    runtime_success = bool(runner.executor.workspace.metadata.get("runtime_success", True))
+    identity_safe = bool(runner.executor.workspace.metadata.get("identity_safe", True))
+    restoration_effective = bool(
+        runner.executor.workspace.metadata.get("restoration_effective", True)
+        and damage_mae_after + 1e-9 < damage_mae_before
+    )
+    unresolved = bool(runner.executor.workspace.metadata.get("unresolved", False))
+    rolled_back = bool(identity_details.get("rolled_back", False))
+    if rolled_back:
+        target95_passed = False if target95_applicable else None
+        abstention_correct = True if scenario.opaque_without_evidence else None
 
     diff = cv2.absdiff(clean, final)
     heat = cv2.applyColorMap(cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY), cv2.COLORMAP_JET)
@@ -352,6 +368,14 @@ def evaluate_scenario(clean: np.ndarray, scenario: Scenario, output_dir: Path, *
         "reference_fraction": reference_fraction,
         "symmetry_fraction": symmetry_fraction,
         "generated_fraction": generated_fraction,
+        "runtime_success": runtime_success,
+        "identity_safe": identity_safe,
+        "restoration_effective": restoration_effective,
+        "unresolved": unresolved,
+        "rolled_back": rolled_back,
+        "final_identity_status": runner.executor.workspace.metadata.get("final_identity_status"),
+        "final_identity_failure_reason": runner.executor.workspace.metadata.get("final_identity_failure_reason"),
+        "wrong_person_final_pixels": int(identity_details.get("wrong_person_final_pixels", 0)),
         "abstention_correct": abstention_correct,
         "conservative_recovery_score": conservative_score,
         "score_components": score_components,

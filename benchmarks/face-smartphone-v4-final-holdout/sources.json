@@ -1,0 +1,715 @@
+{
+  "benchmark_id": "cfs-face-smartphone-v4-final-holdout",
+  "dataset_license": "CC BY 4.0",
+  "dataset_page": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K",
+  "dataset_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+  "discovery_algorithm": "discover_face_smartphone_v4_sources.py:controlface10k-v2.2",
+  "download_date_utc": "2026-08-17",
+  "identity_disjointness": "ControlFace10K explicit synthetic identity UUIDs are unique within V4; source SHA-256 and locators are disjoint from V1, V2 and consumed V3. No real-person identity inference is used.",
+  "identity_registry": [
+    {
+      "identity_key": "controlface10k:identity-009f8511-e800-4f1e-b08b-626d9c732104",
+      "source_id": "finalholdout4_01_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-014aecae-0dcc-4141-90ea-9c1476226341",
+      "source_id": "finalholdout4_02_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-01a96609-1eaf-49fa-913a-c9eaaa03fe42",
+      "source_id": "finalholdout4_03_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-02d0621c-eccf-4dae-a0df-bd4f6a5c56f7",
+      "source_id": "finalholdout4_04_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-036703fa-fc88-4e5a-9e32-6b0843e9147d",
+      "source_id": "finalholdout4_05_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-0044851e-4bc4-4cb9-9763-33b5d3b83827",
+      "source_id": "finalholdout4_06_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-018435e7-c9ae-4d7d-873a-bb476bd30d7b",
+      "source_id": "finalholdout4_07_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-019ed158-4c72-45c8-9fe2-c61b76126f3c",
+      "source_id": "finalholdout4_08_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-01b9cd33-bd65-41fa-8692-67d7c8d2df94",
+      "source_id": "finalholdout4_09_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-03b038a3-c6e7-4f6c-82b9-30edc8a73dff",
+      "source_id": "finalholdout4_10_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-0005a04a-cff1-4424-8a87-58d8d4d41f0a",
+      "source_id": "finalholdout4_11_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-01c357a1-f1d3-4d33-9bbd-06ba441ed9ee",
+      "source_id": "finalholdout4_12_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-021979a5-c0c5-40d1-b554-19e94da280c2",
+      "source_id": "finalholdout4_13_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-02d09fe5-a68e-497b-96f0-c0cfbb187ee7",
+      "source_id": "finalholdout4_14_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-0432ac26-5354-4010-b8a0-694e642b71bf",
+      "source_id": "finalholdout4_15_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-00688026-8f01-4a40-857f-1535b7a92a04",
+      "source_id": "finalholdout4_16_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-007503d5-01f6-4353-be98-80453a23b4a6",
+      "source_id": "finalholdout4_17_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-025c8bb0-a251-4094-a978-5592131177c4",
+      "source_id": "finalholdout4_18_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-02b57c76-8425-4388-8c55-c16e1058475c",
+      "source_id": "finalholdout4_19_f",
+      "subject_domain": "female"
+    },
+    {
+      "identity_key": "controlface10k:identity-001ae446-b164-45ab-9281-93fc1a9beb5e",
+      "source_id": "finalholdout4_20_c",
+      "subject_domain": "control"
+    }
+  ],
+  "primary_domain_identity_ratio": 0.95,
+  "sources": [
+    {
+      "archive_member": "ControlFace10k/African/female/65/identity-009f8511-e800-4f1e-b08b-626d9c732104/r0_g0_a65_o4_ChJWju.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "cd259fd2db80cc6f09e90e6ba515c72131550c3d3ecd9c7618163c3206be0f54",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.268203,
+        0.30457,
+        0.714219,
+        0.791133
+      ],
+      "filename": "finalholdout4_01_f.png",
+      "identity_key": "controlface10k:identity-009f8511-e800-4f1e-b08b-626d9c732104",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r0_g0_a65_o4_ChJWju.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/African/female/65/identity-009f8511-e800-4f1e-b08b-626d9c732104/r0_g0_a65_o4_ChJWju.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/African/female",
+      "source_id": "finalholdout4_01_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/African/female/25/identity-014aecae-0dcc-4141-90ea-9c1476226341/r0_g0_a25_o4_aImVgW.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "2717a8c24c58cc365316e30dcd2cdf51cbffe926856fb627de5004196b386607",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.296016,
+        0.320352,
+        0.705938,
+        0.767539
+      ],
+      "filename": "finalholdout4_02_f.png",
+      "identity_key": "controlface10k:identity-014aecae-0dcc-4141-90ea-9c1476226341",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r0_g0_a25_o4_aImVgW.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/African/female/25/identity-014aecae-0dcc-4141-90ea-9c1476226341/r0_g0_a25_o4_aImVgW.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/African/female",
+      "source_id": "finalholdout4_02_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/African/female/50/identity-01a96609-1eaf-49fa-913a-c9eaaa03fe42/r0_g0_a50_o4_OcriIf.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "d2244b50cdbcd95e49287ef596e414bac7d050348910ddeb139f7c1cbea399bb",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.260156,
+        0.295703,
+        0.724219,
+        0.801953
+      ],
+      "filename": "finalholdout4_03_f.png",
+      "identity_key": "controlface10k:identity-01a96609-1eaf-49fa-913a-c9eaaa03fe42",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r0_g0_a50_o4_OcriIf.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/African/female/50/identity-01a96609-1eaf-49fa-913a-c9eaaa03fe42/r0_g0_a50_o4_OcriIf.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/African/female",
+      "source_id": "finalholdout4_03_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/African/female/25/identity-02d0621c-eccf-4dae-a0df-bd4f6a5c56f7/r0_g0_a25_o4_rDdKoW.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "706ab86b78c578b45688c7faad22f8bafe2f3bd39f5573975ef5829468b9f296",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.29375,
+        0.323828,
+        0.70625,
+        0.773828
+      ],
+      "filename": "finalholdout4_04_f.png",
+      "identity_key": "controlface10k:identity-02d0621c-eccf-4dae-a0df-bd4f6a5c56f7",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r0_g0_a25_o4_rDdKoW.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/African/female/25/identity-02d0621c-eccf-4dae-a0df-bd4f6a5c56f7/r0_g0_a25_o4_rDdKoW.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/African/female",
+      "source_id": "finalholdout4_04_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/African/female/50/identity-036703fa-fc88-4e5a-9e32-6b0843e9147d/r0_g0_a50_o3_uyveKd.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "4a7d5ad90891ecf9ecfbe982e0138c84d6d3cfcd3f05d00b5e2aa85d2bde1621",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.167812,
+        0.338164,
+        0.588047,
+        0.796602
+      ],
+      "filename": "finalholdout4_05_f.png",
+      "identity_key": "controlface10k:identity-036703fa-fc88-4e5a-9e32-6b0843e9147d",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r0_g0_a50_o3_uyveKd.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/African/female/50/identity-036703fa-fc88-4e5a-9e32-6b0843e9147d/r0_g0_a50_o3_uyveKd.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/African/female",
+      "source_id": "finalholdout4_05_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Asian/female/25/identity-0044851e-4bc4-4cb9-9763-33b5d3b83827/r1_g0_a25_o3_WzYNRr.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "06bc698f591da8dc93d5093194da58c037e8fe463454cd46e181e5975a6a4e71",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.184141,
+        0.334492,
+        0.614688,
+        0.80418
+      ],
+      "filename": "finalholdout4_06_f.png",
+      "identity_key": "controlface10k:identity-0044851e-4bc4-4cb9-9763-33b5d3b83827",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r1_g0_a25_o3_WzYNRr.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Asian/female/25/identity-0044851e-4bc4-4cb9-9763-33b5d3b83827/r1_g0_a25_o3_WzYNRr.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Asian/female",
+      "source_id": "finalholdout4_06_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Asian/female/25/identity-018435e7-c9ae-4d7d-873a-bb476bd30d7b/r1_g0_a25_o3_rqqcRe.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "03b28e37499f1bdca2d03eba1b88d04c8b2918ff38a7882b4711c701dce2e010",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.199844,
+        0.348516,
+        0.581406,
+        0.764766
+      ],
+      "filename": "finalholdout4_07_f.png",
+      "identity_key": "controlface10k:identity-018435e7-c9ae-4d7d-873a-bb476bd30d7b",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r1_g0_a25_o3_rqqcRe.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Asian/female/25/identity-018435e7-c9ae-4d7d-873a-bb476bd30d7b/r1_g0_a25_o3_rqqcRe.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Asian/female",
+      "source_id": "finalholdout4_07_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Asian/female/65/identity-019ed158-4c72-45c8-9fe2-c61b76126f3c/r1_g0_a65_o4_VZPaSo.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "01e1dd75ddc9b36a31f9e960c52e99cb3b85d04a6b4f060babc392f50c760332",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.287656,
+        0.322773,
+        0.718203,
+        0.792461
+      ],
+      "filename": "finalholdout4_08_f.png",
+      "identity_key": "controlface10k:identity-019ed158-4c72-45c8-9fe2-c61b76126f3c",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r1_g0_a65_o4_VZPaSo.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Asian/female/65/identity-019ed158-4c72-45c8-9fe2-c61b76126f3c/r1_g0_a65_o4_VZPaSo.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Asian/female",
+      "source_id": "finalholdout4_08_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Asian/female/25/identity-01b9cd33-bd65-41fa-8692-67d7c8d2df94/r1_g0_a25_o4_WRPqna.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "033d3f4a9f4d811d4b16e9b656a3de63eac7b1a58d9b5420c49261228b888a6f",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.284688,
+        0.324063,
+        0.7075,
+        0.785312
+      ],
+      "filename": "finalholdout4_09_f.png",
+      "identity_key": "controlface10k:identity-01b9cd33-bd65-41fa-8692-67d7c8d2df94",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r1_g0_a25_o4_WRPqna.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Asian/female/25/identity-01b9cd33-bd65-41fa-8692-67d7c8d2df94/r1_g0_a25_o4_WRPqna.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Asian/female",
+      "source_id": "finalholdout4_09_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Asian/female/50/identity-03b038a3-c6e7-4f6c-82b9-30edc8a73dff/r1_g0_a50_o3_iWGSxc.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "cff05abdce4735b9e2212d83cafd2c0a6355ff298ec9d5b147b9ec9e2ae53ac7",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.157656,
+        0.308086,
+        0.629453,
+        0.822773
+      ],
+      "filename": "finalholdout4_10_f.png",
+      "identity_key": "controlface10k:identity-03b038a3-c6e7-4f6c-82b9-30edc8a73dff",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r1_g0_a50_o3_iWGSxc.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Asian/female/50/identity-03b038a3-c6e7-4f6c-82b9-30edc8a73dff/r1_g0_a50_o3_iWGSxc.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Asian/female",
+      "source_id": "finalholdout4_10_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Caucasian/female/65/identity-0005a04a-cff1-4424-8a87-58d8d4d41f0a/r2_g0_a65_o3_QuTyOd.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "43a6d5825cdf9ca9b6c02a8e17cd87b9a615fd20468d214b7c32ccf3d28c34ac",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.164688,
+        0.318242,
+        0.610703,
+        0.804805
+      ],
+      "filename": "finalholdout4_11_f.png",
+      "identity_key": "controlface10k:identity-0005a04a-cff1-4424-8a87-58d8d4d41f0a",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r2_g0_a65_o3_QuTyOd.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Caucasian/female/65/identity-0005a04a-cff1-4424-8a87-58d8d4d41f0a/r2_g0_a65_o3_QuTyOd.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Caucasian/female",
+      "source_id": "finalholdout4_11_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Caucasian/female/50/identity-01c357a1-f1d3-4d33-9bbd-06ba441ed9ee/r2_g0_a50_o3_WeuVdv.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "d41cfa1dbc1f521fabfc3d76dfd5fb04d9d42be8d3cea64b8e5c985f347e9c33",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.174453,
+        0.318242,
+        0.620469,
+        0.804805
+      ],
+      "filename": "finalholdout4_12_f.png",
+      "identity_key": "controlface10k:identity-01c357a1-f1d3-4d33-9bbd-06ba441ed9ee",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r2_g0_a50_o3_WeuVdv.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Caucasian/female/50/identity-01c357a1-f1d3-4d33-9bbd-06ba441ed9ee/r2_g0_a50_o3_WeuVdv.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Caucasian/female",
+      "source_id": "finalholdout4_12_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Caucasian/female/50/identity-021979a5-c0c5-40d1-b554-19e94da280c2/r2_g0_a50_o3_xNUTmy.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "027230127822d58acbed5d238dd2507ace64663a4551c5a9564a2293adfbe73b",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.215156,
+        0.380312,
+        0.534844,
+        0.729062
+      ],
+      "filename": "finalholdout4_13_f.png",
+      "identity_key": "controlface10k:identity-021979a5-c0c5-40d1-b554-19e94da280c2",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r2_g0_a50_o3_xNUTmy.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Caucasian/female/50/identity-021979a5-c0c5-40d1-b554-19e94da280c2/r2_g0_a50_o3_xNUTmy.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Caucasian/female",
+      "source_id": "finalholdout4_13_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Caucasian/female/25/identity-02d09fe5-a68e-497b-96f0-c0cfbb187ee7/r2_g0_a25_o3_pCACre.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "3f6fffd1905726fcab679ad3a6db37bc976d31e62fe7ab63e6cf7ba03c121bd1",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.216562,
+        0.310469,
+        0.685781,
+        0.822344
+      ],
+      "filename": "finalholdout4_14_f.png",
+      "identity_key": "controlface10k:identity-02d09fe5-a68e-497b-96f0-c0cfbb187ee7",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r2_g0_a25_o3_pCACre.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Caucasian/female/25/identity-02d09fe5-a68e-497b-96f0-c0cfbb187ee7/r2_g0_a25_o3_pCACre.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Caucasian/female",
+      "source_id": "finalholdout4_14_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Caucasian/female/65/identity-0432ac26-5354-4010-b8a0-694e642b71bf/r2_g0_a65_o3_kMRCpG.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "6b53c9042f58d47819d64952bc1bddb10e4a71c3a1f1c8329134e2579856e9e8",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.234453,
+        0.401719,
+        0.507734,
+        0.699844
+      ],
+      "filename": "finalholdout4_15_f.png",
+      "identity_key": "controlface10k:identity-0432ac26-5354-4010-b8a0-694e642b71bf",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r2_g0_a65_o3_kMRCpG.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Caucasian/female/65/identity-0432ac26-5354-4010-b8a0-694e642b71bf/r2_g0_a65_o3_kMRCpG.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Caucasian/female",
+      "source_id": "finalholdout4_15_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Indian/female/25/identity-00688026-8f01-4a40-857f-1535b7a92a04/r3_g0_a25_o3_lPOHaq.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "fb3801746ce77dd9f47486d2d4fe25079d3ec1b80684567d58500aba448dc7af",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.198672,
+        0.346172,
+        0.606016,
+        0.790547
+      ],
+      "filename": "finalholdout4_16_f.png",
+      "identity_key": "controlface10k:identity-00688026-8f01-4a40-857f-1535b7a92a04",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r3_g0_a25_o3_lPOHaq.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Indian/female/25/identity-00688026-8f01-4a40-857f-1535b7a92a04/r3_g0_a25_o3_lPOHaq.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Indian/female",
+      "source_id": "finalholdout4_16_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Indian/female/25/identity-007503d5-01f6-4353-be98-80453a23b4a6/r3_g0_a25_o4_NNGJst.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "cce83e5e048dd8eea9c40d21806acb9a0c8250d17ed8a85962c426594eebafb6",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.274062,
+        0.314336,
+        0.720078,
+        0.800898
+      ],
+      "filename": "finalholdout4_17_f.png",
+      "identity_key": "controlface10k:identity-007503d5-01f6-4353-be98-80453a23b4a6",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r3_g0_a25_o4_NNGJst.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Indian/female/25/identity-007503d5-01f6-4353-be98-80453a23b4a6/r3_g0_a25_o4_NNGJst.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Indian/female",
+      "source_id": "finalholdout4_17_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Indian/female/50/identity-025c8bb0-a251-4094-a978-5592131177c4/r3_g0_a50_o3_JOjgdX.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "abc719c8d249775e29fb70e12b05cc524dae3f68fe45ff90ee1f45752dcd0f17",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.192734,
+        0.34875,
+        0.584609,
+        0.77625
+      ],
+      "filename": "finalholdout4_18_f.png",
+      "identity_key": "controlface10k:identity-025c8bb0-a251-4094-a978-5592131177c4",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r3_g0_a50_o3_JOjgdX.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Indian/female/50/identity-025c8bb0-a251-4094-a978-5592131177c4/r3_g0_a50_o3_JOjgdX.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Indian/female",
+      "source_id": "finalholdout4_18_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/Indian/female/65/identity-02b57c76-8425-4388-8c55-c16e1058475c/r3_g0_a65_o3_StpgdR.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "8a0dd143eec139df796c0965a4e52a79d325f72dbe18c985df9b140c8738506c",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.183047,
+        0.346172,
+        0.590391,
+        0.790547
+      ],
+      "filename": "finalholdout4_19_f.png",
+      "identity_key": "controlface10k:identity-02b57c76-8425-4388-8c55-c16e1058475c",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r3_g0_a65_o3_StpgdR.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/Indian/female/65/identity-02b57c76-8425-4388-8c55-c16e1058475c/r3_g0_a65_o3_StpgdR.png",
+      "primary_domain": true,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/Indian/female",
+      "source_id": "finalholdout4_19_f",
+      "subject_domain": "female"
+    },
+    {
+      "archive_member": "ControlFace10k/African/male/65/identity-001ae446-b164-45ab-9281-93fc1a9beb5e/r0_g1_a65_o3_dyBrdF.png",
+      "archive_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+      "author": "Nzalasse, Raj, Laird, Clark / HuMInGameLab",
+      "capture_notes": "ControlFace10K synthetic identity; identity and gender are dataset-generation labels, not inferred by Conservative Face Studio. One original 512px member is used per identity.",
+      "clean_source_sha256": "4d694925e1723e1eea3f43551108b3a55d5a46cee02b2f78c11f00ff35cce9b0",
+      "dataset_repository": "HuMInGameLab/ControlFace10K",
+      "download_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/resolve/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip?download=true",
+      "face_bbox_normalized": [
+        0.194766,
+        0.328594,
+        0.602109,
+        0.772969
+      ],
+      "filename": "finalholdout4_20_c.png",
+      "identity_key": "controlface10k:identity-001ae446-b164-45ab-9281-93fc1a9beb5e",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_dimensions": [
+        512,
+        512
+      ],
+      "original_filename": "r0_g1_a65_o3_dyBrdF.png",
+      "page_url": "https://huggingface.co/datasets/HuMInGameLab/ControlFace10K/blob/a03589de1a9e028b2d16fa1eb0e019a6930e817c/controlface10k.zip#archive-member=ControlFace10k/African/male/65/identity-001ae446-b164-45ab-9281-93fc1a9beb5e/r0_g1_a65_o3_dyBrdF.png",
+      "primary_domain": false,
+      "redistribution_status": "source bytes not vendored; dataset is CC BY 4.0",
+      "source_category": "ControlFace10K/African/male",
+      "source_id": "finalholdout4_20_c",
+      "subject_domain": "control"
+    }
+  ],
+  "version": 2
+}

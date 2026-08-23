@@ -24,6 +24,12 @@ class PreflightCandidate:
     frontalness: float
     quality: float
     accepted_identity: bool
+    # Separate donor/component authority from the ranking component.  A single-link
+    # SFace component is useful for ranking but is never enough to authorize pixels.
+    # This flag is true only for a reference with a direct frozen-threshold SFace edge
+    # to imported MAIN source 0. Face-local same-canvas evidence may add an exact-source
+    # override later, but transitive A-B-C agreement can never set this flag.
+    accepted_for_component_transfer: bool = False
 
 
 @dataclass(frozen=True)
@@ -106,6 +112,31 @@ def _pick_identity_component(similarity: np.ndarray) -> list[int]:
     return groups[0] if groups else [0]
 
 
+def _direct_main_component_transfer_sources(
+    valid_indices: list[int],
+    similarity: np.ndarray,
+) -> set[int]:
+    """Return references with a direct MAIN SFace edge at the frozen threshold.
+
+    The connected component is deliberately ignored here.  This prevents an A-B-C
+    single-link chain from authorizing C when MAIN A and C are below threshold.
+    """
+    if 0 not in valid_indices:
+        return set()
+    if similarity.ndim != 2 or similarity.shape != (len(valid_indices), len(valid_indices)):
+        return set()
+    main_position = valid_indices.index(0)
+    threshold = float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine)
+    accepted: set[int] = set()
+    for position, source in enumerate(valid_indices):
+        if source <= 0 or position == main_position:
+            continue
+        value = float(similarity[main_position, position])
+        if np.isfinite(value) and value >= threshold:
+            accepted.add(int(source))
+    return accepted
+
+
 def _deblur_all(images: list[np.ndarray], model_path: Path | None, hardware_policy: dict[str, Any]) -> tuple[list[np.ndarray], int]:
     if model_path is None or not model_path.is_file():
         return [item.copy() for item in images], 0
@@ -142,6 +173,15 @@ def _deblur_all(images: list[np.ndarray], model_path: Path | None, hardware_poli
         except Exception:
             output.append(image.copy())
     return output, applied
+
+
+def _empty_identity_similarity_payload() -> dict[str, Any]:
+    return {
+        "source_indices": [],
+        "matrix": [],
+        "minimum": float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine),
+        "source": "preflight_existing_sface_embeddings",
+    }
 
 
 def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Path]) -> PreflightResult:
@@ -181,6 +221,10 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
         workspace.metadata["preflight_recommended_front_source_index"] = 0
         workspace.metadata["preflight_original_occlusion_masks"] = original_occlusion
         workspace.metadata["preflight_detail_reliability_maps"] = original_reliability
+        workspace.metadata["preflight_identity_similarity"] = _empty_identity_similarity_payload()
+        workspace.metadata["reference_component_transfer_accepted"] = [False] * len(workspace.references)
+        workspace.metadata["preflight_component_transfer_authority_original_source_indices"] = []
+        workspace.metadata["preflight_component_transfer_policy"] = "direct-main-sface-edge-only-v1"
         return PreflightResult(0, (), deblurred_count, 1, "YuNet/SFace non disponibili: MAIN #1 mantenuta come target")
 
     target = str(hardware_policy.get("dnn_target", "cpu")).lower()
@@ -197,8 +241,10 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
     valid_indices = [i for i, obs in enumerate(observations) if obs is not None and obs.embedding is not None]
     selected = 0
     accepted: set[int] = {0}
+    component_transfer_accepted: set[int] = set()
     cluster_size = 1
     component_by_source: dict[int, int] = {}
+    similarity_payload = _empty_identity_similarity_payload()
 
     if valid_indices:
         size = len(valid_indices)
@@ -210,6 +256,13 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
                 denom = float(np.linalg.norm(ea) * np.linalg.norm(eb))
                 value = float(np.dot(ea, eb) / denom) if denom > 1e-12 else -1.0
                 sim[a, b] = sim[b, a] = value
+        similarity_payload = {
+            "source_indices": [int(value) for value in valid_indices],
+            "matrix": [[float(value) for value in row] for row in sim.tolist()],
+            "minimum": float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine),
+            "source": "preflight_existing_sface_embeddings",
+        }
+        component_transfer_accepted = _direct_main_component_transfer_sources(valid_indices, sim)
         local_component = _pick_identity_component(sim)
         accepted = {valid_indices[i] for i in local_component}
         cluster_size = len(accepted)
@@ -253,12 +306,36 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
     workspace.metadata["preflight_nafnet_inference_count"] = len(nafnet_indices)
     workspace.metadata["preflight_original_occlusion_masks"] = [item.copy() for item in original_occlusion]
     workspace.metadata["preflight_detail_reliability_maps"] = [item.copy() for item in original_reliability]
+    workspace.metadata["preflight_face_bboxes"] = [
+        None if item is None else tuple(int(value) for value in item.bbox)
+        for item in observations
+    ]
+    workspace.metadata["preflight_identity_similarity"] = similarity_payload
+    workspace.metadata["reference_component_transfer_accepted"] = [
+        source in component_transfer_accepted
+        for source in range(1, len(processed))
+    ]
+    workspace.metadata["preflight_component_transfer_authority_original_source_indices"] = sorted(
+        component_transfer_accepted
+    )
+    workspace.metadata["preflight_component_transfer_policy"] = "direct-main-sface-edge-only-v1"
 
     pose_engine = HeadPoseEngine(pose_raw) if pose_raw is not None and Path(pose_raw).is_file() else None
     candidates: list[PreflightCandidate] = []
     for i, obs in enumerate(observations):
         if obs is None:
-            candidates.append(PreflightCandidate(i, component_by_source.get(i, 1), 0.0, None, 1e6, 0.0, i in accepted))
+            candidates.append(
+                PreflightCandidate(
+                    i,
+                    component_by_source.get(i, 1),
+                    0.0,
+                    None,
+                    1e6,
+                    0.0,
+                    i in accepted,
+                    i in component_transfer_accepted,
+                )
+            )
             continue
         pose = None
         frontal = 1e6
@@ -277,6 +354,7 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
                 float(frontal),
                 _quality_score(processed[i], obs.bbox, obs.score),
                 i in accepted,
+                i in component_transfer_accepted,
             )
         )
 

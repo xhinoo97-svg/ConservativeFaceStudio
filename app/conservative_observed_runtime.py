@@ -151,7 +151,25 @@ def verify_same_canvas_observed_source(
         edge_median = float(np.median(edge_delta))
         edge_p90 = float(np.percentile(edge_delta, 90.0))
         if edge_median > float(maximum_edge_median_delta) or edge_p90 > float(maximum_edge_p90_delta):
-            return None
+            # Local optical blur changes gradient magnitude even when the source is
+            # the exact same canvas. Phase correlation distinguishes that case from
+            # a shifted or merely same-sized photograph without relaxing geometry.
+            shift, response = cv2.phaseCorrelate(
+                cv2.cvtColor(primary, cv2.COLOR_BGR2GRAY).astype(np.float32),
+                cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY).astype(np.float32),
+            )
+            phase_consistent = (
+                abs(float(shift[0])) <= 1.5
+                and abs(float(shift[1])) <= 1.5
+                and float(response) >= 0.35
+                and median_lab <= 0.02
+                and p90_lab <= 0.06
+            )
+            if not phase_consistent:
+                return None
+        else:
+            shift, response = (0.0, 0.0), 1.0
+            phase_consistent = True
 
     support = observed.astype(np.uint8) * 255
     return support, {
@@ -166,6 +184,9 @@ def verify_same_canvas_observed_source(
         "edge_pixels": edge_count,
         "edge_median_delta": edge_median,
         "edge_p90_delta": edge_p90,
+        "phase_shift": [float(shift[0]), float(shift[1])],
+        "phase_response": float(response),
+        "phase_consistent": bool(phase_consistent),
     }
 
 
@@ -228,12 +249,28 @@ def _restore_exact_same_canvas_references(workspace) -> list[dict[str, Any]]:
 
     slot_by_runtime = {runtime_index: slot for slot, runtime_index in enumerate(runtime_indices)}
     diagnostics: list[dict[str, Any]] = []
+    try:
+        from app.immutable_input_store import ensure_immutable_input_store
+
+        immutable = ensure_immutable_input_store(workspace)
+    except (TypeError, ValueError):
+        immutable = None
+
     for runtime_index, reference in enumerate(references):
+        observed_reference = reference
+        if immutable is not None and runtime_index + 1 < len(runtime_order):
+            original_index = int(runtime_order[runtime_index + 1])
+            if 0 < original_index <= len(immutable.references):
+                candidate = immutable.copy_reference(original_index - 1)
+                if candidate.shape == workspace.primary.shape:
+                    observed_reference = candidate
         existing_slot = slot_by_runtime.get(runtime_index)
-        support_hint = supports[existing_slot] if supports_authoritative and existing_slot is not None else None
+        # An attempted affine support cannot validate the competing exact identity
+        # transform. Recompute support from the immutable imported source.
+        support_hint = None
         verified = verify_same_canvas_observed_source(
             workspace,
-            reference,
+            observed_reference,
             runtime_index,
             support_hint=support_hint,
         )
@@ -251,7 +288,7 @@ def _restore_exact_same_canvas_references(workspace) -> list[dict[str, Any]]:
         if slot is None:
             slot = len(aligned)
             slot_by_runtime[runtime_index] = slot
-            aligned.append(reference.copy())
+            aligned.append(observed_reference.copy())
             supports.append(support)
             reliability.append(source_reliability)
             runtime_indices.append(runtime_index)
@@ -261,7 +298,7 @@ def _restore_exact_same_canvas_references(workspace) -> list[dict[str, Any]]:
             partial_verified.append(True)
             details["action"] = "supplemented"
         else:
-            aligned[slot] = reference.copy()
+            aligned[slot] = observed_reference.copy()
             supports[slot] = support
             reliability[slot] = source_reliability
             partial_verified[slot] = True
@@ -279,6 +316,74 @@ def _restore_exact_same_canvas_references(workspace) -> list[dict[str, Any]]:
         workspace.metadata["aligned_reference_partial_geometry_verified"] = partial_verified
     workspace.metadata["verified_same_canvas_alignment"] = diagnostics
     return diagnostics
+
+
+def _same_canvas_change_authority(workspace, shape: tuple[int, int]) -> np.ndarray | None:
+    """Pixels that immutable exact-canvas donors prove differ from immutable MAIN."""
+    diagnostics = workspace.metadata.get("verified_same_canvas_alignment")
+    order = workspace.metadata.get("runtime_source_order")
+    if not isinstance(diagnostics, list) or not diagnostics or not isinstance(order, list):
+        return None
+    try:
+        from app.immutable_input_store import ensure_immutable_input_store
+
+        store = ensure_immutable_input_store(workspace)
+        main = store.copy_main()
+    except (TypeError, ValueError):
+        return None
+    if main.shape[:2] != shape:
+        return None
+    votes = np.zeros(shape, dtype=np.uint16)
+    candidate_count = 0
+    for item in diagnostics:
+        if not isinstance(item, dict) or item.get("runtime_reference_index") is None:
+            continue
+        runtime_index = int(item["runtime_reference_index"])
+        if runtime_index + 1 >= len(order):
+            continue
+        original_index = int(order[runtime_index + 1])
+        if not 0 < original_index <= len(store.references):
+            continue
+        reference = store.copy_reference(original_index - 1)
+        if reference.shape != main.shape:
+            continue
+        support, _ = _geometric_observed_support(reference)
+        delta = np.max(np.abs(reference.astype(np.int16) - main.astype(np.int16)), axis=2)
+        votes += (support & (delta > 2)).astype(np.uint16)
+        candidate_count += 1
+    if candidate_count == 0:
+        return None
+    # A single globally degraded donor must not authorize changes over the whole
+    # portrait. With multiple exact-canvas observations require corroboration; a
+    # full clean donor plus a component crop still votes twice over the real defect.
+    authority = votes >= (2 if candidate_count >= 2 else 1)
+    if not np.any(authority):
+        return None
+    authority = cv2.morphologyEx(
+        authority.astype(np.uint8) * 255,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+    ) > 0
+    return authority
+
+
+def _clamp_to_same_canvas_authority(
+    workspace,
+    image: np.ndarray,
+    anchor: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray | None, int]:
+    authority = _same_canvas_change_authority(workspace, image.shape[:2])
+    if authority is None:
+        return image, None, 0
+    output = anchor.copy()
+    output[authority] = image[authority]
+    suppressed = int(np.count_nonzero(np.any(image != anchor, axis=2) & ~authority))
+    provenance = workspace.provenance_map
+    if isinstance(provenance, np.ndarray) and provenance.shape == authority.shape:
+        provenance = provenance.copy()
+        provenance[~authority] = 0
+        workspace.provenance_map = provenance
+    return output, authority, suppressed
 
 
 def install_conservative_observed_runtime(executor) -> None:
@@ -309,8 +414,14 @@ def install_conservative_observed_runtime(executor) -> None:
             except ValueError:
                 return result
 
+            authority = _same_canvas_change_authority(executor.workspace, before.shape[:2])
+            if authority is not None:
+                damaged &= authority
             output = before.copy()
             output[damaged] = result.image[damaged]
+            output, authority, authority_suppressed = _clamp_to_same_canvas_authority(
+                executor.workspace, output, before
+            )
             suppressed = int(np.count_nonzero(np.any(result.image != before, axis=2) & ~damaged))
             provenance = executor.workspace.provenance_map
             if isinstance(provenance, np.ndarray) and provenance.shape == before.shape[:2]:
@@ -321,5 +432,24 @@ def install_conservative_observed_runtime(executor) -> None:
             details["preserve_visible_primary"] = True
             details["suppressed_visible_primary_pixels"] = suppressed
             details["damage_mask_pixels"] = int(np.count_nonzero(damaged))
+            details["same_canvas_change_authority_applied"] = authority is not None
+            details["same_canvas_change_authority_pixels"] = int(np.count_nonzero(authority)) if authority is not None else 0
+            details["same_canvas_authority_suppressed_pixels"] = authority_suppressed
             return ExecutionResult(result.block, output, details)
         executor._handlers[BlockKind.REGION_SELECT] = region_handler
+
+    original_fusion = executor._handlers.get(BlockKind.FUSION)
+    if original_fusion is not None:
+        @wraps(original_fusion)
+        def fusion_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
+            before = executor.workspace.copy_primary()
+            result = original_fusion(block, parameters)
+            output, authority, suppressed = _clamp_to_same_canvas_authority(
+                executor.workspace, result.image, before
+            )
+            details = dict(result.details)
+            details["same_canvas_change_authority_applied"] = authority is not None
+            details["same_canvas_change_authority_pixels"] = int(np.count_nonzero(authority)) if authority is not None else 0
+            details["same_canvas_authority_suppressed_pixels"] = suppressed
+            return ExecutionResult(result.block, output, details)
+        executor._handlers[BlockKind.FUSION] = fusion_handler

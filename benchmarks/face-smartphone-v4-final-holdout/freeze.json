@@ -1,0 +1,32 @@
+{
+  "benchmark_id": "cfs-face-smartphone-v4-final-holdout",
+  "cases_manifest_sha256": "d1afe85c554216e55ab1380b958db8d5a2ccf07af2535cbdeb3803ace1bef5f6",
+  "category_distribution": {
+    "black_paint_scribble": 4,
+    "extreme_low_evidence": 2,
+    "face_blur_censor": 8,
+    "face_mosaic_pixelation": 8,
+    "mixed_smartphone": 4,
+    "natural_facial_occluder": 4,
+    "opaque_graphic_face_occlusion": 10
+  },
+  "consumed_sources_manifest_sha256": {
+    "v1": "1bba20dcd587972b54e3b63d4e250d10e47c46b548eb144c8ae71375bf2c63a0",
+    "v2": "0632ac73640633c7e7a03e8436c16d5ce3e6425b6c80c50c47f2abbf13d68bab",
+    "v3": "9310d78082b6a33bf79d7497f6823443ac922ee15576bf7dc2ec15bf17f9662a"
+  },
+  "contract_sha256": "03c06d34779b1909876786baeda6f53e7f6d66df56dd0d51fc8f5a77eeae7500",
+  "damage_seed_base": 202608170001,
+  "frozen_before_candidate_modification": true,
+  "identity_registry_sha256": "c48b757e52b0457c4b90c828e5d23b3e26ac108e58d134c8a5334f4f81d19323",
+  "mask_hashes_sha256": "30c7307d07dd728b06b9818cd28fc958643cd5b946b83e601f1846dbc483926a",
+  "production_pipeline_changed_by_freeze": false,
+  "reference_assignment_sha256": "85cf5f23fb6c814f2567eb55ffd27b725d0a2a820511312a4f1cd1b9693be67c",
+  "source_hash_registry_sha256": "dab606ccebb6a9b6a785de49c08ab29f07f26b26ffe085532a36a966a30ca77d",
+  "sources_manifest_sha256": "d05a94cb35b19bfbdc15f34387087a635c7a6f43d552696b8a563b256f07d66b",
+  "split": {
+    "final_holdout": 40
+  },
+  "target95_policy": "FROZEN_APPLICABILITY",
+  "version": 1
+}

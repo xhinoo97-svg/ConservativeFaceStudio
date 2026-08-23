@@ -5,7 +5,11 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 
-from app.conservative_observed_runtime import verify_same_canvas_observed_source
+from app.conservative_observed_runtime import (
+    _same_canvas_change_authority,
+    verify_same_canvas_observed_source,
+)
+from app.immutable_input_store import ensure_immutable_input_store
 
 
 def _face() -> np.ndarray:
@@ -131,3 +135,52 @@ def test_unrelated_same_size_reference_is_rejected() -> None:
     workspace = _workspace(clean, unrelated)
 
     assert verify_same_canvas_observed_source(workspace, unrelated, 0) is None
+
+
+def test_exact_canvas_local_motion_blur_is_not_rejected_for_gradient_loss() -> None:
+    clean = _face()
+    primary = clean.copy()
+    damage = np.zeros(clean.shape[:2], dtype=np.uint8)
+    cv2.ellipse(damage, (64, 65), (28, 20), 0, 0, 360, 255, -1)
+    kernel = np.zeros((15, 15), dtype=np.float32)
+    kernel[7, :] = 1.0 / 15.0
+    blurred = cv2.filter2D(clean, -1, kernel)
+    primary[damage > 0] = blurred[damage > 0]
+    workspace = _workspace(primary, clean, damage)
+
+    verified = verify_same_canvas_observed_source(workspace, clean, 0)
+
+    assert verified is not None
+    _, details = verified
+    assert details["phase_consistent"] is True
+    assert abs(details["phase_shift"][0]) <= 1.5
+    assert abs(details["phase_shift"][1]) <= 1.5
+
+
+def test_change_authority_requires_donor_corroboration() -> None:
+    clean = _face()
+    primary = clean.copy()
+    damage = np.zeros(clean.shape[:2], dtype=np.uint8)
+    cv2.rectangle(damage, (48, 48), (80, 82), 255, -1)
+    primary[damage > 0] = (8, 8, 8)
+    globally_degraded = cv2.GaussianBlur(clean, (15, 15), 4.0)
+    workspace = SimpleNamespace(
+        primary=primary.copy(),
+        references=[clean.copy(), clean.copy(), globally_degraded],
+        provenance_map=np.zeros(clean.shape[:2], dtype=np.uint16),
+        metadata={
+            "runtime_source_order": [0, 1, 2, 3],
+            "verified_same_canvas_alignment": [
+                {"runtime_reference_index": 0},
+                {"runtime_reference_index": 1},
+                {"runtime_reference_index": 2},
+            ],
+        },
+    )
+    ensure_immutable_input_store(workspace)
+
+    authority = _same_canvas_change_authority(workspace, clean.shape[:2])
+
+    assert authority is not None
+    assert np.count_nonzero(authority & (damage == 0)) == 0
+    assert np.count_nonzero(authority & (damage > 0)) >= int(np.count_nonzero(damage) * 0.98)

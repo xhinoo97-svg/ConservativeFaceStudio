@@ -58,29 +58,8 @@ class AutomaticPipelineRunner:
         core_paths = workspace.metadata.get("core_model_paths")
         model_paths = core_paths if isinstance(core_paths, dict) else {}
         observed_sources = [workspace.primary.copy(), *[item.copy() for item in workspace.references]]
-
-        if model_paths and not bool(workspace.metadata.get("preflight_completed", False)):
-            try:
-                preflight = preprocess_and_select_front_base(workspace, model_paths)
-                anchor_decision = restore_imported_primary_for_same_canvas(workspace, observed_sources)
-                apply_observed_restoration_policy(workspace, observed_sources)
-                workspace.metadata["preflight_completed"] = True
-                workspace.metadata["preflight_selected_source_index"] = int(preflight.selected_source_index)
-                workspace.metadata["preflight_runtime_primary_source_index"] = int(
-                    workspace.metadata.get("selected_primary_original_source_index", preflight.selected_source_index)
-                )
-                workspace.metadata["preflight_identity_cluster_size"] = int(preflight.identity_cluster_size)
-                workspace.metadata["preflight_reason"] = str(preflight.reason)
-                workspace.metadata["preflight_candidate_count"] = len(preflight.candidates)
-                workspace.metadata["primary_anchor_policy"] = {
-                    "applied": bool(anchor_decision.applied),
-                    "reason": str(anchor_decision.reason),
-                    "matched_reference_count": int(anchor_decision.matched_reference_count),
-                    "original_selected_source_index": int(anchor_decision.original_selected_source_index),
-                }
-            except Exception as exc:
-                workspace.metadata["preflight_completed"] = False
-                workspace.metadata["preflight_error"] = str(exc)
+        self._model_paths = model_paths
+        self._observed_sources = observed_sources
 
         self.executor = StrictBlockExecutor(workspace)
         if model_paths:
@@ -94,12 +73,115 @@ class AutomaticPipelineRunner:
         install_same_canvas_repair_runtime(self.executor)
         install_observed_target_repair_runtime(self.executor)
         self.on_progress: Callable[[int, str], None] | None = None
-        self._original_anchor = workspace.copy_primary()
+        self.on_block_completed: Callable[[int, str, str, np.ndarray, dict[str, Any]], None] | None = None
+        self._original_anchor = observed_sources[0].copy()
+
+    def _run_preflight_after_import(self) -> None:
+        """Run analysis/restoration only after Block 01 has recorded immutable MAIN."""
+        workspace = self.executor.workspace
+        if not self._model_paths or bool(workspace.metadata.get("preflight_completed", False)):
+            return
+        before = workspace.copy_primary()
+        try:
+            preflight = preprocess_and_select_front_base(workspace, self._model_paths)
+            anchor_decision = restore_imported_primary_for_same_canvas(workspace, self._observed_sources)
+            apply_observed_restoration_policy(workspace, self._observed_sources)
+            changed = np.any(workspace.primary != before, axis=2)
+            workspace.metadata["preflight_completed"] = True
+            workspace.metadata["preflight_main_changed_pixels"] = int(np.count_nonzero(changed))
+            workspace.metadata["preflight_main_mae"] = float(
+                np.mean(np.abs(workspace.primary.astype(np.int16) - before.astype(np.int16)))
+            )
+            workspace.metadata["preflight_selected_source_index"] = int(preflight.selected_source_index)
+            workspace.metadata["preflight_runtime_primary_source_index"] = int(
+                workspace.metadata.get("selected_primary_original_source_index", preflight.selected_source_index)
+            )
+            workspace.metadata["preflight_identity_cluster_size"] = int(preflight.identity_cluster_size)
+            workspace.metadata["preflight_reason"] = str(preflight.reason)
+            workspace.metadata["preflight_candidate_count"] = len(preflight.candidates)
+            workspace.metadata["primary_anchor_policy"] = {
+                "applied": bool(anchor_decision.applied),
+                "reason": str(anchor_decision.reason),
+                "matched_reference_count": int(anchor_decision.matched_reference_count),
+                "original_selected_source_index": int(anchor_decision.original_selected_source_index),
+            }
+        except Exception as exc:
+            workspace.primary = before
+            workspace.metadata["preflight_completed"] = False
+            workspace.metadata["preflight_error"] = str(exc)
 
     def _emit_progress(self, index: int, name: str) -> None:
         callback = self.on_progress
         if callback is not None:
             callback(int(index), str(name))
+
+    def _emit_block_completed(self, index: int, block, result: ExecutionResult) -> None:
+        callback = self.on_block_completed
+        if callback is None:
+            return
+        status = str(result.details.get("status", ""))
+        if status not in {"PASS", "ROLLBACK", "ABSTAIN", "SKIPPED", "UNRESOLVED"}:
+            status = "ROLLBACK" if result.details.get("rolled_back") else ("SKIPPED" if result.details.get("skipped") else "PASS")
+        callback(int(index), str(block.title), status, result.image.copy(), dict(result.details))
+
+    def _record_final_identity_rollback(self, block, reason: str) -> ExecutionResult:
+        """Fail closed to immutable MAIN without reporting rejection as a crash."""
+        workspace = self.executor.workspace
+        rejected = workspace.copy_primary()
+        restored = self._original_anchor.copy()
+        changed = (
+            np.any(rejected != restored, axis=2)
+            if rejected.shape == restored.shape
+            else np.ones(restored.shape[:2], dtype=bool)
+        )
+        unresolved = self._binary_mask(
+            workspace.metadata.get("inpaint_unresolved_mask"), restored.shape[:2]
+        )
+        unresolved |= changed
+
+        workspace.primary = restored.copy()
+        workspace.provenance_map = np.zeros(restored.shape[:2], dtype=np.uint16)
+        workspace.metadata["inpaint_unresolved_mask"] = np.where(
+            unresolved, 255, 0
+        ).astype(np.uint8)
+        workspace.metadata.update({
+            "runtime_success": True,
+            "identity_safe": True,
+            "restoration_effective": False,
+            "abstained": False,
+            "unresolved": bool(np.any(unresolved)),
+            "hard_guardrail_pass": True,
+            "final_identity_status": "ROLLBACK",
+            "final_identity_failure_reason": str(reason),
+            "identity_fail_closed_source": "IMMUTABLE_MAIN",
+            "zero_recovery_is_restoration_pass": False,
+        })
+        self.executor.history.restore_discarding_later(restored, "identity-rollback")
+
+        result = self.executor.record_skipped(block, str(reason))
+        details = dict(result.details)
+        details.update({
+            "status": "ROLLBACK",
+            "skipped": False,
+            "rolled_back": True,
+            "runtime_success": True,
+            "identity_safe": True,
+            "restoration_effective": False,
+            "abstained": False,
+            "unresolved": bool(np.any(unresolved)),
+            "hard_guardrail_pass": True,
+            "rollback_source": "IMMUTABLE_MAIN",
+            "rollback_reason": str(reason),
+            "rejected_candidate_changed_pixels": int(np.count_nonzero(changed)),
+            "unresolved_pixels": int(np.count_nonzero(unresolved)),
+            "wrong_person_final_pixels": 0,
+            "zero_recovery_is_restoration_pass": False,
+        })
+        replacement = self.executor.block_artifacts.replace_last(restored, details)
+        details["snapshot_sha256"] = replacement.sha256
+        if self.executor.project.operations:
+            self.executor.project.operations[-1].parameters.update(details)
+        return ExecutionResult(block.key, restored, details)
 
     @staticmethod
     def _binary_mask(value: Any, shape: tuple[int, int]) -> np.ndarray:
@@ -318,6 +400,25 @@ class AutomaticPipelineRunner:
         if block.kind in {BlockKind.IMPORT, BlockKind.EXPORT, BlockKind.IDENTITY_CHECK}:
             return result
 
+        if block.kind is BlockKind.UPSCALE:
+            scale = int(result.details.get("scale", 1))
+            expected_shape = (before.shape[0] * scale, before.shape[1] * scale)
+            geometry_valid = scale >= 1 and result.image.shape[:2] == expected_shape
+            details = dict(result.details)
+            details["identity_guardrail"] = {
+                "accepted": bool(geometry_valid),
+                "engine": "deterministic-transform-consistency",
+                "reason": "accepted deterministic scale transform" if geometry_valid else "invalid deterministic scale geometry",
+                "scale": scale,
+                "source_dimensions": [int(before.shape[1]), int(before.shape[0])],
+                "target_dimensions": [int(result.image.shape[1]), int(result.image.shape[0])],
+            }
+            if geometry_valid:
+                if self.executor.project.operations:
+                    self.executor.project.operations[-1].parameters["identity_guardrail"] = details["identity_guardrail"]
+                return ExecutionResult(result.block, result.image, details)
+            raise BlockExecutionError("Upscale deterministico con geometria incoerente")
+
         trusted_observed, observed_details = self._trusted_observed_reference_change(block, before, result.image)
         if trusted_observed:
             decision = GuardrailDecision(
@@ -392,10 +493,13 @@ class AutomaticPipelineRunner:
         blocks = self.executor.pipeline.blocks
         results: list[ExecutionResult] = []
         for index, block in enumerate(blocks, start=1):
+            if block.kind is BlockKind.DEBLUR:
+                self._run_preflight_after_import()
             self._emit_progress(index - 1, f"Avvio: {block.title}")
             if block.kind is BlockKind.EXPORT:
                 result = self.executor.execute(block, path=output_path, blocks_zip=output_path.with_suffix(output_path.suffix + ".blocks.zip"))
                 results.append(result)
+                self._emit_block_completed(index, block, result)
                 self._emit_progress(index, block.title)
                 provenance = result.details.get("provenance_path")
                 return AutomaticRunResult(Path(result.details["path"]), Path(provenance) if provenance else None, Path(result.details["blocks_zip"]), tuple(results))
@@ -420,7 +524,9 @@ class AutomaticPipelineRunner:
 
             reason = self._skip_reason(block.kind)
             if reason is not None:
-                results.append(self.executor.record_skipped(block, reason))
+                skipped = self.executor.record_skipped(block, reason)
+                results.append(skipped)
+                self._emit_block_completed(index, block, skipped)
                 self._emit_progress(index, f"{block.title} — saltato")
                 continue
 
@@ -430,14 +536,25 @@ class AutomaticPipelineRunner:
                 raw = self.executor.execute(block, **parameters)
                 result = self._apply_guardrail(block, before, raw, state_before)
                 results.append(result)
+                self._emit_block_completed(index, block, result)
                 self._emit_progress(index, block.title + (" — rollback" if result.details.get("rolled_back") else ""))
             except BlockExecutionError as exc:
-                if block.kind in {BlockKind.IMPORT, BlockKind.IDENTITY_CHECK}:
+                if block.kind is BlockKind.IMPORT:
                     raise
-                results.append(self.executor.record_skipped(block, str(exc)))
+                if block.kind is BlockKind.IDENTITY_CHECK:
+                    result = self._record_final_identity_rollback(block, str(exc))
+                    results.append(result)
+                    self._emit_block_completed(index, block, result)
+                    self._emit_progress(index, f"{block.title} — rollback")
+                    continue
+                skipped = self.executor.record_skipped(block, str(exc))
+                results.append(skipped)
+                self._emit_block_completed(index, block, skipped)
                 self._emit_progress(index, f"{block.title} — saltato")
             except ValueError as exc:
-                results.append(self.executor.record_skipped(block, str(exc)))
+                skipped = self.executor.record_skipped(block, str(exc))
+                results.append(skipped)
+                self._emit_block_completed(index, block, skipped)
                 self._emit_progress(index, f"{block.title} — saltato")
         raise RuntimeError("Pipeline terminata senza blocco export")
 
