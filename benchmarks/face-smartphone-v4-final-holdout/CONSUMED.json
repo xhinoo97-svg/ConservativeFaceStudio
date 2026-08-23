@@ -1,0 +1,16 @@
+{
+  "benchmark_id": "cfs-face-smartphone-v4-final-holdout",
+  "candidate_commit_sha": "b6ce7ebde87d4ce84e5849664716dc3e822ad762",
+  "candidate_freeze_sha256": "43d9b8040ec36bfe35ef44a735da559d36724d191139da002ef5144c8484c6ad",
+  "candidate_id": "face-domain-guard-v4",
+  "execution_nonce": "b393b13620294fecb4b6df477ee5dd31923587a5e17ec58f9f7eacb2678dee5e",
+  "female_domain_report_sha256": "a3083eb80214265224451d8efd07e4ff83ba801494d2bb948595f8f730793d0f",
+  "female_domain_run_id": "32650745340",
+  "request_commit_sha": "d847798efda95890febb1bf9ae5c9832727ccb43",
+  "schema_version": 3,
+  "state": "STARTED",
+  "windows_product_run_id": "32650745364",
+  "windows_validation_summary_sha256": "c123e8923ea350704758e8d6b1dbd096045a056122bd55cc8d7d83de582dceed",
+  "workflow_run_attempt": "1",
+  "workflow_run_id": "32656139686"
+}
