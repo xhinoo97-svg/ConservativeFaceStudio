@@ -54,17 +54,28 @@ Status: **BENCHMARKING**.
 
 Status: **BENCHMARKING / current JPEG leader**.
 
+Recovered authoritative evidence:
+
+- workflow: `Research FBCNN JPEG specialist vertical slice` run `32304605507`, success;
+- exact CFS commit: `6ea5d113a1400da97864fcb43c69c53f789605ea`;
+- artifact: `9384276352`, `fbcnn-color-q20-upstream-adapter-3`;
+- artifact archive SHA-256: `da38fb6d925c1f7011bebc1929c17153ffc612f092c7cf048535fbb631a1514c`;
+- official upstream commit: `54d1831927506b3247e2d4d245abb4f4dab1a1cd`;
+- official checkpoint SHA-256: `8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8`;
+- code/checkpoint license recorded from official upstream: Apache-2.0.
+
 Real CPU JPEG QF=20 DEVELOPMENT evidence:
 
-- PSNR `34.62 -> 36.78 dB`.
-- SSIM `0.9486 -> 0.9634`.
-- SFace `0.9571 -> 0.9691`.
-- peak RSS about `1.305 GB`.
+- PSNR `34.6184 -> 36.7801 dB`.
+- SSIM `0.948646 -> 0.963414`.
+- SFace `0.957095 -> 0.969138`.
+- measured 512 inference after warm-up: `9.0507 s`.
+- peak inference RSS: `1226.25 MiB`.
 - needs double-JPEG, social recompression, broader validation, Windows and EliteBook qualification.
 
 ## Phase 8 — DamageMaskNet
 
-Status: **IMPLEMENTED VERTICAL-SLICE PIPELINE; TRAINING RESULT NOT_VERIFIED**.
+Status: **U-NET HYPOTHESIS STOPPED — MODEL/DATA QUALITY FAIL**.
 
 Implemented:
 
@@ -83,9 +94,27 @@ Attempt history:
 
 1. Wikimedia acquisition stopped by HTTP 403 before training.
 2. HTTP-compatible downloader verified four sources, then Wikimedia stopped by HTTP 429 before training.
-3. acquisition switched to the mixed FairFace + ControlFace source bank without changing U-Net hyperparameters; current training/run result cannot be read from the available Actions interface and is therefore **NOT_VERIFIED**, not PASS or FAIL.
+3. acquisition switched to the mixed FairFace + ControlFace source bank without changing U-Net hyperparameters. The evidence has now been recovered and verified from GitHub Actions run `32087249287` at exact CFS commit `08df3163f317fe6a16571337178168d9845a749c`.
 
-Do not launch a fourth U-Net training attempt merely to recover observability. If third-attempt evidence is eventually confirmed as a model/data failure, stop this U-Net hypothesis and reassess architecture as required by the three-attempt policy.
+Attempt 3 evidence:
+
+- workflow conclusion: success; training, export and evidence-contract steps all completed;
+- artifact: `9307331508`, `damage-mask-net-unet-mixed-dev-3`;
+- artifact archive SHA-256: `e3b7aa05bcfdc9d48a803595218727f84bc255a4095caab84239c1850f7b52b8`;
+- checkpoint SHA-256: `e3b05272782aded20f209ddd39a3ac847cf4f3a90e5e3f02b63cae90474e2b7d`;
+- ONNX SHA-256: `64e032d8693edc55d69a0a77d8665034d4edbeff43a93b6a622c4639a0d018c7`;
+- train/validation identity separation: verified; final holdout used: false;
+- source bank: 22 train identities, 2 identity-disjoint validation identities, 1452 train samples and 66 validation samples;
+- ONNX argmax parity: exact; maximum absolute logit difference `5.2452e-6`;
+- first-call ONNX Runtime CPU inference: `0.01282 s` per aligned face;
+- process RSS: `824745984` bytes under the 80% resource contract;
+- validation damage macro-F1: `0.173198`;
+- validation damage macro-IoU: `0.113028`;
+- F1 was zero for `BLUR`, `MOTION_BLUR`, `PIXELATION`, `BLOCK_MOSAIC`, `JPEG_ARTIFACT` and `STICKER`.
+
+Classification: **MODEL/DATA QUALITY FAIL**. Infrastructure, checkpoint creation, loader, ONNX export and inference are verified, but the produced mask is not accurate enough to authorize restoration. Under the three-attempt policy, the small U-Net hypothesis is stopped. Do not tune or rerun it.
+
+Two later historical Actions runs (`32087329763` and `32088670503`) already existed when this audit began because subsequent path-triggering commits caused the workflow to execute again. This audit did not launch them and does not use them to reinterpret or tune attempt 3.
 
 ## Phase 9 — Personalized Reference Bank
 
@@ -191,7 +220,7 @@ CFS prepared vertical slice:
 - records observed checkpoint hashes, RAM, timing and identity evidence;
 - enforces the 80% total-PC budget.
 
-RefFace must remain NOT_RUN until the preceding DamageMaskNet gate state is recoverable/verified. Do not run RestoreFormer++, VQFR or GPEN-inpainting before RefFace is either measured or formally stopped/reassessed.
+RefFace remains **NOT_RUN**. DamageMaskNet attempt 3 is now verified, but its mask failed the model/data quality gate. RefFace cannot execute until a replacement damage-localization architecture produces an adequate DEVELOPMENT mask. Do not run RestoreFormer++, VQFR or GPEN-inpainting before that prerequisite is satisfied or the routing contract is formally redesigned and independently validated.
 
 ## Specialist feasibility notes
 
@@ -218,9 +247,4 @@ PROJECT_FINISHED: **FALSE**.
 
 ## Exact next blocker
 
-Recover/verify the already-triggered third DamageMaskNet mixed-source run **without rerunning/tuning it**. Then:
-
-- if PASS: read IoU/F1 per damage class + ONNX parity + resource evidence, decide whether to retain the lightweight U-Net and scale the DEVELOPMENT/VALIDATION bank;
-- if FAIL due acquisition/infrastructure only: report and correct infrastructure without changing data/model hypothesis;
-- if FAIL due model/data quality: three attempts are consumed for the U-Net hypothesis; stop and benchmark the next lightweight segmentation architecture instead;
-- only after that gate is resolved, execute RefFaceInpainting CPU vertical slice attempt 1/3.
+Benchmark the next lightweight damage-localization architecture on the same DEVELOPMENT source-bank contract without changing acceptance semantics. The stopped small U-Net is not a tuning baseline. RefFaceInpainting remains gated until the replacement demonstrates adequate per-class mask quality, identity-disjoint validation, real checkpoint and hashes, reproducible CPU inference and ONNX parity.
