@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "cfs-face-smartphone-v4-final-holdout",
+  "candidate_id": "face-domain-guard-v4",
+  "candidate_commit_sha": "b6ce7ebde87d4ce84e5849664716dc3e822ad762",
+  "requested_action": "execute_once"
+}
