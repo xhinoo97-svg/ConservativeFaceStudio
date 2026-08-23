@@ -116,6 +116,8 @@ Classification: **MODEL/DATA QUALITY FAIL**. Infrastructure, checkpoint creation
 
 Two later historical Actions runs (`32087329763` and `32088670503`) already existed when this audit began because subsequent path-triggering commits caused the workflow to execute again. This audit did not launch them and does not use them to reinterpret or tune attempt 3.
 
+Replacement comparison prepared: official torchvision LR-ASPP with MobileNetV3-Large backbone, source `pytorch/vision@c6f39778e636ec40a69bdbc74386818c57a65af3` (`v0.16.2`). The thin adapter verifies the official backbone checkpoint at SHA-256 `8738ca797c879b547d18bbd15da5736ff2557b2036a9af72225393ca61759a04`, trains only on the unchanged DEVELOPMENT source-bank contract and exports a full offline-loadable checkpoint plus ONNX. Its adequacy gate was frozen before execution at damage macro-F1 `>=0.70`, macro-IoU `>=0.55` and every damage-class F1 `>=0.35`. Code license is BSD-3-Clause; upstream does not provide an explicit redistribution license for the checkpoint, so this comparison remains research-only even if the DEV quality gate passes. Result: **PENDING/NOT_VERIFIED**.
+
 ## Phase 9 — Personalized Reference Bank
 
 Status: **IMPLEMENTED; latest workflow result NOT_VERIFIED**.
@@ -247,4 +249,4 @@ PROJECT_FINISHED: **FALSE**.
 
 ## Exact next blocker
 
-Benchmark the next lightweight damage-localization architecture on the same DEVELOPMENT source-bank contract without changing acceptance semantics. The stopped small U-Net is not a tuning baseline. RefFaceInpainting remains gated until the replacement demonstrates adequate per-class mask quality, identity-disjoint validation, real checkpoint and hashes, reproducible CPU inference and ONNX parity.
+Execute and inspect the prepared LR-ASPP comparison on the unchanged DEVELOPMENT source-bank contract. The stopped small U-Net is not a tuning baseline. RefFaceInpainting remains gated until the replacement demonstrates adequate per-class mask quality, broader identity-disjoint validation, real checkpoint and hashes, reproducible CPU inference, ONNX parity and compatible checkpoint licensing.

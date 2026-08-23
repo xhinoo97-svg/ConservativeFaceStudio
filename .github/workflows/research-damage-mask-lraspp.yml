@@ -1,0 +1,236 @@
+name: Research DamageMask LRASPP comparison
+
+on:
+  push:
+    branches:
+      - research/paper-quality-local-v2
+    paths:
+      - research/damage_mask_lraspp_contract.py
+      - research/damage_mask_lraspp.py
+      - research/train_damage_mask_lraspp.py
+      - tests/test_damage_mask_lraspp_contract.py
+      - .github/workflows/research-damage-mask-lraspp.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-damage-mask-lraspp-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  train-export-evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/research
+      VISION_REVISION: c6f39778e636ec40a69bdbc74386818c57a65af3
+      BACKBONE_SHA256: 8738ca797c879b547d18bbd15da5736ff2557b2036a9af72225393ca61759a04
+
+    steps:
+      - name: Checkout exact Track B commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install isolated CPU research runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'torch==2.1.2+cpu' \
+            'torchvision==0.16.2+cpu' \
+            --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install \
+            'pytest>=8,<9' \
+            'numpy>=1.26,<2' \
+            'opencv-python>=4.10,<5' \
+            'onnx>=1.16,<2' \
+            'onnxruntime>=1.20,<2' \
+            'psutil>=5.9,<8' \
+            'Pillow>=10,<12' \
+            'gdown==5.2.0' \
+            'remotezip==0.12.3' \
+            'requests>=2.32,<3' \
+            'packaging>=24,<27'
+          python - <<'PY'
+          import torch, torchvision
+          assert torch.__version__ == '2.1.2+cpu'
+          assert torchvision.__version__ == '0.16.2+cpu'
+          assert not torch.cuda.is_available()
+          print({'torch': torch.__version__, 'torchvision': torchvision.__version__, 'cuda': False})
+          PY
+
+      - name: Freeze and verify official torchvision source
+        run: |
+          set -euo pipefail
+          rm -rf .research/torchvision-v0.16.2
+          git init .research/torchvision-v0.16.2
+          git -C .research/torchvision-v0.16.2 remote add origin https://github.com/pytorch/vision.git
+          git -C .research/torchvision-v0.16.2 fetch --depth=1 origin "$VISION_REVISION"
+          git -C .research/torchvision-v0.16.2 checkout --detach FETCH_HEAD
+          test "$(git -C .research/torchvision-v0.16.2 rev-parse HEAD)" = "$VISION_REVISION"
+          test "$(sha256sum .research/torchvision-v0.16.2/LICENSE | awk '{print $1}')" = \
+            '6502f676851cfe25f8af75531dfb32375b7325b73c37e7b43741fa422893e71d'
+          python - <<'PY'
+          import inspect
+          from pathlib import Path
+          import torchvision.models.mobilenetv3 as mobilenet
+          import torchvision.models.segmentation.lraspp as lraspp
+
+          upstream = Path('.research/torchvision-v0.16.2')
+          pairs = [
+              (Path(inspect.getfile(lraspp)), upstream / 'torchvision/models/segmentation/lraspp.py'),
+              (Path(inspect.getfile(mobilenet)), upstream / 'torchvision/models/mobilenetv3.py'),
+          ]
+          for installed, source in pairs:
+              assert installed.read_bytes() == source.read_bytes(), (installed, source)
+              print({'installed_source': str(installed), 'upstream_source': str(source), 'exact': True})
+          PY
+
+      - name: Acquire and hash official MobileNetV3 backbone
+        run: |
+          set -euo pipefail
+          mkdir -p .research/checkpoints
+          curl -fL --retry 3 \
+            -o .research/checkpoints/mobilenet_v3_large-8738ca79.pth \
+            https://download.pytorch.org/models/mobilenet_v3_large-8738ca79.pth
+          test "$(stat -c '%s' .research/checkpoints/mobilenet_v3_large-8738ca79.pth)" = '22139423'
+          test "$(sha256sum .research/checkpoints/mobilenet_v3_large-8738ca79.pth | awk '{print $1}')" = \
+            "$BACKBONE_SHA256"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = {
+              'repository': 'https://github.com/pytorch/vision.git',
+              'revision': 'c6f39778e636ec40a69bdbc74386818c57a65af3',
+              'tag': 'v0.16.2',
+              'code_license': 'BSD-3-Clause',
+              'checkpoint': 'mobilenet_v3_large-8738ca79.pth',
+              'checkpoint_sha256': '8738ca797c879b547d18bbd15da5736ff2557b2036a9af72225393ca61759a04',
+              'checkpoint_bytes': 22139423,
+              'checkpoint_license': 'NOT_EXPLICIT_UPSTREAM_RESEARCH_ONLY',
+              'production_redistribution_qualified': False,
+          }
+          Path('.research/lraspp-upstream.json').write_text(json.dumps(payload, indent=2, sort_keys=True))
+          PY
+
+      - name: Verify frozen adapter contract and real loader
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests/test_damage_mask_lraspp_contract.py
+          python - <<'PY'
+          from pathlib import Path
+          import torch
+          from app.damage_taxonomy import DAMAGE_CLASSES
+          from damage_mask_lraspp import LRASPPDamageModel
+
+          model = LRASPPDamageModel(
+              classes=len(DAMAGE_CLASSES),
+              backbone_checkpoint=Path('.research/checkpoints/mobilenet_v3_large-8738ca79.pth'),
+          ).eval()
+          with torch.inference_mode():
+              logits = model(torch.zeros(1, 3, 192, 192))
+          assert tuple(logits.shape) == (1, len(DAMAGE_CLASSES), 192, 192)
+          assert model.loaded_backbone_tensor_count == 308
+          print({'shape': list(logits.shape), 'loaded_backbone_tensors': 308})
+          PY
+
+      - name: Build unchanged mixed open-source development source bank
+        run: |
+          set -euo pipefail
+          rm -rf .research/damage-mask-lraspp-sources
+          mkdir -p .research/damage-mask-lraspp-sources
+          python research/build_damage_source_bank.py \
+            --output-dir .research/damage-mask-lraspp-sources \
+            --manifest .research/damage-mask-lraspp-source-bank.json \
+            --fairface-count 8
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('.research/damage-mask-lraspp-source-bank.json').read_text())
+          assert manifest['final_holdout_used'] is False
+          assert manifest['identity_disjoint_validation'] is True
+          assert manifest['counts'] == {
+              'real_train': 8,
+              'synthetic_train': 14,
+              'validation': 2,
+              'total': 24,
+          }
+          print(json.dumps(manifest['counts'], sort_keys=True))
+          PY
+
+      - name: Train official LRASPP comparison and export ONNX
+        run: |
+          set -euo pipefail
+          python research/train_damage_mask_lraspp.py \
+            --manifest .research/damage-mask-lraspp-source-bank.json \
+            --source-dir .research/damage-mask-lraspp-sources \
+            --backbone-checkpoint .research/checkpoints/mobilenet_v3_large-8738ca79.pth \
+            --output research-results/damage-mask-lraspp-v1 \
+            --face-size 192 \
+            --epochs 8 \
+            --batch-size 8 \
+            --train-repetitions 6 \
+            --val-repetitions 3 \
+            --seed 240823
+          python research/finalize_damage_mask_report.py \
+            --report research-results/damage-mask-lraspp-v1/report.json \
+            --manifest .research/damage-mask-lraspp-source-bank.json
+
+      - name: Verify evidence without reinterpreting the quality gate
+        run: |
+          set -euo pipefail
+          test -s research-results/damage-mask-lraspp-v1/report.json
+          test -s research-results/damage-mask-lraspp-v1/damage_mask_lraspp_dev.pth
+          test -s research-results/damage-mask-lraspp-v1/damage_mask_lraspp_dev.onnx
+          test -s research-results/damage-mask-lraspp-v1/validation_example.png
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path('research-results/damage-mask-lraspp-v1')
+          report = json.loads((root / 'report.json').read_text())
+          sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+          assert report['data']['identity_disjoint'] is True
+          assert report['data']['final_holdout_used'] is False
+          assert report['production_qualified'] is False
+          assert report['upstream']['revision'] == 'c6f39778e636ec40a69bdbc74386818c57a65af3'
+          assert report['upstream']['backbone_sha256'] == '8738ca797c879b547d18bbd15da5736ff2557b2036a9af72225393ca61759a04'
+          assert report['upstream']['redistribution_qualified'] is False
+          assert report['validation']['development_gate']['thresholds_frozen_before_run'] is True
+          assert report['onnx_parity']['passed'] is True
+          assert report['runtime']['network_required_after_artifact_acquisition'] is False
+          assert report['safety']['wrong_person_final_pixels'] == 0
+          assert report['safety']['provenance_violations'] == 0
+          assert report['safety']['refface_execution_authorized'] is False
+          assert report['artifacts']['checkpoint_sha256'] == sha(root / report['artifacts']['checkpoint'])
+          assert report['artifacts']['onnx_sha256'] == sha(root / report['artifacts']['onnx'])
+          print(json.dumps({
+              'disposition': report['disposition'],
+              'damage_macro_f1': report['validation']['damage_macro_f1'],
+              'damage_macro_iou': report['validation']['damage_macro_iou'],
+              'minimum_damage_class_f1': report['validation']['minimum_damage_class_f1'],
+              'development_gate_pass': report['validation']['development_gate']['passed'],
+              'checkpoint_sha256': report['artifacts']['checkpoint_sha256'],
+              'onnx_sha256': report['artifacts']['onnx_sha256'],
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload LRASPP development evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: damage-mask-lraspp-dev-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            research-results/damage-mask-lraspp-v1/**
+            .research/damage-mask-lraspp-source-bank.json
+            .research/lraspp-upstream.json
