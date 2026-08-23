@@ -6,20 +6,20 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` operational hotfix; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `hotfix/real-world-restoration-v1.1` for Track A; `research/paper-quality-local-v2` for isolated Track B research.
-- CURRENT TECHNICAL HEAD: Track A `5240eaecb8943244f5bf7276a0905489d261318b`; Track B `1591fa3cebaa44a3ef80a6a2178ed85fd1ae2d66`.
-- CURRENT PHASE: Track A failure classification and operational recovery; Track B benchmark/research infrastructure.
+- CURRENT TECHNICAL HEAD: Track A `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; Track B `1591fa3cebaa44a3ef80a6a2178ed85fd1ae2d66`.
+- CURRENT PHASE: Track A same-HEAD CI validation after operational rollback fix; Track B benchmark/research infrastructure.
 - CURRENT MAIN OBJECTIVE: eliminate runtime-error outcomes without weakening identity, provenance or holdout safety.
-- WHAT WAS JUST COMPLETED: exact GitHub reconciliation of PR #2, all remote branches, same-HEAD Actions #1316/#133/#583 and the current Paper Quality branch.
-- WHAT IS BEING WORKED ON: convert unsupported/no-biometric-evidence restoration paths into explicit conservative rollback or predeclared abstention outcomes instead of exceptions.
-- WHAT IS BLOCKING PROGRESS: Track A Windows practical benchmark has 70 runtime errors and Female-domain #583 has 122; Release Quality #133 therefore cannot restore the same-HEAD Windows model pack. Track B DamageMaskNet attempt 3 remains evidence-unrecoverable from the available Actions index and must not be rerun merely for observability.
+- WHAT WAS JUST COMPLETED: pushed the structured immutable-MAIN identity rollback fix; local targeted tests `33/33 PASS`, full pytest `547/547 PASS`, exact local/remote tree `51369b538b20c6f58853f59afa3b0fd43dc07919`.
+- WHAT IS BEING WORKED ON: exact-HEAD Windows #1317, Release Quality #134 and Female-domain #584 are running on `b6ce7ebd...`.
+- WHAT IS BLOCKING PROGRESS: Track A awaits those three exact-HEAD workflow results. Track B DamageMaskNet attempt 3 remains evidence-unrecoverable from the available Actions index and must not be rerun merely for observability.
 - WHAT MODEL IS CURRENTLY BEING TESTED: Track A uses the certified local YuNet/SFace/NAFNet/parser/pose/LaMa pack; Track B's newest measured candidate integration is the official pinned FBCNN adapter, still `NOT_VERIFIED` for its new workflow.
 - WHY THAT MODEL: SFace is the frozen identity authority; FBCNN is the current DEV JPEG specialist leader and is isolated from V1.1.
 - CURRENT BEST MODEL PER DAMAGE TYPE: mild blur/denoise NAFNet; JPEG FBCNN in DEV only; severe blind face GPEN in DEV identity evidence; opaque/reference-supported loss observed same-person component transfer; unqualified classes preserve MAIN/rollback/abstain.
 - CURRENT QUALITY RESULT: Female #583 Target95 report-only `22/182`; quality target not achieved.
 - CURRENT SAFETY RESULT: targeted identity/source/provenance suite PASS and full pytest `546/546` on Release #133 before the external prerequisite failure; SFace `0.363`, wrong-person `0` and provenance rules unchanged. End-to-end runtime gate FAIL.
-- CURRENT WINDOWS STATUS: #1316 FAIL at practical public-portrait benchmark; installer/build steps did not run.
+- CURRENT WINDOWS STATUS: #1317 `IN_PROGRESS`; previous #1316 failed at the practical public-portrait benchmark.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: implement and test structured fail-closed rollback/abstention for no-anchor/no-real-SFace cases on current Track A without treating proxy evidence as identity authority; do not execute V3 or V4.
+- NEXT EXACT STEP: inspect #1317/#134/#584 when complete; classify exact failures if any. Do not execute V3 or V4.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on independent release, research, personalized-reference, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `72%` (runtime outcome handling, same-HEAD CI, installer and target-PC acceptance remain); Paper Quality V2 `38%` (DamageMaskNet evidence, specialist validation, broader identity-disjoint evaluation, Windows/offline pack remain); personalized restoration `35%` (prototype authority/routing exists, scientific validation and target-PC qualification remain); Windows productization `62%` (V1 historical package exists, V1.1 same-HEAD package and physical EliteBook acceptance remain); overall `43%` (unified PRODUCT_V5 and independent quality/target-hardware evidence remain).
@@ -31,10 +31,10 @@ Completion estimates: V1.1 operational `72%` (runtime outcome handling, same-HEA
 - Canonical state branch: `meta/project-state`
 - Certified base: `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`
 - Last Track A branch: `hotfix/real-world-restoration-v1.1`
-- Track A current HEAD: `5240eaecb8943244f5bf7276a0905489d261318b`
+- Track A current HEAD: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@1591fa3cebaa44a3ef80a6a2178ed85fd1ae2d66`
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #132 at `60b79658...`.
-- Current Track A gate: exact-head Windows #1316, Release Quality #133 and Female-domain #583 on `5240eaec...` are all **FAIL**. Windows stopped at the practical benchmark with 70 runtime errors. Female executed 380 cases with 122 runtime errors and Target95 report-only `22/182`. Release Quality passed V3/V4 verification, the targeted suite and full pytest `546/546`, then failed because the exact-head Windows prerequisite failed. SFace `0.363`, face-local identity, provenance, models and holdouts are unchanged. V4 is not authorized to run.
+- Current Track A gate: exact-head Windows #1317, Release Quality #134 and Female-domain #584 on `b6ce7ebd...` are **IN_PROGRESS**. Previous failures #1316/#133/#583 remain historical evidence. SFace `0.363`, face-local identity, provenance, models and holdouts are unchanged. V4 is not authorized to run.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
 - Current Track B FBCNN state: official source pinned; thin upstream adapter and fail-closed tests committed; real CPU upstream-adapter workflow wired. New adapter/workflow evidence is **NOT_VERIFIED** until the corresponding Actions run completes and its artifact is inspected.
 - Current Track B blocker retained: recover already-triggered DamageMaskNet attempt-3 evidence without rerun for observability. Upstream qualification proceeds independently and does not alter V1.1.
@@ -69,7 +69,7 @@ Paper Quality does not reimplement a published architecture when an official exe
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
-| `hotfix/real-world-restoration-v1.1` | Track A | `5240eaec...` | BLOCKED / ACTIVE | PR #2 OPEN/DRAFT/MERGEABLE; Windows #1316, Release #133, Female #583 FAIL | remove runtime-error outcomes without weakening safety; never run V4 early |
+| `hotfix/real-world-restoration-v1.1` | Track A | `b6ce7ebd...` | VALIDATING / ACTIVE | PR #2 OPEN/DRAFT; Windows #1317, Release #134, Female #584 in progress | inspect exact-head results; never run V4 early |
 | `research/face-restoration-v2` | early data/degradation research | `757a3f60...` | SUPERSEDED AS ACTIVE ARCHITECTURE | not merged | preserve useful assets |
 | `research/paper-quality-local-v2` | advanced Track B | `1591fa3c...` | ACTIVE / BENCHMARKING | FBCNN upstream adapter plus six commits of per-block progress/timeline/ETA telemetry; no workflow run indexed on the latest HEAD | recover existing DamageMaskNet attempt-3 evidence; keep FBCNN evidence NOT_VERIFIED |
 | `meta/project-state` | canonical ledger | self-SHA omitted | ACTIVE META | docs only | update after every meaningful technical push |
@@ -228,9 +228,9 @@ Previous safety architecture established immutable MAIN, direct/non-transitive S
 
 At `60b796581feb7a9c6fecd3a20a95759da4e48aa5`, Release Quality #132: V3 verification-only PASS; V4 freeze + pinned blob/origin verification PASS; targeted identity/source/provenance `108/108 PASS`; full pytest `545 passed, 1 failed`. The sole failure was a legacy test whose stated purpose is immutable IMPORT ordering but which ran the full pipeline into the V4 biometric firewall.
 
-Current exact technical HEAD `5240eaecb8943244f5bf7276a0905489d261318b`: only `tests/test_automatic.py` changed from `60b...`, scoping `test_preflight_cannot_mutate_true_import_snapshot` to `IMPORT -> preflight` ordering. Production code, SFace threshold, V4 manifests and holdout protocol were not changed. Exact-head Windows #1316, Release Quality #133 and Female #583 all completed FAIL.
+Current exact technical HEAD `b6ce7ebde87d4ce84e5849664716dc3e822ad762`: automatic product-boundary identity failures now restore immutable MAIN, reset donor provenance, discard later unsafe history, record `ROLLBACK/UNRESOLVED`, prevent zero recovery from counting as a restoration pass, and continue export. The identity handler still rejects missing, proxy, malformed and below-threshold evidence. Local targeted tests `33/33 PASS`; full pytest `547/547 PASS`; local and remote tree SHA are both `51369b538b20c6f58853f59afa3b0fd43dc07919`. Exact-head #1317/#134/#584 are running.
 
-Next exact action: implement explicit structured rollback/abstention outcomes for unsupported no-anchor/no-real-SFace runtime cases, using immutable MAIN/checkpoint output and preserving rejected/partial diagnostics. Do not turn proxy evidence into SFace authority. Re-run targeted/full tests and only then push a new Track A candidate. V3 remains verification-only and V4 remains unexecuted.
+Next exact action: inspect exact-head #1317/#134/#584 after completion. If a workflow fails, classify the first failing step and change only the evidenced blocker. V3 remains verification-only and V4 remains unexecuted.
 
 ---
 
@@ -287,6 +287,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260819-022 Track B FBCNN series `d4f09f2b... -> dfaf7bd1... -> 0ae6d420... -> 6ea5d113...`: thin pinned official backend, fail-closed tests and atomic benchmark/workflow refactor. Runtime evidence NOT_VERIFIED at ledger update; no research model promoted to release.
 - HIST-20260823-023 exact-head Track A Actions reconciled: Windows #1316 FAIL, Female #583 FAIL, Release #133 FAIL downstream of Windows; V3 not executed and V4 not executed.
 - HIST-20260823-024 Track B reconciled at `1591fa3c...`; telemetry work recorded, model qualification state unchanged.
+- HIST-20260823-025 Track A `5240eaec... -> b6ce7ebd...`: structured immutable-MAIN identity rollback; exact tree `51369b53...`; local targeted `33/33 PASS`, full pytest `547/547 PASS`; exact-head CI started; V3/V4 not executed by this push.
 
 ---
 
@@ -307,6 +308,25 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - KNOWN FAILURES/NEW RISKS: fail-closed biometric exceptions are being counted as runtime crashes; any correction must preserve zero wrong-person contribution and must not grant proxy identity authority.
 - DECISIONS/STATUS TRANSITIONS: Track A VALIDATING -> BLOCKED; V4 remains NOT_RUN/UNCONSUMED.
 - NEXT EXACT ACTION: implement structured conservative rollback/abstention on current Track A, test locally, push exact SHA, then append a second journal entry with that technical result.
+
+### PUSH-20260823-002
+
+- DATE/TIME UTC: `2026-08-23`; exact technical commit time supplied by GitHub.
+- TECHNICAL BRANCH: `hotfix/real-world-restoration-v1.1`.
+- PREVIOUS HEAD: `5240eaecb8943244f5bf7276a0905489d261318b`.
+- NEW REMOTE HEAD: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`.
+- COMMITS INCLUDED: `Rollback failed identity checks without runtime crashes`.
+- FILES ADDED: none.
+- FILES MODIFIED: `app/automatic.py`, `app/female_domain_benchmark.py`, `app/history.py`, `app/practical_benchmark.py`, `tests/test_automatic.py`.
+- FILES REMOVED: none.
+- OBJECTIVES/VERSIONS/BLOCKS/MODELS/DATASETS AFFECTED: OBJ-002; PRODUCT_V1_1; Block 11 product-boundary outcome and benchmark reporting. No model, threshold, workflow, benchmark manifest, dataset or holdout changed.
+- TESTS RUN/RESULT: targeted `33/33 PASS`; full pytest `547/547 PASS`; `compileall` and `git diff --check` PASS.
+- WORKFLOWS TRIGGERED/RESULT: Windows #1317, Release Quality #134, Female-domain #584; all `IN_PROGRESS` at this ledger update.
+- BENCHMARK RESULT: pending exact-head CI.
+- KNOWN FAILURES/NEW RISKS: rollback must remain a safety/no-recovery outcome, never a restoration PASS; remote workflows must verify end-to-end behavior.
+- DECISIONS CREATED: none; implements the already-recorded structured fail-closed direction.
+- STATUS TRANSITIONS: Track A BLOCKED -> VALIDATING; V4 remains NOT_RUN/UNCONSUMED.
+- NEXT EXACT ACTION: inspect the three exact-head runs; update this entry with completed results and artifacts.
 
 ---
 
