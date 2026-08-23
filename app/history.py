@@ -88,3 +88,17 @@ class ImageHistory:
         self._index -= 1
         del self._items[self._index + 1 :]
         return self.current()
+
+    def restore_discarding_later(self, image: np.ndarray, label: str) -> np.ndarray:
+        """Restore an accepted checkpoint and permanently discard later states."""
+        if image is None or image.size == 0:
+            raise ValueError("Immagine checkpoint non valida")
+        for index in range(min(self._index, len(self._items) - 1), -1, -1):
+            candidate = self._decode(self._items[index].png_bytes)
+            if candidate.shape == image.shape and np.array_equal(candidate, image):
+                self._index = index
+                del self._items[index + 1 :]
+                return self.current()
+        self._items = [Snapshot(str(label), self._encode(image))]
+        self._index = 0
+        return self.current()
