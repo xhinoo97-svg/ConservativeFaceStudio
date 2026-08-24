@@ -6,20 +6,20 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `integration/final-paper-quality-local` is the single active integration line, created exactly from immutable `main`. Track A, protocol hardening and Track B remain traceable read-only source/evidence lines.
-- CURRENT TECHNICAL HEAD: integration `5473bcb2160591cbfbf0df700c6c7731b1ce7598`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
-- CURRENT PHASE: model-independent foundations, fail-closed orchestration and a machine-readable production/V5 readiness gate are integrated/tested. Qualified-backend transfer is now the active phase; V4 remains CONSUMED_FAIL and V5 does not exist.
+- CURRENT TECHNICAL HEAD: integration `6ea287195a8d9a3f4a39554018beb631d3fd9212`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
+- CURRENT PHASE: model-independent foundations, fail-closed orchestration/readiness and the first disabled official upstream specialist are integrated/tested. Existing artifact reconciliation and qualified-backend evidence are now the active phase; V4 remains CONSUMED_FAIL and V5 does not exist.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
-- WHAT WAS JUST COMPLETED: production-readiness gate `5473bcb...`: the current evidence snapshot is valid but derives Paper Quality `FALSE` with 12 blockers and V5 authorization `FALSE` with 14 blockers; targeted `17/17`, full `547/547` PASS.
-- WHAT IS BEING WORKED ON: selective transfer of the pinned official-upstream registry/bootstrap and FBCNN adapter as an inactive, fail-closed JPEG specialist; production routing remains disabled.
+- WHAT WAS JUST COMPLETED: pinned FBCNN integration `6ea2871...`: exact official source/checkpoint identity, direct CLI and source/hash/route firewalls; targeted `24/24`, full `560/560` PASS. Adapter remains inactive and checkpoint terms/Windows/multi-identity gates remain open.
+- WHAT IS BEING WORKED ON: read-only reconciliation of the existing FBCNN run/artifact so valid evidence is reused without launching a duplicate workflow.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
-- WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; overall DEVELOPMENT gates pass on 2- and 40-identity evaluations, but domain robustness and weight licensing are not qualified.
-- WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
+- WHAT MODEL IS CURRENTLY BEING TESTED: official FBCNN at `jiaxi-jiang/FBCNN@54d183...`, color checkpoint SHA-256 `8b0e4ef...`; one-identity DEVELOPMENT compression matrix passes, but production qualification does not.
+- WHY THAT MODEL: it is the measured JPEG/recompression leader, has an official Apache-2.0 source implementation and CPU evidence, while routing and generated provenance can be narrowly constrained.
 - CURRENT BEST MODEL PER DAMAGE TYPE: mild blur/denoise NAFNet; JPEG FBCNN in DEV only; severe blind face GPEN in DEV identity evidence; opaque/reference-supported loss observed same-person component transfer; unqualified classes preserve MAIN/rollback/abstain.
 - CURRENT QUALITY RESULT: FBCNN public DEV matrix 6/6 PASS on one identity. Frozen LR-ASPP external validation overall PASS on 40 identities/880 cases (`F1 0.716639`, `IoU 0.579849`), but Asian macro-F1 `0.696471`/min-class `0.243086` and age-50 min-class `0.322288` expose domain gaps. Target95 remains NOT_MEASURED.
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: integrate the official-source-pinned FBCNN bootstrap/adapter and its route/hash/offline tests without copying the architecture or enabling it automatically; then run targeted and full regression suites.
+- NEXT EXACT STEP: retrieve and inspect the already-valid FBCNN artifact `9502200502`, verify its archive SHA-256 and evidence contents, and bind only demonstrated DEVELOPMENT facts to the current readiness record without a rerun or production promotion.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -34,7 +34,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@6d57725aae087bb4a3144d521d91346999f9a4fd`
-- Active integration HEAD: `integration/final-paper-quality-local@5473bcb2160591cbfbf0df700c6c7731b1ce7598`; exact tree `5a74771bd1d4ab2ba4e9a10cc801f1564f342747`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- Active integration HEAD: `integration/final-paper-quality-local@6ea287195a8d9a3f4a39554018beb631d3fd9212`; exact tree `98685cb0b91cf03b82e7a846ea2c97c13aed28a1`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -73,7 +73,7 @@ The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`
 | Branch | Purpose | HEAD | State | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
-| `integration/final-paper-quality-local` | single final product integration | `5473bcb...` | ACTIVE / READINESS FAIL-CLOSED | targeted 17/17, full 547/547; Paper Quality false (12 blockers), V5 false (14 blockers) | disabled official FBCNN adapter |
+| `integration/final-paper-quality-local` | single final product integration | `6ea2871...` | ACTIVE / FBCNN DEV ADAPTER INACTIVE | targeted 24/24, full 560/560; Paper Quality false, V5 false | reconcile existing FBCNN artifact; no rerun |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
@@ -340,6 +340,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-049 candidate selector `f6caff6... -> 4cdc439...`: calibrated eight-metric ranking is reachable only after immutable SFace `0.363`, wrong-person zero, provenance zero, healthy-region MAE ≤8 and calibrated geometry gates pass. Targeted 10/10 and full 536/536 PASS; no candidate backend activated.
 - HIST-20260824-050 Paper Quality orchestration `b8b6356...`: qualified upstream evidence is composed without loading a model or inventing calibration. Missing damage/safety evidence abstains; nonzero wrong-person/provenance counters, invalid reference provenance and outside-authority changes roll back to MAIN. Generated candidates require an explicit DEVELOPMENT/VALIDATION policy. Targeted 22/22 and full 541/541 PASS; no backend, checkpoint, threshold, holdout or V5 object activated.
 - HIST-20260824-051 production readiness `5473bcb...`: strict 16-gate evidence manifest and evaluator derive Paper Quality false with 12 blockers and V5 authorization false with 14 blockers. PASS requires explicit evidence, all gates/scopes are mandatory, frozen SFace/MAE/identity/provenance policy and consumed V3/V4 state are immutable. Manifest SHA-256 `e4172117e02c9190d1be742eb439fc660393bdd38fcf75d10fce8e081fd57df8`; targeted 17/17 and full 547/547 PASS.
+- HIST-20260824-052 official FBCNN adapter `6ea2871...`: Track B registry/bootstrap/thin adapter transferred with origins, exact official code revision and color checkpoint identity frozen, checkpoint terms separately NOT_VERIFIED, production routing disabled. A direct-CLI import defect found during integration was fixed and regression-tested. Targeted 24/24 and full 560/560 PASS; no checkpoint bytes or automatic downloader added.
 
 ---
 
@@ -730,6 +731,21 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - TESTS: targeted readiness/orchestration/protocol `17/17 PASS`; full pytest `547/547 PASS`; CLI validation, require-ready nonzero behavior, Python compile and diff check PASS.
 - MODEL/HOLDOUT EFFECT: none. No backend activation, checkpoint, threshold, dataset, installer, workflow, V3/V4 marker, candidate freeze or V5/holdout object changed.
 - NEXT EXACT ACTION: integrate the pinned official-upstream registry/bootstrap and FBCNN adapter as an inactive fail-closed JPEG specialist, prove source revision/checkpoint hash/route/offline rejection locally, then run the complete suite without enabling production routing.
+
+### PUSH-20260824-028
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD: `5473bcb2160591cbfbf0df700c6c7731b1ce7598`; tree `5a74771bd1d4ab2ba4e9a10cc801f1564f342747`.
+- NEW REMOTE HEAD: `6ea287195a8d9a3f4a39554018beb631d3fd9212`; exact tested tree `98685cb0b91cf03b82e7a846ea2c97c13aed28a1`.
+- ORIGINS: Track B `a7ffced`, `b8da228`, `2978be9`, `d4f09f2`, `dfaf7bd`, `0ae6d42`; integration hardening additionally fixes the direct script entrypoint and freezes the verified checkpoint byte size/hash.
+- FILES: `app/fbcnn_upstream_backend.py`, `config/upstream-implementations.json`, `scripts/bootstrap_pinned_upstream.py`, `scripts/verify_upstream_implementation_registry.py`, `tests/test_fbcnn_upstream_backend.py`, `tests/test_upstream_implementation_registry.py`.
+- VERIFIED IDENTITY: official `jiaxi-jiang/FBCNN@54d1831927506b3247e2d4d245abb4f4dab1a1cd`; code license Apache-2.0; official release v1.0 asset `fbcnn_color.pth`, `287755111` bytes, SHA-256 `8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8`. Separate checkpoint terms remain `NOT_SEPARATELY_VERIFIED`.
+- CONTRACT: CFS imports the official architecture from an exact detached research checkout, requires its metadata, rejects any unapproved expected hash and wrong byte size/hash before importing PyTorch/upstream code, runs CPU-only and accepts only JPEG/compression/recompression evidence. Output pixels are generated provenance. No automatic production route or download exists.
+- TESTS: targeted registry/bootstrap/backend/lifecycle/readiness `24/24 PASS`; full pytest `560/560 PASS`; registry CLI, exact bootstrap CLI dry-run, Python compile and diff check PASS.
+- LIMIT: no real checkpoint is stored or downloaded by this push. Existing run `32674085939` remains one-identity DEVELOPMENT evidence only; checkpoint redistribution terms, multi-identity validation, same-candidate Windows/offline and EliteBook remain blockers.
+- MODEL/HOLDOUT EFFECT: inactive DEVELOPMENT adapter only. No threshold, dataset, installer, certification workflow, V3/V4 marker, V5 or final holdout changed.
+- NEXT EXACT ACTION: retrieve and inspect existing artifact `9502200502`, verify archive SHA-256 `365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842` and contained evidence, then bind only demonstrated DEVELOPMENT facts without rerunning the workflow or promoting FBCNN.
 
 ---
 
