@@ -118,6 +118,8 @@ Two later historical Actions runs (`32087329763` and `32088670503`) already exis
 
 Replacement comparison: official torchvision LR-ASPP with MobileNetV3-Large backbone, source `pytorch/vision@c6f39778e636ec40a69bdbc74386818c57a65af3` (`v0.16.2`). Run `32675225785` on exact Track B HEAD `2b775b8186ac974f568b3644c59350cc1f12181a` passed every infrastructure step and the pre-run DEVELOPMENT adequacy gate: damage macro-F1 `0.711144 >= 0.70`, macro-IoU `0.569570 >= 0.55`, minimum class F1 `0.423585 >= 0.35`. Artifact `9502642834`, archive SHA-256 `0bef114cfeed95ebcceb81ce8f5dfc43c3fdb37bca82c69a346ed6219c137a11`; checkpoint SHA-256 `d510e6991cca582c3696b6b9132bf3fdb7948e240f4bf136440d8b75046910f4`; ONNX SHA-256 `708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9`. Result: **DEVELOPMENT MASK ADEQUACY PASS; NOT PRODUCTION QUALIFIED**. Only two validation identities were used, boundary/class errors remain visible, Windows is untested and upstream provides no explicit checkpoint redistribution license. RefFace remains unauthorized.
 
+External validation is prepared without retraining or tuning: the exact frozen checkpoint/ONNX above will be evaluated on 40 new ControlFace identities, excluding every prior ControlFace identity and balancing five identities in each race-by-sex stratum (20 female, 20 male). Two deterministic examples per damage class produce 880 mask cases. The same frozen adequacy thresholds apply; final holdouts remain forbidden. Result: **PENDING/NOT_VERIFIED**.
+
 ## Phase 9 — Personalized Reference Bank
 
 Status: **IMPLEMENTED; latest workflow result NOT_VERIFIED**.
@@ -249,4 +251,4 @@ PROJECT_FINISHED: **FALSE**.
 
 ## Exact next blocker
 
-Expand LR-ASPP mask validation to a substantially larger identity-disjoint DEVELOPMENT/VALIDATION bank and resolve the checkpoint licensing path. Do not tune the stopped small U-Net. RefFaceInpainting remains gated until broader per-class/boundary quality, compatible licensing and Windows/offline evidence are demonstrated.
+Execute and inspect the prepared 40-identity frozen-artifact LR-ASPP validation, then resolve the checkpoint licensing path. Do not tune the stopped small U-Net. RefFaceInpainting remains gated until broader per-class/boundary quality, compatible licensing and Windows/offline evidence are demonstrated.
