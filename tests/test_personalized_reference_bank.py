@@ -50,7 +50,7 @@ def _full(source: int, embedding: list[float], *, eye=0.8, nose=0.8, accepted=Tr
     )
 
 
-def test_wrong_person_never_becomes_global_or_local_authority() -> None:
+def test_wrong_person_full_reference_never_becomes_global_or_local_authority() -> None:
     good = _full(1, [1.0, 0.0, 0.0], eye=0.7)
     wrong = _full(2, [0.0, 1.0, 0.0], eye=1.0, accepted=False)
     bank = build_personalized_reference_bank([good, wrong])
@@ -58,12 +58,13 @@ def test_wrong_person_never_becomes_global_or_local_authority() -> None:
     assert [row.source_index for row in bank.ranked("left_eye")] == [1]
 
 
-def test_partial_eye_reference_is_component_local_and_never_global_anchor() -> None:
+def test_partial_eye_reference_uses_local_verification_without_becoming_global_anchor() -> None:
     full = _full(1, [1.0, 0.0], eye=0.55)
     partial = ReferenceObservation(
         source_index=3,
         reference_kind="partial",
-        identity_accepted=True,
+        # A sparse eye crop may not have a valid full-face SFace comparison.
+        identity_accepted=False,
         face_quality=0.9,
         exposure_quality=0.9,
         pose_quality=0.9,
@@ -77,7 +78,28 @@ def test_partial_eye_reference_is_component_local_and_never_global_anchor() -> N
     bank = build_personalized_reference_bank([full, partial])
     assert bank.global_anchor_source_indices == (1,)
     assert bank.ranked("left_eye")[0].source_index == 3
+    assert "identity=component_local_verified" in bank.ranked("left_eye")[0].reasons
     assert [row.source_index for row in bank.ranked("mouth")] == [1]
+
+
+def test_unverified_partial_reference_has_zero_local_authority_even_if_visually_perfect() -> None:
+    full = _full(1, [1.0, 0.0], eye=0.55)
+    unknown_partial = ReferenceObservation(
+        source_index=4,
+        reference_kind="partial",
+        identity_accepted=False,
+        face_quality=1.0,
+        exposure_quality=1.0,
+        pose_quality=1.0,
+        resolution_quality=1.0,
+        occlusion_quality=1.0,
+        component_visibility={"left_eye": 1.0},
+        component_sharpness={"left_eye": 1.0},
+        component_coverage={"left_eye": 1.0},
+        component_same_person_verified={"left_eye": False},
+    )
+    bank = build_personalized_reference_bank([full, unknown_partial])
+    assert [row.source_index for row in bank.ranked("left_eye")] == [1]
 
 
 def test_ranking_is_per_component_not_one_global_best_reference() -> None:
@@ -95,7 +117,7 @@ def test_consensus_embedding_uses_only_accepted_full_references() -> None:
     partial = ReferenceObservation(
         source_index=4,
         reference_kind="partial",
-        identity_accepted=True,
+        identity_accepted=False,
         embedding=np.asarray([-1.0, 0.0], dtype=np.float32),
         component_same_person_verified={"left_eye": True},
     )
