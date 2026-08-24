@@ -152,6 +152,16 @@ def test_automatic_pipeline_uses_references_without_confirmation(tmp_path: Path)
     _install_synthetic_landmark_handler(runner)
     result = runner.run(tmp_path / "with-reference.png", upscale=1)
     by_block = {item.block: item for item in result.results}
+    enhance = by_block["enhance"]
+    assert enhance.details["status"] == "ABSTAIN"
+    assert enhance.details["decision"] == "ABSTAIN"
+    assert enhance.details["skipped"] is True
+    assert enhance.details["abstained"] is True
+    assert enhance.details["restoration_effective"] is False
+    assert enhance.details["restoration_pass"] is False
+    assert enhance.details["zero_recovery_is_restoration_pass"] is False
+    assert enhance.details["reference_evidence_preserved"] is True
+    assert np.array_equal(enhance.image, by_block["deblur"].image)
     assert by_block["align"].details.get("skipped") is not True
     assert result.blocks_zip.exists()
 

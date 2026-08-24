@@ -9,7 +9,10 @@ def install_automatic_integrity_policy() -> None:
     if _INSTALLED:
         return
 
-    from app.automatic import AutomaticPipelineRunner
+    from app.automatic import (
+        REFERENCE_PHOTOMETRY_ENHANCE_ABSTENTION,
+        AutomaticPipelineRunner,
+    )
     from app.pipeline import BlockKind
 
     original_run = AutomaticPipelineRunner.run
@@ -31,6 +34,14 @@ def install_automatic_integrity_policy() -> None:
             if (
                 not workspace.references
                 and block.kind in {BlockKind.ALIGN, BlockKind.REGION_SELECT, BlockKind.FUSION}
+            ):
+                continue
+            if (
+                workspace.references
+                and block.kind is BlockKind.ENHANCE
+                and item.details.get("status") == "ABSTAIN"
+                and item.details.get("reason")
+                == REFERENCE_PHOTOMETRY_ENHANCE_ABSTENTION
             ):
                 continue
             unexpected.append(f"{block.key}: {item.details.get('reason', 'errore non specificato')}")

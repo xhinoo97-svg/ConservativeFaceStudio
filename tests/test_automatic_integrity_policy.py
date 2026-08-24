@@ -30,3 +30,12 @@ def test_mandatory_block_execution_error_cannot_be_hidden_as_success(tmp_path: P
     runner.executor._handlers[BlockKind.DEBLUR] = fail_deblur
     with pytest.raises(RuntimeError, match="blocchi obbligatori saltati.*deblur"):
         runner.run(tmp_path / "must-fail.png", upscale=1)
+
+
+def test_reference_enhance_abstention_is_an_explicit_safe_decision() -> None:
+    image = _image()
+    runner = AutomaticPipelineRunner(
+        Workspace(primary=image.copy(), references=[image.copy()])
+    )
+    reason = runner._skip_reason(BlockKind.ENHANCE)
+    assert reason == "ENHANCE_ABSTAIN_PRESERVE_OBSERVED_REFERENCE_PHOTOMETRY"

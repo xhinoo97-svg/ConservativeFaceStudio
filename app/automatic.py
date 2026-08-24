@@ -27,6 +27,11 @@ from app.strict_execution import StrictBlockExecutor
 from app.validation import GuardrailDecision, evaluate_identity_guardrail
 
 
+REFERENCE_PHOTOMETRY_ENHANCE_ABSTENTION = (
+    "ENHANCE_ABSTAIN_PRESERVE_OBSERVED_REFERENCE_PHOTOMETRY"
+)
+
+
 @dataclass(frozen=True)
 class AutomaticRunResult:
     final_image: Path
@@ -524,7 +529,26 @@ class AutomaticPipelineRunner:
 
             reason = self._skip_reason(block.kind)
             if reason is not None:
-                skipped = self.executor.record_skipped(block, reason)
+                decision_metadata: dict[str, Any] = {}
+                if (
+                    block.kind is BlockKind.ENHANCE
+                    and reason == REFERENCE_PHOTOMETRY_ENHANCE_ABSTENTION
+                ):
+                    decision_metadata = {
+                        "status": "ABSTAIN",
+                        "decision": "ABSTAIN",
+                        "abstained": True,
+                        "restoration_effective": False,
+                        "restoration_pass": False,
+                        "zero_recovery_is_restoration_pass": False,
+                        "engine": "automatic-reference-photometry-preserve",
+                        "reference_evidence_preserved": True,
+                    }
+                skipped = self.executor.record_skipped(
+                    block,
+                    reason,
+                    **decision_metadata,
+                )
                 results.append(skipped)
                 self._emit_block_completed(index, block, skipped)
                 self._emit_progress(index, f"{block.title} — saltato")
@@ -561,6 +585,8 @@ class AutomaticPipelineRunner:
     def _skip_reason(self, kind: BlockKind) -> str | None:
         workspace = self.executor.workspace
         has_references = bool(workspace.references)
+        if kind is BlockKind.ENHANCE and has_references:
+            return REFERENCE_PHOTOMETRY_ENHANCE_ABSTENTION
         if kind in {BlockKind.ALIGN, BlockKind.REGION_SELECT, BlockKind.FUSION} and not has_references:
             return "Nessuna fotografia di riferimento disponibile"
         if kind is BlockKind.FRONTALIZE:

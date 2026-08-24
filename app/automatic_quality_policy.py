@@ -15,9 +15,10 @@ def install_automatic_quality_policy() -> None:
     modest CLAHE blend. When real references are available, global contrast remapping
     is counterproductive: later blocks can reconstruct the damaged region from observed
     donor pixels, while a global CLAHE changes already-correct skin/background and the
-    donors no longer match photometrically. In that route ENHANCE therefore executes a
-    deliberate preserve decision rather than altering pixels merely to make the stage
-    visibly active. Manual positive blends remain unchanged.
+    donors no longer match photometrically. ``AutomaticPipelineRunner`` therefore emits
+    an explicit ENHANCE abstention before this handler for reference-backed cases. The
+    preserve branch below remains a fail-safe for direct/manual zero-blend execution;
+    manual positive blends remain unchanged.
     """
     global _INSTALLED
     if _INSTALLED:

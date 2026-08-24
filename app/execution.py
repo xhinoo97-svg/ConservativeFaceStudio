@@ -119,9 +119,22 @@ class BlockExecutor:
             operation.parameters.update({"blocks_zip": str(archive), "block_images": details["block_images"], "archive_attachments": details["archive_attachments"]})
         return ExecutionResult(result.block, result.image, details)
 
-    def record_skipped(self, block: BlockSpec, reason: str) -> ExecutionResult:
+    def record_skipped(
+        self,
+        block: BlockSpec,
+        reason: str,
+        **decision_metadata: Any,
+    ) -> ExecutionResult:
         now = datetime.now(timezone.utc).isoformat()
-        details = {"skipped": True, "reason": str(reason), "started_at": now, "completed_at": now, "duration_ms": 0.0, "status": "SKIPPED"}
+        details = {
+            "skipped": True,
+            "reason": str(reason),
+            "started_at": now,
+            "completed_at": now,
+            "duration_ms": 0.0,
+            "status": "SKIPPED",
+        }
+        details.update(decision_metadata)
         image = self.workspace.copy_primary()
         self.project.operations.append(OperationRecord(block=block.key, parameters=details, conservative=not block.generative))
         snapshot = self.block_artifacts.record(block.key, block.title, image, details)
