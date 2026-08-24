@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-08-24",
+  "repository": "xhinoo97-svg/ConservativeFaceStudio",
+  "branch": "integration/final-paper-quality-local",
+  "frozen_policy": {
+    "sface_min": 0.363,
+    "healthy_region_mae_max": 8.0,
+    "wrong_person_final_pixels_max": 0,
+    "provenance_violations_max": 0
+  },
+  "holdout_state": {
+    "v3": "CONSUMED",
+    "v4": "CONSUMED_FAIL",
+    "v5": "NOT_CREATED_NOT_AUTHORIZED"
+  },
+  "model_evidence_summary": {
+    "fbcnn": "DEVELOPMENT_6_OF_6_ONE_IDENTITY_NOT_PRODUCTION_QUALIFIED",
+    "damage_mask_small_unet": "STOPPED_MODEL_DATA_QUALITY_FAIL",
+    "lraspp": "DEVELOPMENT_OVERALL_PASS_DOMAIN_AND_LICENSE_NOT_QUALIFIED",
+    "gpen_gfpgan_codeformer_instantrestore": "NOT_PRODUCTION_QUALIFIED",
+    "refface": "NOT_RUN_BLOCKED_BY_DAMAGE_MASK_QUALITY"
+  },
+  "gates": [
+    {
+      "id": "generic_runner_dev_e2e",
+      "status": "PASS",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [
+        "commit:b05e5aa595e44e391110b61866b98c1f18c92a28",
+        "github-run:32730724851",
+        "artifact:9521289394",
+        "artifact-sha256:2e596bb2e365aec5a6910a3d5083cb38b8090cf88009ef7c34bee9a70c88b846"
+      ],
+      "detail": "Synthetic DEV entrypoint verifies preflight, marker-before-first-case ordering, success and failure injection."
+    },
+    {
+      "id": "one_shot_dev_mock",
+      "status": "PASS",
+      "required_for": ["V5_LAUNCH"],
+      "evidence_refs": [
+        "github-run:32730724851",
+        "artifact-sha256:2e596bb2e365aec5a6910a3d5083cb38b8090cf88009ef7c34bee9a70c88b846"
+      ],
+      "detail": "DEV-only one-shot lifecycle completed; no real V5 object or holdout was created."
+    },
+    {
+      "id": "damage_router_qualified",
+      "status": "BLOCKED",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": ["github-run:32087249287", "github-run:32676602851"],
+      "detail": "Small U-Net failed six classes; LR-ASPP has unresolved domain robustness and checkpoint-license qualification."
+    },
+    {
+      "id": "restorer_pack_qualified",
+      "status": "NOT_VERIFIED",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": ["github-run:32674085939"],
+      "detail": "FBCNN passed a one-identity DEVELOPMENT matrix; face restorers and reference inpainting are not production qualified."
+    },
+    {
+      "id": "checkpoint_licenses_compatible",
+      "status": "NOT_VERIFIED",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "Code and weight redistribution/use terms are not fully verified for the intended final model pack."
+    },
+    {
+      "id": "offline_runtime_reproducible",
+      "status": "NOT_RUN",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "No same-candidate Paper Quality offline Windows execution evidence exists."
+    },
+    {
+      "id": "extended_identity_disjoint_benchmark",
+      "status": "NOT_MEASURED",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "The frozen balanced 300-400 identity benchmark has not been constructed and executed."
+    },
+    {
+      "id": "target95_overall_and_per_domain",
+      "status": "NOT_MEASURED",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "Target95 is not measured overall or per required damage/demographic domain."
+    },
+    {
+      "id": "wrong_person_final_pixels_zero",
+      "status": "NOT_MEASURED",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "Zero wrong-person final pixels is not demonstrated on the extended frozen benchmark."
+    },
+    {
+      "id": "provenance_violations_zero",
+      "status": "NOT_MEASURED",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "Zero provenance violations is not demonstrated on the extended frozen benchmark."
+    },
+    {
+      "id": "healthy_region_guardrail",
+      "status": "NOT_MEASURED",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "Healthy/outside-region MAE <= 8.0 is not demonstrated on the extended frozen benchmark."
+    },
+    {
+      "id": "same_candidate_windows_installer",
+      "status": "NOT_RUN",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "Windows run #1317 belongs to the NO-GO Track A candidate, not the active integration candidate."
+    },
+    {
+      "id": "clean_windows_offline_acceptance",
+      "status": "NOT_RUN",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "Clean Windows x64 install, launch, export, ZIP and uninstall acceptance is not run."
+    },
+    {
+      "id": "elitebook_acceptance",
+      "status": "NOT_RUN",
+      "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "Physical HP EliteBook offline quality, memory and timing acceptance is not run."
+    },
+    {
+      "id": "exact_candidate_frozen",
+      "status": "NOT_RUN",
+      "required_for": ["V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "No V5 candidate has been frozen; current work is reversible integration."
+    },
+    {
+      "id": "independent_v5_holdout_prepared",
+      "status": "NOT_RUN",
+      "required_for": ["V5_LAUNCH"],
+      "evidence_refs": [],
+      "detail": "No independent identity-disjoint V5 holdout has been created or accessed."
+    }
+  ]
+}
