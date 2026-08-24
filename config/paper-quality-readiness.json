@@ -50,6 +50,9 @@
       "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
       "evidence_refs": [
         "github-run:32087249287",
+        "artifact:9307331508",
+        "artifact-sha256:e3b7aa05bcfdc9d48a803595218727f84bc255a4095caab84239c1850f7b52b8",
+        "config:damage-mask-attempt3-evidence.json",
         "github-run:32676602851",
         "artifact:9502870418",
         "artifact-sha256:1357c983343b22f81942b130ae359a0051c0d6b79750417d17d832a89cf6b19c",

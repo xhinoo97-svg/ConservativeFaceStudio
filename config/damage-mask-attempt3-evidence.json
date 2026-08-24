@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "experiment": "damage_mask_net_unet_development_vertical_slice_v1",
+  "attempt": 3,
+  "hypothesis": "small_unet_base_channels_12",
+  "hypothesis_status": "STOPPED_MODEL_DATA_QUALITY_FAIL",
+  "attempt4_launched": false,
+  "workflow": {
+    "run_id": 32087249287,
+    "head_branch": "research/paper-quality-local-v2",
+    "head_sha": "08df3163f317fe6a16571337178168d9845a749c",
+    "conclusion": "SUCCESS"
+  },
+  "artifact": {
+    "id": 9307331508,
+    "name": "damage-mask-net-unet-mixed-dev-3",
+    "size_bytes": 2101877,
+    "archive_sha256": "e3b7aa05bcfdc9d48a803595218727f84bc255a4095caab84239c1850f7b52b8",
+    "file_count": 5,
+    "report_sha256": "08d903c84e88114b34fe421b24ca408b1ccdef83b2e5d610096734af634de0cf",
+    "source_manifest_sha256": "85d2d3442e5441768993a002eb911934a0fb9528bf4cb19b8a5b778d570af7ee",
+    "expires_at": "2026-11-16T01:10:18Z"
+  },
+  "model": {
+    "architecture": "DamageMaskUNet",
+    "base_channels": 12,
+    "parameter_count": 272052,
+    "input_face_size_training": 192,
+    "checkpoint_sha256": "e3b05272782aded20f209ddd39a3ac847cf4f3a90e5e3f02b63cae90474e2b7d",
+    "onnx_sha256": "64e032d8693edc55d69a0a77d8665034d4edbeff43a93b6a622c4639a0d018c7"
+  },
+  "data": {
+    "source_bank_version": 2,
+    "real_train": 8,
+    "synthetic_train": 14,
+    "train_identities": 22,
+    "train_samples": 1452,
+    "validation_identities": 2,
+    "validation_samples": 66,
+    "identity_disjoint": true,
+    "exact_synthetic_masks": true,
+    "final_holdout_used": false
+  },
+  "training": {
+    "epochs": 6,
+    "training_seconds": 601.838812986,
+    "best_damage_macro_f1": 0.17319769770764726
+  },
+  "runtime": {
+    "torch_cpu_seconds_single_face": 0.023952562999966176,
+    "onnxruntime_cpu_seconds_single_face_first_call": 0.012821275999954196,
+    "onnx_argmax_segmentation_equal": true,
+    "onnx_max_abs_logit_difference": 0.000005245208740234375,
+    "onnx_mean_abs_logit_difference": 0.00000030052470378905127,
+    "onnx_opset": 17,
+    "allowed_processors": 3,
+    "logical_processors": 4,
+    "max_parallel_heavy_models": 1,
+    "process_ram_fraction": 0.04919034808534008
+  },
+  "validation": {
+    "damage_macro_f1": 0.17319769770764726,
+    "damage_macro_iou": 0.11302823182419285,
+    "per_class": {
+      "HEALTHY": {"f1": 0.9771372249466196, "iou": 0.9552964960481873},
+      "BLUR": {"f1": 0.0, "iou": 0.0},
+      "MOTION_BLUR": {"f1": 0.0, "iou": 0.0},
+      "PIXELATION": {"f1": 0.0, "iou": 0.0},
+      "BLOCK_MOSAIC": {"f1": 0.0, "iou": 0.0},
+      "JPEG_ARTIFACT": {"f1": 0.0, "iou": 0.0},
+      "SCRIBBLE": {"f1": 0.25157152565409446, "iou": 0.14388436778816957},
+      "STICKER": {"f1": 0.0, "iou": 0.0},
+      "OPAQUE_BLOCK": {"f1": 0.5078482796414452, "iou": 0.34034627492130115},
+      "BLACK_BAR": {"f1": 0.3807684690037631, "iou": 0.23515381322243287},
+      "PARTIAL_OCCLUSION": {"f1": 0.15259981813672813, "iou": 0.08260247001968857},
+      "MISSING_COMPONENT": {"f1": 0.6123865823480891, "iou": 0.44132362411452913}
+    },
+    "zero_f1_classes": [
+      "BLUR",
+      "MOTION_BLUR",
+      "PIXELATION",
+      "BLOCK_MOSAIC",
+      "JPEG_ARTIFACT",
+      "STICKER"
+    ]
+  },
+  "infrastructure_result": "PASS_CHECKPOINT_EXPORT_ONNX_PARITY_CPU_INFERENCE",
+  "quality_result": "FAIL_MACRO_AND_PER_CLASS_DAMAGE_LOCALIZATION",
+  "production_qualified": false,
+  "refface_execution_authorized": false,
+  "exact_next_action": "Preserve attempt 3 evidence; do not launch attempt 4; use independently qualified architecture evidence before any RefFace execution."
+}
