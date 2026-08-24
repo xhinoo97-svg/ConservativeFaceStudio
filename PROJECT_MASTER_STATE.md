@@ -5,12 +5,12 @@
 ## OWNER DASHBOARD
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
-- CURRENT ACTIVE BRANCH: `hotfix/real-world-restoration-v1.1` preserves consumed Track A evidence; `protocol/v5-certification-hardening` contains DEV-only runner hardening; `research/paper-quality-local-v2` is the active isolated Track B research branch.
+- CURRENT ACTIVE BRANCH: `hotfix/real-world-restoration-v1.1` preserves consumed Track A evidence; `protocol/v5-certification-hardening` contains DEV-only runner hardening; `research/paper-quality-local-v2` preserves the active Track B evidence. The governing mandate requires the next technical line to be `integration/final-paper-quality-local`, created exactly from immutable `main` and populated by selective, tested integration.
 - CURRENT TECHNICAL HEAD: Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; protocol hardening `268188c5a2540455ff804383cb583b16546b62f1`; Track B `6d57725aae087bb4a3144d521d91346999f9a4fd`.
 - CURRENT PHASE: V4 remains permanently consumed FAIL/NO-GO. The generic future one-shot runner is hardened on synthetic DEV fixtures; Track B is qualifying the official FBCNN compression specialist and replacing an inadequate DamageMaskNet hypothesis.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
 - WHAT WAS JUST COMPLETED: frozen LR-ASPP external run `32676602851` completed 880/880 cases with zero errors and passed the unchanged overall gate (`F1 0.716639`, `IoU 0.579849`, minimum class F1 `0.387499`). Domain robustness did not qualify.
-- WHAT IS BEING WORKED ON: checkpoint licensing resolution and design of a new identity-disjoint real-photo mask validation with pre-registered domain-aware acceptance. RefFace remains NOT_RUN.
+- WHAT IS BEING WORKED ON: the final execution mandate is now canonical in `PROJECT_EXECUTION_RULES.md`. The next technical action is to create `integration/final-paper-quality-local` exactly from `main`, inventory the real 13-block product, and integrate only traceable, tested changes. RefFace remains NOT_RUN.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; overall DEVELOPMENT gates pass on 2- and 40-identity evaluations, but domain robustness and weight licensing are not qualified.
 - WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
@@ -19,7 +19,7 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: resolve or replace the non-explicit LR-ASPP checkpoint licensing path and pre-register domain-aware gates for a new real-photo identity-disjoint validation bank; keep RefFace blocked and do not create/execute V5.
+- NEXT EXACT STEP: create `integration/final-paper-quality-local` exactly from `main`; record the base SHA; perform the repository/model/installer inventory required by Phase 0; then selectively integrate Track A operations, the hardened generic protocol, and Track B modules with a green full suite after each group. Keep RefFace blocked and do not create/execute V5.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -40,6 +40,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Current protocol state: generic `build_freeze` supports both legacy one-argument and generic cases+contract providers by signature binding before execution; synthetic one-shot success and failure-before/after-marker ordering is verified. No V5 exists and no final holdout was accessed.
 - Current Track B FBCNN state: **DEVELOPMENT MATRIX PASS, NOT PRODUCTION QUALIFIED**. Run `32674085939`, artifact `9502200502`, SHA-256 `365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842`; 6/6 profiles PASS.
 - Current Track B DamageMaskNet state: attempt 3 evidence recovered from run `32087249287`, artifact `9307331508`, SHA-256 `e3b7aa05...`. Infrastructure/export/parity PASS; macro-F1 `0.173198` and macro-IoU `0.113028`, with six damage classes at F1 zero. Small U-Net hypothesis stopped as MODEL/DATA QUALITY FAIL.
+- Governing final execution mandate: `PROJECT_EXECUTION_RULES.md`, recorded verbatim from the user-supplied source whose SHA-256 is `af0d8e35f67d9ceac4544f72c860963b6a99e571eab7332fb96dd8dac936ff75`. It requires one final offline Windows product, selective integration from immutable `main`, measured model qualification, honest provenance/identity outcomes, frozen acceptance gates, clean-Windows/EliteBook evidence and an independent one-shot V5 only after every prerequisite is machine-readably green.
 
 FORENSIC_MODE_READY: **TRUE for certified PRODUCT_V1 only**
 PAPER_QUALITY_MODE_READY: **FALSE**
@@ -61,6 +62,8 @@ PRODUCT_V1 is certified and immutable. PRODUCT_V1_1 is an operational/safety hot
 Identity authority is no longer the current blocker. The same-canvas architecture separates **whole-canvas sameness**, which is only geometry/canvas evidence, from the stricter face-local identity bridge. V4 remains fail-closed: histogram/proxy similarity is not identity authority, direct SFace evidence cannot be propagated transitively, and wrong-person same-canvas donors are blocked.
 
 Paper Quality does not reimplement a published architecture when an official executable upstream exists. The official repository is pinned and reused; CFS patches only compatibility/integration defects and adds safety/resource/package boundaries. Official code is not assumed bug-free and paper-reported quality is not treated as CFS/EliteBook evidence.
+
+The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`. In case of a stale SHA or status in that mandate, the newest reproducible GitHub evidence prevails. The immutable constraints remain absolute: do not modify `main`, do not rewrite history, do not reuse V3/V4, do not tune on consumed/final holdouts, do not lower thresholds after observing a frozen result, and do not call the product finished before the single installer, offline Windows, physical EliteBook, MAIN+0–9, Target95 and V5 gates all pass.
 
 ---
 
@@ -317,6 +320,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-032 LR-ASPP run `32675225785` SUCCESS; frozen DEVELOPMENT mask gate PASS; artifact/checkpoint/ONNX verified; production/RefFace remain blocked by validation scale and checkpoint licensing.
 - HIST-20260824-033 Track B `edc5da8b...`: 40-identity, 880-case frozen LR-ASPP external validation launched once; checkpoint unchanged; no training/holdout/RefFace action.
 - HIST-20260824-034 LR-ASPP external run `32676602851` SUCCESS; overall gate PASS, domain robustness NOT_QUALIFIED; 880/880, zero errors; RefFace remains blocked.
+- HIST-20260824-035 final autonomous integration mandate recorded verbatim in `PROJECT_EXECUTION_RULES.md` with source SHA-256 `af0d8e35f67d9ceac4544f72c860963b6a99e571eab7332fb96dd8dac936ff75`. The mandated next technical line is `integration/final-paper-quality-local` from immutable `main`; no technical branch, model, threshold, dataset, holdout or release state changed by this ledger-only record.
 
 ---
 
@@ -479,6 +483,17 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - RUNTIME/SAFETY: ONNX `0.005081s/face`; checkpoint/ONNX argmax exact; max drift `8.49e-5`; wrong-person pixels `0`; provenance violations `0`; RefFace NOT_RUN.
 - CLASSIFICATION: OVERALL_DEVELOPMENT_PASS / DOMAIN_NOT_QUALIFIED / NOT_PRODUCTION_QUALIFIED; Target95 NOT_MEASURED.
 - NEXT EXACT ACTION: resolve checkpoint licensing and freeze domain-aware acceptance for a new real-photo identity-disjoint bank before any RefFace run.
+
+### PUSH-20260824-011
+
+- DATE/TIME UTC: `2026-08-24`.
+- BRANCH: `meta/project-state` only.
+- PREVIOUS REMOTE HEAD: `365af5ea54ba25960657ba85065c0cab43da9a8b`.
+- CHANGE: add `PROJECT_EXECUTION_RULES.md` as the verbatim governing final mandate and update this ledger to point to it.
+- SOURCE INTEGRITY: user-supplied source SHA-256 `af0d8e35f67d9ceac4544f72c860963b6a99e571eab7332fb96dd8dac936ff75`; repository copy must be byte-identical.
+- RECONCILIATION: `main`, Track A, Track B, protocol and ledger remote SHAs match the mandate; PR #2 is OPEN/DRAFT/not merged; `integration/final-paper-quality-local` did not exist before this entry; key protocol and LR-ASPP artifacts are present and unexpired.
+- TECHNICAL EFFECT: none. No application code, workflow, model, checkpoint, threshold, dataset, consumed marker or holdout changed. V3/V4 remain closed; V5 remains NOT_CREATED/NOT_AUTHORIZED.
+- NEXT EXACT ACTION: create `integration/final-paper-quality-local` at exact `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`, then execute Phase 0 inventory before any selective integration.
 
 ---
 
