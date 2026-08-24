@@ -40,10 +40,11 @@ def _component_value(values: Mapping[str, float], component: str) -> float:
 class ReferenceObservation:
     """Already-measured evidence for one original reference source.
 
-    This object deliberately does not run identity inference. Identity acceptance is an
-    upstream hard-gate result. A full reference may become a global identity anchor;
-    a partial reference can never do so, even when it has excellent local component
-    evidence.
+    Full-reference identity acceptance and partial-reference component authority are
+    intentionally different contracts. A full reference needs the upstream global
+    identity hard gate. A partial reference may contribute only to a component that an
+    upstream local same-person verifier explicitly accepted; it can never become a
+    global identity anchor.
     """
 
     source_index: int
@@ -84,10 +85,10 @@ class ReferenceObservation:
     def locally_identity_eligible(self, component: str) -> bool:
         if component not in COMPONENTS:
             raise KeyError(component)
-        if not self.identity_accepted:
-            return False
         if self.reference_kind == "full":
-            return True
+            return bool(self.identity_accepted)
+        # Partial/sparse references do not need to masquerade as a full-face SFace
+        # anchor. They require explicit component-local same-person authority instead.
         return bool(self.component_same_person_verified.get(component, False))
 
 
@@ -149,8 +150,8 @@ def component_reference_score(reference: ReferenceObservation, component: str) -
     visibility = _component_value(reference.component_visibility, component)
     sharpness = _component_value(reference.component_sharpness, component)
 
-    # Component-local evidence must actually exist; a full-face identity PASS alone is
-    # not authority to use an invisible/occluded eye, nose or mouth.
+    # Component-local evidence must actually exist; identity authority alone is not
+    # enough to use an invisible or occluded eye/nose/mouth.
     if coverage < 0.18 or visibility < 0.20:
         return None
 
@@ -164,12 +165,17 @@ def component_reference_score(reference: ReferenceObservation, component: str) -
         + 0.04 * _unit(reference.resolution_quality)
         + 0.04 * _unit(reference.occlusion_quality)
     )
+    identity_reason = (
+        "identity=full_sface_accepted"
+        if reference.reference_kind == "full"
+        else "identity=component_local_verified"
+    )
     reasons = (
         f"coverage={coverage:.3f}",
         f"visibility={visibility:.3f}",
         f"sharpness={sharpness:.3f}",
         f"kind={reference.reference_kind}",
-        "identity=accepted",
+        identity_reason,
     )
     return ComponentCandidate(
         component=component,
