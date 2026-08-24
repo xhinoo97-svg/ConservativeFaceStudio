@@ -808,6 +808,21 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - MODEL/HOLDOUT EFFECT: none. No backend load/activation, checkpoint, threshold, training, RefFace, installer, certification workflow, V3/V4 marker, V5 or holdout change.
 - NEXT EXACT ACTION: enforce at the Paper Quality orchestration/fusion boundary that every generated candidate has a coherent route plan whose selected qualified model key matches the candidate; missing/mismatched authorization must abstain or roll back while observed-reference-only repair remains available.
 
+
+### PUSH-20260824-033
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD: `c990b8b647e1416ef913a50e1457fa092dfded89`; tree `bcfe1f0ed5d386b9c983e387ce5ae0d155e65a08`.
+- NEW REMOTE HEAD: `2b00191a1ca4a55c0ad4cb77d3d166691817ce35`; exact tested tree `7f455176ec5debf2ecab2f3a035d11c89b70da76`.
+- FILES: `app/paper_quality_runtime.py`, `tests/test_paper_quality_runtime.py`.
+- CONTRACT: every generated placement is keyed by `candidate_id` to a coherent `DamageRoutePlan`; the plan mask must match the canvas, be production-qualified, select the exact candidate `model_key`, and cover every generated pixel. Missing, unqualified, mismatched or out-of-authority plans exclude the generated candidate before calibrated selection and fusion.
+- OBSERVED SAFETY: excluding an unauthorized generated candidate does not disable a valid observed-reference-only repair; observed MAIN/reference provenance retains priority and may still PASS independently.
+- TESTS: targeted router/orchestration/selector/fusion `45/45 PASS`; full pytest `596/596 PASS`; diff check PASS.
+- MODEL/HOLDOUT EFFECT: none. No backend load/activation, checkpoint, license decision, threshold, training, RefFace execution, installer, certification workflow, V3/V4 marker, V5 or holdout changed.
+- CLASSIFICATION: `GENERATED_ROUTE_AUTHORIZATION_TEST_PASS_NOT_RUNTIME_WIRED`; Paper Quality and Target95 remain NOT_MEASURED.
+- NEXT EXACT ACTION: wire the fail-closed damage route planner into the automatic Paper Quality boundary as diagnostic-only metadata, while keeping every research or unqualified backend disabled and preserving the existing observed-reference path.
+
 ---
 
 ## 26. SESSION START/END CONTINUITY RULE
