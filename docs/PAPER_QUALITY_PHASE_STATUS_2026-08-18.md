@@ -116,7 +116,7 @@ Classification: **MODEL/DATA QUALITY FAIL**. Infrastructure, checkpoint creation
 
 Two later historical Actions runs (`32087329763` and `32088670503`) already existed when this audit began because subsequent path-triggering commits caused the workflow to execute again. This audit did not launch them and does not use them to reinterpret or tune attempt 3.
 
-Replacement comparison prepared: official torchvision LR-ASPP with MobileNetV3-Large backbone, source `pytorch/vision@c6f39778e636ec40a69bdbc74386818c57a65af3` (`v0.16.2`). The thin adapter verifies the official backbone checkpoint at SHA-256 `8738ca797c879b547d18bbd15da5736ff2557b2036a9af72225393ca61759a04`, trains only on the unchanged DEVELOPMENT source-bank contract and exports a full offline-loadable checkpoint plus ONNX. Its adequacy gate was frozen before execution at damage macro-F1 `>=0.70`, macro-IoU `>=0.55` and every damage-class F1 `>=0.35`. Code license is BSD-3-Clause; upstream does not provide an explicit redistribution license for the checkpoint, so this comparison remains research-only even if the DEV quality gate passes. Result: **PENDING/NOT_VERIFIED**.
+Replacement comparison: official torchvision LR-ASPP with MobileNetV3-Large backbone, source `pytorch/vision@c6f39778e636ec40a69bdbc74386818c57a65af3` (`v0.16.2`). Run `32675225785` on exact Track B HEAD `2b775b8186ac974f568b3644c59350cc1f12181a` passed every infrastructure step and the pre-run DEVELOPMENT adequacy gate: damage macro-F1 `0.711144 >= 0.70`, macro-IoU `0.569570 >= 0.55`, minimum class F1 `0.423585 >= 0.35`. Artifact `9502642834`, archive SHA-256 `0bef114cfeed95ebcceb81ce8f5dfc43c3fdb37bca82c69a346ed6219c137a11`; checkpoint SHA-256 `d510e6991cca582c3696b6b9132bf3fdb7948e240f4bf136440d8b75046910f4`; ONNX SHA-256 `708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9`. Result: **DEVELOPMENT MASK ADEQUACY PASS; NOT PRODUCTION QUALIFIED**. Only two validation identities were used, boundary/class errors remain visible, Windows is untested and upstream provides no explicit checkpoint redistribution license. RefFace remains unauthorized.
 
 ## Phase 9 — Personalized Reference Bank
 
@@ -249,4 +249,4 @@ PROJECT_FINISHED: **FALSE**.
 
 ## Exact next blocker
 
-Execute and inspect the prepared LR-ASPP comparison on the unchanged DEVELOPMENT source-bank contract. The stopped small U-Net is not a tuning baseline. RefFaceInpainting remains gated until the replacement demonstrates adequate per-class mask quality, broader identity-disjoint validation, real checkpoint and hashes, reproducible CPU inference, ONNX parity and compatible checkpoint licensing.
+Expand LR-ASPP mask validation to a substantially larger identity-disjoint DEVELOPMENT/VALIDATION bank and resolve the checkpoint licensing path. Do not tune the stopped small U-Net. RefFaceInpainting remains gated until broader per-class/boundary quality, compatible licensing and Windows/offline evidence are demonstrated.
