@@ -29,6 +29,7 @@ def test_default_budget_never_exceeds_eighty_percent() -> None:
     assert budget.allowed_processors <= max(1, int(budget.logical_processors * 0.80))
     if budget.total_ram_bytes is not None:
         assert budget.process_ram_limit_bytes == int(budget.total_ram_bytes * 0.80)
+        assert budget.system_ram_limit_bytes == int(budget.total_ram_bytes * 0.80)
 
 
 def test_budget_rejects_fraction_above_eighty_percent() -> None:
@@ -41,22 +42,54 @@ def test_budget_rejects_too_small_fraction() -> None:
         detect_resource_budget(0.09)
 
 
-def test_memory_reservation_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_memory_reservation_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     budget = replace(
         detect_resource_budget(),
         total_ram_bytes=1000,
         process_ram_limit_bytes=800,
+        system_ram_limit_bytes=800,
     )
     monkeypatch.setattr(module, '_process_rss_bytes', lambda: 700)
-    with pytest.raises(ResourceBudgetExceeded):
+    monkeypatch.setattr(module, '_physical_memory_status_bytes', lambda: (1000, 900))
+    with pytest.raises(ResourceBudgetExceeded, match='Process RAM budget exceeded'):
         assert_memory_within_budget(budget, stage='model_load', reserve_bytes=101)
 
 
-def test_memory_reservation_accepts_exact_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_process_memory_reservation_accepts_exact_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     budget = replace(
         detect_resource_budget(),
         total_ram_bytes=1000,
         process_ram_limit_bytes=800,
+        system_ram_limit_bytes=800,
     )
     monkeypatch.setattr(module, '_process_rss_bytes', lambda: 700)
+    monkeypatch.setattr(module, '_physical_memory_status_bytes', lambda: (1000, 900))
     assert_memory_within_budget(budget, stage='model_load', reserve_bytes=100)
+
+
+def test_system_memory_reservation_fails_when_total_pc_use_would_exceed_eighty_percent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    budget = replace(
+        detect_resource_budget(),
+        total_ram_bytes=1000,
+        process_ram_limit_bytes=800,
+        system_ram_limit_bytes=800,
+    )
+    monkeypatch.setattr(module, '_process_rss_bytes', lambda: 100)
+    # 750 bytes are already used system-wide; another 51 would exceed the 800-byte cap.
+    monkeypatch.setattr(module, '_physical_memory_status_bytes', lambda: (1000, 250))
+    with pytest.raises(ResourceBudgetExceeded, match='System RAM budget exceeded'):
+        assert_memory_within_budget(budget, stage='model_load', reserve_bytes=51)
+
+
+def test_system_memory_exact_eighty_percent_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    budget = replace(
+        detect_resource_budget(),
+        total_ram_bytes=1000,
+        process_ram_limit_bytes=800,
+        system_ram_limit_bytes=800,
+    )
+    monkeypatch.setattr(module, '_process_rss_bytes', lambda: 100)
+    monkeypatch.setattr(module, '_physical_memory_status_bytes', lambda: (1000, 250))
+    assert_memory_within_budget(budget, stage='model_load', reserve_bytes=50)
