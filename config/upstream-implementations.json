@@ -1,0 +1,157 @@
+{
+  "format": "ConservativeFaceStudio upstream implementation registry",
+  "version": 1,
+  "policy": {
+    "architecture_reimplementation": "forbidden_when_official_executable_upstream_exists",
+    "integration_mode": "pinned_official_upstream_plus_thin_cfs_adapter",
+    "cfs_owned_layers": [
+      "identity_and_provenance_firewalls",
+      "resource_budgeting",
+      "model_lifecycle",
+      "Windows_and_offline_packaging",
+      "checkpoint_hash_verification",
+      "benchmarking_and_release_gates"
+    ],
+    "upstream_code_is_assumed_bug_free": false,
+    "qualification_required": [
+      "official_repository_verified",
+      "revision_pinned",
+      "checkpoint_and_license_verified",
+      "upstream_smoke_or_tests_pass",
+      "cfs_adapter_contract_pass",
+      "wrong_person_and_provenance_regressions_pass",
+      "target_hardware_resource_budget_pass"
+    ]
+  },
+  "target_hardware": {
+    "profile": "HP EliteBook 1030 G3 / Windows / 16 GB / CPU-first / no CUDA requirement",
+    "max_cpu_fraction": 0.8,
+    "max_process_ram_fraction": 0.8,
+    "max_system_ram_fraction": 0.8,
+    "max_parallel_heavy_models": 1
+  },
+  "implementations": [
+    {
+      "key": "gpen_bfr512",
+      "official_repository": "yangxy/GPEN",
+      "clone_url": "https://github.com/yangxy/GPEN.git",
+      "default_branch": "main",
+      "pinned_revision": "2c736702983368847fb544d234a22ac7cff25802",
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "blind_face_restoration_challenger",
+      "current_cfs_evidence": "real Linux CPU slice measured; see MODEL_RESEARCH_MATRIX.md",
+      "qualification_state": "BLOCKED",
+      "blockers": ["release_license_reverification", "Windows_target_hardware_validation"]
+    },
+    {
+      "key": "gfpgan_v14",
+      "official_repository": "TencentARC/GFPGAN",
+      "clone_url": "https://github.com/TencentARC/GFPGAN.git",
+      "default_branch": "master",
+      "pinned_revision": "7552a7791caad982045a7bbe5634bbf1cd5c8679",
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "blind_face_restoration_challenger",
+      "current_cfs_evidence": "real Linux CPU slice measured; see MODEL_RESEARCH_MATRIX.md",
+      "qualification_state": "BLOCKED",
+      "blockers": ["checkpoint_terms_reverification", "Windows_target_hardware_validation"]
+    },
+    {
+      "key": "codeformer_v010",
+      "official_repository": "sczhou/CodeFormer",
+      "clone_url": "https://github.com/sczhou/CodeFormer.git",
+      "default_branch": "master",
+      "pinned_revision": "b33cc7d639d6545bfcccc7e0bc6ae51f24e79c2b",
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "blind_face_restoration_challenger",
+      "current_cfs_evidence": "real CPU vertical slice measured; see MODEL_RESEARCH_MATRIX.md",
+      "qualification_state": "BLOCKED",
+      "blockers": ["license_not_production_clear", "Windows_target_hardware_validation"]
+    },
+    {
+      "key": "fbcnn",
+      "official_repository": "jiaxi-jiang/FBCNN",
+      "clone_url": "https://github.com/jiaxi-jiang/FBCNN.git",
+      "default_branch": "main",
+      "pinned_revision": "54d1831927506b3247e2d4d245abb4f4dab1a1cd",
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "jpeg_artifact_specialist",
+      "code_license": "Apache-2.0",
+      "checkpoint": {
+        "asset": "fbcnn_color.pth",
+        "official_release": "v1.0",
+        "download_url": "https://github.com/jiaxi-jiang/FBCNN/releases/download/v1.0/fbcnn_color.pth",
+        "size_bytes": 287755111,
+        "sha256": "8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8",
+        "terms_state": "NOT_SEPARATELY_VERIFIED"
+      },
+      "current_cfs_evidence": "6/6 one-identity DEVELOPMENT compression profiles PASS; not production qualified",
+      "qualification_state": "CANDIDATE",
+      "blockers": ["checkpoint_terms_reverification", "multi_identity_validation", "Windows_target_hardware_validation", "offline_packaging"]
+    },
+    {
+      "key": "instantrestore",
+      "official_repository": "snap-research/InstantRestore",
+      "clone_url": "https://github.com/snap-research/InstantRestore.git",
+      "default_branch": "main",
+      "pinned_revision": "05891bf7d30ab7290c501272de7a1a4a51b21b4f",
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "personalized_multi_reference_severe_restoration",
+      "current_cfs_evidence": "paper/repository candidate only for target PC until measured",
+      "qualification_state": "BLOCKED",
+      "blockers": ["checkpoint_terms_and_hash", "CPU_feasibility", "Windows_target_hardware_validation", "identity_and_provenance_adapter_validation"]
+    },
+    {
+      "key": "refinefir",
+      "official_repository": "RefineFIR/RefineFIR",
+      "clone_url": "https://github.com/RefineFIR/RefineFIR.git",
+      "default_branch": "main",
+      "pinned_revision": null,
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "single_reference_detail_specialist",
+      "qualification_state": "NOT_VERIFIED",
+      "blockers": ["executable_code_and_checkpoint_availability", "revision_pin", "license", "CPU_feasibility"]
+    },
+    {
+      "key": "ref_face_inpainting",
+      "official_repository": "WuyangLuo/RefFaceInpainting",
+      "clone_url": "https://github.com/WuyangLuo/RefFaceInpainting.git",
+      "default_branch": "main",
+      "pinned_revision": null,
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "reference_guided_large_occlusion_specialist",
+      "qualification_state": "NOT_VERIFIED",
+      "blockers": ["revision_pin", "checkpoint_hash", "license_reverification", "CPU_and_Windows_feasibility"]
+    },
+    {
+      "key": "osdface",
+      "official_repository": "jkwang28/OSDFace",
+      "clone_url": "https://github.com/jkwang28/OSDFace.git",
+      "default_branch": "main",
+      "pinned_revision": null,
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "one_step_diffusion_identity_aware_challenger",
+      "qualification_state": "NOT_VERIFIED",
+      "blockers": ["revision_pin", "checkpoint_hash", "license", "CPU_feasibility", "Windows_target_hardware_validation"]
+    },
+    {
+      "key": "restoreformer_plus_plus",
+      "official_repository": "wzhouxiff/RestoreFormerPlusPlus",
+      "clone_url": "https://github.com/wzhouxiff/RestoreFormerPlusPlus.git",
+      "default_branch": "main",
+      "pinned_revision": null,
+      "repository_verified": true,
+      "reuse_upstream_code": true,
+      "cfs_role": "blind_face_restoration_challenger",
+      "qualification_state": "NOT_VERIFIED",
+      "blockers": ["revision_pin", "checkpoint_hash", "Windows_target_hardware_validation"]
+    }
+  ]
+}
