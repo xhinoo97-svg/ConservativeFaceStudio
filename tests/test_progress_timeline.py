@@ -160,8 +160,39 @@ def test_worker_and_ui_are_wired_to_structured_runtime_evidence() -> None:
     assert "progress_detail = Signal(object)" in worker
     assert "runner.on_block_completed = self._runner_block_completed" in worker
     assert '"checkpoint_sha256"' in worker
+    assert '"mask_summary"' in worker
+    assert '"provenance_summary"' in worker
+    assert "runner.should_cancel = self._cancel_event.is_set" in worker
     assert "ProcessResourceSampler" in worker
     assert "worker.progress_detail.connect(self._on_progress_detail)" in ui
+    assert "worker.cancelled.connect(self._on_cancelled)" in ui
     assert "self.progress_timer.setInterval(1000)" in ui
     assert "CPU processo" in ui
     assert "SHA-256" in ui
+
+
+def test_completed_event_summarizes_decision_masks_and_provenance() -> None:
+    from app.worker import PipelineWorker
+
+    worker = PipelineWorker.__new__(PipelineWorker)
+    worker._verified_models = {}
+    evidence = worker._runtime_evidence(
+        8,
+        "ABSTAIN",
+        {
+            "decision": "ABSTAIN",
+            "reason": "insufficient observed evidence",
+            "requested_pixels": 20,
+            "repaired_pixels": 0,
+            "generated_pixels": 0,
+            "unresolved_pixels": 20,
+            "source_pixel_counts": [0, 0],
+            "wrong_person_final_pixels": 0,
+        },
+    )
+    assert evidence["decision"] == "ABSTAIN"
+    assert evidence["decision_reason"] == "insufficient observed evidence"
+    assert evidence["mask_summary"]["unresolved_pixels"] == 20
+    assert evidence["mask_summary"]["wrong_person_final_pixels"] == 0
+    assert evidence["provenance_summary"]["source_pixel_counts"] == [0, 0]
+    assert evidence["model_keys"] == []

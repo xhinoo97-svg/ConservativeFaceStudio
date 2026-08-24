@@ -40,6 +40,23 @@ class AutomaticRunResult:
     results: tuple[ExecutionResult, ...]
 
 
+class AutomaticRunCancelled(RuntimeError):
+    """Cooperative cancellation observed at a safe block boundary."""
+
+    def __init__(
+        self,
+        next_block_index: int,
+        next_block_key: str,
+        completed_results: tuple[ExecutionResult, ...],
+    ) -> None:
+        super().__init__(
+            f"Pipeline annullata prima del blocco {next_block_index}: {next_block_key}"
+        )
+        self.next_block_index = int(next_block_index)
+        self.next_block_key = str(next_block_key)
+        self.completed_results = tuple(completed_results)
+
+
 class AutomaticPipelineRunner:
     """Esegue l'intera pipeline senza conferme intermedie, mantenendo audit e strict mode."""
 
@@ -79,6 +96,7 @@ class AutomaticPipelineRunner:
         install_observed_target_repair_runtime(self.executor)
         self.on_progress: Callable[[int, str], None] | None = None
         self.on_block_completed: Callable[[int, str, str, np.ndarray, dict[str, Any]], None] | None = None
+        self.should_cancel: Callable[[], bool] | None = None
         self._original_anchor = observed_sources[0].copy()
 
     def _run_preflight_after_import(self) -> None:
@@ -498,6 +516,23 @@ class AutomaticPipelineRunner:
         blocks = self.executor.pipeline.blocks
         results: list[ExecutionResult] = []
         for index, block in enumerate(blocks, start=1):
+            if self.should_cancel is not None and bool(self.should_cancel()):
+                self.executor.workspace.metadata.update(
+                    {
+                        "runtime_success": False,
+                        "runtime_cancelled": True,
+                        "cancelled_before_block_index": int(index),
+                        "cancelled_before_block_key": str(block.key),
+                        "last_accepted_block_key": (
+                            results[-1].block if results else None
+                        ),
+                    }
+                )
+                raise AutomaticRunCancelled(
+                    index,
+                    block.key,
+                    tuple(results),
+                )
             if block.kind is BlockKind.DEBLUR:
                 self._run_preflight_after_import()
             self._emit_progress(index - 1, f"Avvio: {block.title}")

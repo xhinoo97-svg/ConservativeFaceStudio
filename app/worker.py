@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from threading import Event
 
 from PySide6.QtCore import QObject, Signal, Slot
 
-from app.automatic import AutomaticPipelineRunner
+from app.automatic import AutomaticPipelineRunner, AutomaticRunCancelled
 from app.activity import RestorationActivityLock
 from app.execution import Workspace
 from app.hardware import apply_hardware_policy, detect_hardware_policy, detect_hardware_profile
@@ -27,6 +28,7 @@ class PipelineWorker(QObject):
     progress_detail = Signal(object)
     block_completed = Signal(int, str, str, object, object)
     completed = Signal(object)
+    cancelled = Signal(object)
     failed = Signal(str)
 
     def __init__(self, workspace: Workspace, output: Path, upscale: int = 1) -> None:
@@ -41,6 +43,11 @@ class PipelineWorker(QObject):
         self._resources = ProcessResourceSampler()
         self._verified_models: dict[str, dict[str, str]] = {}
         self._active_block_index: int | None = None
+        self._cancel_event = Event()
+
+    def request_cancel(self) -> None:
+        """Thread-safe request; the runner observes it at the next block boundary."""
+        self._cancel_event.set()
 
     def _emit_detail(self, payload: dict[str, object]) -> None:
         enriched = dict(payload)
@@ -85,6 +92,7 @@ class PipelineWorker(QObject):
     def _runtime_evidence(
         self,
         block_index: int,
+        status: str,
         details: dict[str, object],
     ) -> dict[str, object]:
         keys = self._actual_model_keys(block_index, details)
@@ -92,11 +100,69 @@ class PipelineWorker(QObject):
         engine = details.get("engine") or details.get("backend")
         if engine is None and details.get("face_parsing_pretrained") is True:
             engine = "resnet18-celebamaskhq-onnx"
+        reason = (
+            details.get("reason")
+            or details.get("rollback_reason")
+            or details.get("pretrained_fallback_reason")
+        )
+        scalar_confidence = details.get("confidence")
+        if scalar_confidence is None:
+            scalar_confidence = details.get("landmark_confidence")
+        identity = details.get("identity_guardrail")
+        identity_summary: dict[str, object] = {}
+        if isinstance(identity, dict):
+            for key in (
+                "accepted",
+                "score_before",
+                "score_after",
+                "score_drop",
+                "retention_ratio",
+                "minimum_retention",
+                "engine",
+                "reason",
+            ):
+                value = identity.get(key)
+                if isinstance(value, (str, int, float, bool)) or value is None:
+                    identity_summary[key] = value
+        count_keys = (
+            "requested_pixels",
+            "repaired_pixels",
+            "accepted_pixels",
+            "changed_pixels",
+            "generated_pixels",
+            "unresolved_pixels",
+            "wrong_person_final_pixels",
+        )
+        mask_summary = {
+            key: int(details[key])
+            for key in count_keys
+            if isinstance(details.get(key), (int, float))
+        }
+        provenance_summary: dict[str, object] = {}
+        for key in (
+            "source_pixel_counts",
+            "generated_provenance_code",
+            "reference_evidence_preserved",
+            "untouched_pixels_preserved",
+        ):
+            value = details.get(key)
+            if isinstance(value, (str, int, float, bool, list, tuple)) or value is None:
+                provenance_summary[key] = list(value) if isinstance(value, tuple) else value
         return {
             "engine": None if engine is None else str(engine),
             "model_keys": [item["model_key"] for item in models],
             "checkpoint_paths": [item["checkpoint_path"] for item in models],
             "checkpoint_sha256": [item["checkpoint_sha256"] for item in models],
+            "decision": str(details.get("decision") or status),
+            "decision_reason": None if reason is None else str(reason),
+            "confidence": (
+                float(scalar_confidence)
+                if isinstance(scalar_confidence, (int, float))
+                else None
+            ),
+            "mask_summary": mask_summary,
+            "provenance_summary": provenance_summary,
+            "identity_metric_summary": identity_summary,
         }
 
     def _runner_progress(self, index: int, name: str) -> None:
@@ -131,7 +197,7 @@ class PipelineWorker(QObject):
         self.block_completed.emit(index, title, status, image, detail_map)
         payload = self._timeline.complete(int(index), status=str(status)).to_dict()
         payload["message"] = str(title)
-        payload.update(self._runtime_evidence(int(index), detail_map))
+        payload.update(self._runtime_evidence(int(index), str(status), detail_map))
         self._active_block_index = None
         self._emit_detail(payload)
 
@@ -182,9 +248,33 @@ class PipelineWorker(QObject):
                 runner = AutomaticPipelineRunner(self.workspace)
                 runner.on_progress = self._runner_progress
                 runner.on_block_completed = self._runner_block_completed
+                runner.should_cancel = self._cancel_event.is_set
                 result = runner.run(self.output, upscale=self.upscale)
                 self._history.save()
                 self.completed.emit(result)
+        except AutomaticRunCancelled as exc:
+            last = exc.completed_results[-1] if exc.completed_results else None
+            checkpoint_directory = self.workspace.metadata.get("checkpoint_directory")
+            snapshot = last.details.get("snapshot") if last is not None else None
+            checkpoint = None
+            if isinstance(checkpoint_directory, str) and isinstance(snapshot, str):
+                checkpoint = str(Path(checkpoint_directory) / snapshot)
+            payload = {
+                "status": "CANCELLED",
+                "decision": "CANCELLED",
+                "decision_reason": str(exc),
+                "completed_blocks": len(exc.completed_results),
+                "next_block_index": exc.next_block_index,
+                "next_block_key": exc.next_block_key,
+                "last_checkpoint": checkpoint,
+                "last_image": self.workspace.copy_primary(),
+            }
+            try:
+                self._history.save()
+            except OSError:
+                pass
+            self.progress_detail.emit({key: value for key, value in payload.items() if key != "last_image"})
+            self.cancelled.emit(payload)
         except Exception as exc:
             if self._active_block_index is not None:
                 event = self._timeline.heartbeat()

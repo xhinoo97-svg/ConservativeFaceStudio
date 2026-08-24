@@ -7,9 +7,10 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 import app.automatic as automatic_module
 
-from app.automatic import AutomaticPipelineRunner
+from app.automatic import AutomaticPipelineRunner, AutomaticRunCancelled
 from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.pipeline import BlockKind, default_pipeline
 
@@ -164,6 +165,25 @@ def test_automatic_pipeline_uses_references_without_confirmation(tmp_path: Path)
     assert np.array_equal(enhance.image, by_block["deblur"].image)
     assert by_block["align"].details.get("skipped") is not True
     assert result.blocks_zip.exists()
+
+
+def test_cooperative_cancellation_preserves_last_accepted_block() -> None:
+    workspace = Workspace(primary=sample_image())
+    runner = AutomaticPipelineRunner(workspace)
+    boundary_checks = iter((False, False, True))
+    runner.should_cancel = lambda: next(boundary_checks)
+
+    with pytest.raises(AutomaticRunCancelled) as captured:
+        runner.run(Path("unused-cancelled-output.png"), upscale=1)
+
+    cancellation = captured.value
+    assert cancellation.next_block_index == 3
+    assert cancellation.next_block_key == "enhance"
+    assert [item.block for item in cancellation.completed_results] == ["import", "deblur"]
+    assert np.array_equal(workspace.primary, cancellation.completed_results[-1].image)
+    assert workspace.metadata["runtime_cancelled"] is True
+    assert workspace.metadata["last_accepted_block_key"] == "deblur"
+    assert len(runner.executor.block_artifacts.snapshots) == 2
 
 
 def test_guardrail_preserves_verified_partial_reference_transfer() -> None:

@@ -151,6 +151,7 @@ class MainWindow(QMainWindow):
         self.save_project_button = QPushButton("Salva progetto")
         self.update_button = QPushButton("Aggiornamenti")
         self.start_button = QPushButton("Inizia")
+        self.cancel_button = QPushButton("Annulla")
         self.download_button = QPushButton("Scarica risultati ZIP")
         controls.addWidget(self.load_primary_button)
         controls.addWidget(self.load_references_button)
@@ -159,6 +160,7 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.save_project_button)
         controls.addWidget(self.update_button)
         controls.addWidget(self.start_button)
+        controls.addWidget(self.cancel_button)
         controls.addWidget(self.download_button)
         layout.addLayout(controls)
 
@@ -169,6 +171,7 @@ class MainWindow(QMainWindow):
         self.save_project_button.clicked.connect(self.save_current_project)
         self.update_button.clicked.connect(self.check_updates)
         self.start_button.clicked.connect(self.start_pipeline)
+        self.cancel_button.clicked.connect(self.cancel_pipeline)
         self.download_button.clicked.connect(self.download_results)
         self.progress_timer = QTimer(self)
         self.progress_timer.setInterval(1000)
@@ -525,8 +528,10 @@ class MainWindow(QMainWindow):
         worker.progress_detail.connect(self._on_progress_detail)
         worker.block_completed.connect(self._on_block_completed)
         worker.completed.connect(self._on_completed)
+        worker.cancelled.connect(self._on_cancelled)
         worker.failed.connect(self._on_failed)
         worker.completed.connect(thread.quit)
+        worker.cancelled.connect(thread.quit)
         worker.failed.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
@@ -541,6 +546,16 @@ class MainWindow(QMainWindow):
         self.status.setText("Pipeline automatica in esecuzione")
         self._update_controls()
         thread.start()
+
+    def cancel_pipeline(self) -> None:
+        worker = self.worker
+        if worker is None or self.worker_thread is None:
+            return
+        worker.request_cancel()
+        self.cancel_button.setEnabled(False)
+        self.status.setText(
+            "Annullamento richiesto: completo il blocco corrente e conservo l'ultimo checkpoint accettato"
+        )
 
     def _on_progress(self, index: int, name: str) -> None:
         self.progress.setValue(max(0, min(13, int(index))))
@@ -608,6 +623,9 @@ class MainWindow(QMainWindow):
             Path(path).name for path in checkpoint_paths
         ) or "—"
         hash_text = ", ".join(checkpoint_hashes) or "—"
+        decision = str(payload.get("decision") or status)
+        reason = payload.get("decision_reason")
+        reason_text = "—" if reason in (None, "") else str(reason)
 
         cpu = payload.get("process_cpu_percent")
         cpu_text = "—" if cpu is None else f"{float(cpu):.1f}%"
@@ -617,6 +635,7 @@ class MainWindow(QMainWindow):
         return (
             f"{prefix} • {title} • {status} • ruolo {role} • engine {engine_text} • "
             f"modello {model_text} • checkpoint {checkpoint_text} • SHA-256 {hash_text} • "
+            f"decisione {decision} • motivo {reason_text} • "
             f"trascorso {format_duration(elapsed)} • ETA ~{format_duration(remaining_value)} • "
             f"CPU processo {cpu_text} • RAM processo {ram_text} • RAM sistema {system_ram_text}"
         )
@@ -651,6 +670,7 @@ class MainWindow(QMainWindow):
                 "ABSTAIN": Qt.GlobalColor.darkYellow,
                 "SKIPPED": Qt.GlobalColor.darkYellow,
                 "ROLLBACK": Qt.GlobalColor.darkYellow,
+                "CANCELLED": Qt.GlobalColor.darkYellow,
                 "ERROR": Qt.GlobalColor.red,
                 "FAILED": Qt.GlobalColor.red,
             }
@@ -684,6 +704,7 @@ class MainWindow(QMainWindow):
                 "ABSTAIN": Qt.GlobalColor.darkYellow,
                 "SKIPPED": Qt.GlobalColor.darkYellow,
                 "ROLLBACK": Qt.GlobalColor.darkYellow,
+                "CANCELLED": Qt.GlobalColor.darkYellow,
                 "ERROR": Qt.GlobalColor.red,
                 "FAILED": Qt.GlobalColor.red,
             }
@@ -732,6 +753,36 @@ class MainWindow(QMainWindow):
             )
         self._update_controls()
 
+    def _on_cancelled(self, payload: object) -> None:
+        self.progress_timer.stop()
+        self._progress_event_started_monotonic = None
+        result = dict(payload) if isinstance(payload, dict) else {}
+        completed = int(result.get("completed_blocks", 0) or 0)
+        self.progress.setValue(max(0, min(13, completed)))
+        image = result.get("last_image")
+        if isinstance(image, np.ndarray) and image.size:
+            self.after_panel.set_cv_image(image)
+        reason = str(result.get("decision_reason") or "Pipeline annullata")
+        self.status.setText(
+            f"Elaborazione annullata in sicurezza dopo {completed}/13 blocchi"
+        )
+        self.progress_detail_label.setText(
+            f"CANCELLED • {reason} • ultimo checkpoint accettato conservato"
+        )
+        self.confidence_label.setText(
+            "Original Information Confidence: non finale (esecuzione annullata)"
+        )
+        if self.recovery_project_path is not None:
+            checkpoint = result.get("last_checkpoint")
+            save_project(
+                self._project_document(
+                    status="cancelled",
+                    last_checkpoint=(str(checkpoint) if isinstance(checkpoint, str) else None),
+                ),
+                self.recovery_project_path,
+            )
+        self._update_controls()
+
     def _on_failed(self, message: str) -> None:
         LOGGER.error("Pipeline failed: %s", message)
         self.progress_timer.stop()
@@ -775,4 +826,5 @@ class MainWindow(QMainWindow):
         self.save_project_button.setEnabled(self.primary is not None and not busy)
         self.update_button.setEnabled(not busy)
         self.start_button.setEnabled(self.primary is not None and not busy)
+        self.cancel_button.setEnabled(self.worker_thread is not None and self.worker is not None)
         self.download_button.setEnabled(self.run_result is not None and not busy)
