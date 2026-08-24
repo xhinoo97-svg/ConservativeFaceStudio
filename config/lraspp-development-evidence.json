@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "evidence_tier": "EXTERNAL_DEVELOPMENT_VALIDATION",
+  "experiment": "lraspp_frozen_checkpoint_external_development_validation_v1",
+  "workflow": {
+    "run_id": 32676602851,
+    "head_branch": "research/paper-quality-local-v2",
+    "head_sha": "edc5da8b55c39815cb34e10da6058ee0d2f4bc90",
+    "conclusion": "SUCCESS"
+  },
+  "artifact": {
+    "id": 9502870418,
+    "name": "lraspp-external-validation-1",
+    "size_bytes": 79726,
+    "archive_sha256": "1357c983343b22f81942b130ae359a0051c0d6b79750417d17d832a89cf6b19c",
+    "file_count": 3,
+    "report_sha256": "f20cb922dc0db0cb90b994a85228cc9ffd64fb18644fd9b5924b1f4d827ff681",
+    "manifest_sha256": "0b7a5e74fd424d93c200632564a9e1d8ff97fced11209be4d72cec7929c2322e",
+    "expires_at": "2026-11-22T00:24:49Z"
+  },
+  "data": {
+    "dataset": "ControlFace10K",
+    "dataset_revision": "a03589de1a9e028b2d16fa1eb0e019a6930e817c",
+    "dataset_license": "CC BY 4.0",
+    "domain": "synthetic_explicit_identity",
+    "identity_count": 40,
+    "completed_cases": 880,
+    "error_cases": 0,
+    "identity_disjoint_from_prior_lraspp_bank": true,
+    "final_holdout_used": false,
+    "training_or_tuning_authorized": false,
+    "strata": {
+      "races": ["African", "Asian", "Caucasian", "Indian"],
+      "sexes": ["female", "male"],
+      "identities_per_race_sex_stratum": 5,
+      "age_counts": {"25": 12, "50": 17, "65": 11}
+    }
+  },
+  "model": {
+    "architecture": "official_torchvision_LRASPP_MobileNetV3_Large",
+    "official_repository": "pytorch/vision",
+    "upstream_revision": "c6f39778e636ec40a69bdbc74386818c57a65af3",
+    "source_code_license": "BSD-3-Clause",
+    "checkpoint_sha256": "d510e6991cca582c3696b6b9132bf3fdb7948e240f4bf136440d8b75046910f4",
+    "checkpoint_weights_license": "NOT_EXPLICIT_UPSTREAM_RESEARCH_ONLY",
+    "onnx_sha256": "708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9",
+    "retrained_or_tuned_for_external_validation": false
+  },
+  "runtime": {
+    "device": "onnxruntime_cpu",
+    "seconds_per_face": 0.005080685179545277,
+    "total_seconds": 4.471002957999843,
+    "checkpoint_onnx_first_batch_argmax_equal": true,
+    "checkpoint_onnx_first_batch_max_abs": 0.00008487701416015625,
+    "network_required_after_artifact_and_dataset_acquisition": false,
+    "allowed_processors": 3,
+    "logical_processors": 4,
+    "max_parallel_heavy_models": 1,
+    "process_rss_bytes": 521285632,
+    "process_ram_fraction": 0.031091076501681626,
+    "system_ram_fraction": 0.08429039119686732
+  },
+  "frozen_development_gate": {
+    "thresholds_frozen_before_run": true,
+    "minimum_damage_macro_f1": 0.7,
+    "minimum_damage_macro_iou": 0.55,
+    "minimum_per_damage_class_f1": 0.35,
+    "aggregate_passed": true
+  },
+  "overall": {
+    "damage_macro_f1": 0.7166394224968546,
+    "damage_macro_iou": 0.5798486772517341,
+    "minimum_damage_class_f1": 0.3874992983834755,
+    "binary_damage_f1": 0.7807272210300271,
+    "binary_damage_iou": 0.6403220300625232,
+    "binary_damage_precision": 0.6734512661981378,
+    "binary_damage_recall": 0.9286553563935016
+  },
+  "per_class": {
+    "BLACK_BAR": {"f1": 0.8615741345897009, "iou": 0.7568118054654193},
+    "BLOCK_MOSAIC": {"f1": 0.7762056718704555, "iou": 0.6342615372771122},
+    "BLUR": {"f1": 0.5940788618160276, "iou": 0.4225548970573122},
+    "HEALTHY": {"f1": 0.982631429392234, "iou": 0.9658558931157266},
+    "JPEG_ARTIFACT": {"f1": 0.7766102781197821, "iou": 0.6348020293371567},
+    "MISSING_COMPONENT": {"f1": 0.9561293124422806, "iou": 0.9159461261234166},
+    "MOTION_BLUR": {"f1": 0.3874992983834755, "iou": 0.24030953784702808},
+    "OPAQUE_BLOCK": {"f1": 0.628596762913378, "iou": 0.4583602735609365},
+    "PARTIAL_OCCLUSION": {"f1": 0.8404007406942063, "iou": 0.7247337681099599},
+    "PIXELATION": {"f1": 0.7309997204372949, "iou": 0.5760437820306832},
+    "SCRIBBLE": {"f1": 0.766283883835484, "iou": 0.6211184840624226},
+    "STICKER": {"f1": 0.5646549823633157, "iou": 0.39339320889762663}
+  },
+  "per_domain": {
+    "age:25": {"macro_f1": 0.7170986861680203, "macro_iou": 0.57992924897221, "minimum_class_f1": 0.41374631399241735},
+    "age:50": {"macro_f1": 0.7066292142729282, "macro_iou": 0.5706600506233269, "minimum_class_f1": 0.32228790071374264},
+    "age:65": {"macro_f1": 0.7316115144337488, "macro_iou": 0.5964220612622233, "minimum_class_f1": 0.48786147982915046},
+    "race:African": {"macro_f1": 0.7139419266711088, "macro_iou": 0.5739217770596341, "minimum_class_f1": 0.45515990768216286},
+    "race:Asian": {"macro_f1": 0.6964714521878208, "macro_iou": 0.5632158578974992, "minimum_class_f1": 0.2430860423109074},
+    "race:Caucasian": {"macro_f1": 0.7380651543628477, "macro_iou": 0.6030141601530473, "minimum_class_f1": 0.4910296577430228},
+    "race:Indian": {"macro_f1": 0.7207098921829486, "macro_iou": 0.5838701961149058, "minimum_class_f1": 0.4023892773892774},
+    "sex:female": {"macro_f1": 0.7150222637049874, "macro_iou": 0.5782225563117369, "minimum_class_f1": 0.4196277260247278},
+    "sex:male": {"macro_f1": 0.7181186078633071, "macro_iou": 0.581789848863393, "minimum_class_f1": 0.3548452127904139}
+  },
+  "safety_scope": {
+    "model_output_type": "mask_logits_only",
+    "can_modify_image_pixels": false,
+    "wrong_person_final_pixels": 0,
+    "provenance_violations": 0,
+    "restoration_pass_count": 0,
+    "refface_execution_authorized": false
+  },
+  "disposition": "EXTERNAL_DEVELOPMENT_VALIDATION_PASS_NOT_PRODUCTION_QUALIFIED",
+  "production_qualified": false,
+  "target95": "NOT_MEASURED",
+  "production_blockers": [
+    "synthetic_controlface_domain_only",
+    "asian_domain_macro_and_minimum_class_f1_gap",
+    "age_50_minimum_class_f1_gap",
+    "checkpoint_redistribution_license_not_explicit",
+    "real_photo_300_400_identity_benchmark_not_run",
+    "windows_and_hp_elitebook_not_measured"
+  ]
+}

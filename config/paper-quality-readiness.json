@@ -48,7 +48,13 @@
       "id": "damage_router_qualified",
       "status": "BLOCKED",
       "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
-      "evidence_refs": ["github-run:32087249287", "github-run:32676602851"],
+      "evidence_refs": [
+        "github-run:32087249287",
+        "github-run:32676602851",
+        "artifact:9502870418",
+        "artifact-sha256:1357c983343b22f81942b130ae359a0051c0d6b79750417d17d832a89cf6b19c",
+        "config:lraspp-development-evidence.json"
+      ],
       "detail": "Small U-Net failed six classes; LR-ASPP has unresolved domain robustness and checkpoint-license qualification."
     },
     {
