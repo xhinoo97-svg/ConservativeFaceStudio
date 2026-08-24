@@ -1,9 +1,9 @@
-name: Protocol V5 hardening DEV
+name: Final integration one-shot protocol DEV
 
 on:
   push:
     branches:
-      - protocol/v5-certification-hardening
+      - integration/final-paper-quality-local
     paths:
       - ".github/workflows/protocol-v5-hardening.yml"
       - "app/one_shot_certification.py"
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Check out hardening branch
+      - name: Check out exact integration commit
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -82,7 +82,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: protocol-v5-hardening-${{ github.run_id }}
+          name: one-shot-protocol-hardening-${{ github.run_id }}
           path: protocol-hardening-evidence
           if-no-files-found: error
           retention-days: 30

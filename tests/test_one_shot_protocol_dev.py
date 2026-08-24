@@ -69,3 +69,19 @@ def test_cli_uses_same_dev_entrypoint_and_reports_terminal_exit_codes(tmp_path: 
     assert main(["--output", str(tmp_path / "success")]) == 0
     assert main(["--output", str(tmp_path / "before"), "--inject-failure", "before_marker"]) == 2
     assert main(["--output", str(tmp_path / "after"), "--inject-failure", "after_marker"]) == 2
+
+
+def test_integration_workflow_is_dev_only_and_bound_to_the_active_branch() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[1]
+        / ".github"
+        / "workflows"
+        / "protocol-v5-hardening.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "integration/final-paper-quality-local" in workflow
+    assert "scripts/run_one_shot_protocol_dev.py" in workflow
+    assert "one-shot-protocol-hardening-${{ github.run_id }}" in workflow
+    assert "face-smartphone-v3-final-holdout" not in workflow
+    assert "face-smartphone-v4-final-holdout" not in workflow
+    assert "v4-certification-request" not in workflow
