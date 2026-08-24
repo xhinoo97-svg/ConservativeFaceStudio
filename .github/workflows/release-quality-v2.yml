@@ -17,17 +17,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  calibration-and-independent-final-holdout:
+  calibration-only-until-v4-certification:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       PYTHONPATH: ${{ github.workspace }}
       QT_QPA_PLATFORM: offscreen
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+
+      - name: Verify exact candidate checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$CANDIDATE_SHA" || {
+            echo "Release Quality checkout mismatch: $actual != $CANDIDATE_SHA"
+            exit 1
+          }
+          echo "Exact candidate SHA: $actual"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -41,21 +54,55 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
-      - name: Freeze new independent final holdout before candidate evaluation
+      - name: Verify consumed V3 manifests without executing V3
         run: |
-          python scripts/freeze_face_smartphone_v3_final_holdout.py
+          test -f benchmarks/face-smartphone-v3-final-holdout/freeze.json
+          test -f benchmarks/face-smartphone-v3-final-holdout/cases.json
+          test -f benchmarks/face-smartphone-v3-final-holdout/sources.json
+          test -f benchmarks/face-smartphone-v3-final-holdout/contract.json
           python scripts/freeze_face_smartphone_v3_final_holdout.py --verify
+          git diff --exit-code -- benchmarks/face-smartphone-v3-final-holdout
+          echo 'V3 final holdout is consumed: verification only; execution forbidden in this workflow.'
 
-      - name: Targeted source-eligibility, partial-reference, MAIN and provenance regressions
+      - name: Verify frozen V4 manifests without executing V4
+        run: |
+          test -f benchmarks/face-smartphone-v4-final-holdout/freeze.json
+          test -f benchmarks/face-smartphone-v4-final-holdout/cases.json
+          test -f benchmarks/face-smartphone-v4-final-holdout/sources.json
+          test -f benchmarks/face-smartphone-v4-final-holdout/contract.json
+          python scripts/freeze_face_smartphone_v4_final_holdout.py --verify
+          python scripts/verify_v4_freeze_history.py
+          git diff --exit-code -- benchmarks/face-smartphone-v4-final-holdout
+          echo 'V4 final holdout is consumed/immutable: verification only; final execution forbidden in this workflow.'
+
+      - name: Targeted identity, source-eligibility, partial-reference, MAIN and provenance regressions
         run: |
           python -m pytest -q \
+            tests/test_identity_anchor_v4_policy.py \
+            tests/test_identity_anchor_v4_fail_closed.py \
+            tests/test_identity_anchor_v4_face_local.py \
+            tests/test_v4_legacy_cluster_flag_hardening.py \
+            tests/test_v4_sface_matrix_validation.py \
+            tests/test_v4_direct_edge_protocol.py \
+            tests/test_v4_abstention_markers.py \
+            tests/test_face_smartphone_abstention.py \
+            tests/test_reliability_aware_identity.py \
             tests/test_face_domain_guard_v2_policy.py \
             tests/test_pretrained_face_resilience_regressions.py \
             tests/test_partial_reference_stage_gates.py \
             tests/test_preflight_main_contract.py \
             tests/test_nine_reference_support.py \
             tests/test_immutable_input_and_provenance_firewall.py \
-            tests/test_provenance_source_mapping.py
+            tests/test_provenance_source_mapping.py \
+            tests/test_guardrail_workspace_rollback.py \
+            tests/test_release_gate_wrong_person_provenance.py \
+            tests/test_v4_release_protocol_static.py \
+            tests/test_v4_controlface_source_parser.py \
+            tests/test_v4_freeze_history.py \
+            tests/test_same_head_windows_product.py \
+            tests/test_female_domain_observed.py \
+            tests/test_damage_router.py \
+            tests/test_paper_quality_runtime.py
 
       - name: Full pytest
         run: python -m pytest -q
@@ -66,6 +113,7 @@ jobs:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          test "$EXPECTED_HEAD" = "$CANDIDATE_SHA"
           deadline=$(( $(date +%s) + 3600 ))
           windows_run_id=""
           windows_status=""
@@ -118,7 +166,9 @@ jobs:
           mkdir -p models
           cp -R .same-head-local-models/. models/
           test -f .same-head-release-metadata/models/model-registry.json
+          test -f .same-head-release-metadata/validation-summary.json
           cp .same-head-release-metadata/models/model-registry.json models/model-registry.json
+          python scripts/verify_same_head_windows_product.py
 
       - name: Verify frozen local model pack and SHA-256 without downloads
         run: |
@@ -202,53 +252,32 @@ jobs:
               break
           PY
 
-      - name: V2 calibration on existing frozen 60-case calibration split
+      - name: V4 candidate calibration on existing frozen 60-case calibration split
         run: |
-          python scripts/run_face_smartphone_baseline.py \
-            --output face-smartphone-v2-calibration \
+          python scripts/run_face_smartphone_v4_calibration.py \
+            --output face-smartphone-v4-calibration \
             --cache .benchmark-cache/face-smartphone-v1 \
-            --model-root . \
-            --split calibration \
-            --candidate-id face-domain-guard-v3 \
-            --offline-sources \
-            --fail-on-errors
+            --model-root .
 
-      - name: Enforce 60/60 calibration admission
+      - name: Enforce 60/60 V4 candidate calibration admission
         run: |
           python scripts/validate_face_smartphone_release_gate.py \
-            face-smartphone-v2-calibration/baseline.json \
+            face-smartphone-v4-calibration/baseline.json \
             --expected-count 60 \
             --expected-benchmark cfs-face-smartphone-v1 \
             --expected-split calibration \
-            --expected-candidate face-domain-guard-v3 \
-            --output face-smartphone-v2-calibration/gate.json
+            --expected-candidate face-domain-guard-v4 \
+            --output face-smartphone-v4-calibration/gate.json
 
-      - name: Freeze committed candidate after calibration and before final holdout
+      - name: Freeze same-HEAD V4 candidate after calibration
         run: |
-          python scripts/freeze_face_domain_guard_v3_candidate.py \
-            --calibration-gate face-smartphone-v2-calibration/gate.json \
+          python scripts/freeze_face_domain_guard_v4_candidate.py \
+            --calibration-gate face-smartphone-v4-calibration/gate.json \
             --model-root . \
-            --output face-domain-guard-v3-candidate-freeze.json
+            --output face-domain-guard-v4-candidate-freeze.json
+          echo 'V4 candidate calibration evidence created; V4 final holdout remains forbidden.'
 
-      - name: One-shot independent 40-case final holdout
-        run: |
-          python scripts/run_face_smartphone_v3_final_holdout.py \
-            --output face-smartphone-v3-final-holdout-result \
-            --cache .benchmark-cache/face-smartphone-v3-final-holdout \
-            --model-root . \
-            --candidate-freeze face-domain-guard-v3-candidate-freeze.json
-
-      - name: Enforce 40/40 independent final-holdout admission
-        run: |
-          python scripts/validate_face_smartphone_release_gate.py \
-            face-smartphone-v3-final-holdout-result/baseline.json \
-            --expected-count 40 \
-            --expected-benchmark cfs-face-smartphone-v3-final-holdout \
-            --expected-split final_holdout \
-            --expected-candidate face-domain-guard-v3 \
-            --output face-smartphone-v3-final-holdout-result/gate.json
-
-      - name: Upload V2 release-quality evidence
+      - name: Upload calibration evidence only
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -256,19 +285,21 @@ jobs:
           if-no-files-found: warn
           path: |
             models/model-registry.json
-            face-smartphone-v2-calibration/baseline.json
-            face-smartphone-v2-calibration/gate.json
-            face-smartphone-v2-calibration/cases/**/input.png
-            face-smartphone-v2-calibration/cases/**/clean.png
-            face-smartphone-v2-calibration/cases/**/damage_mask.png
-            face-smartphone-v2-calibration/cases/**/output.png
-            face-smartphone-v2-calibration/cases/**/blocks.zip
-            face-smartphone-v2-calibration/cases/**/final_provenance.json
-            face-domain-guard-v3-candidate-freeze.json
+            .same-head-release-metadata/validation-summary.json
+            face-smartphone-v4-calibration/baseline.json
+            face-smartphone-v4-calibration/gate.json
+            face-smartphone-v4-calibration/cases/**/input.png
+            face-smartphone-v4-calibration/cases/**/clean.png
+            face-smartphone-v4-calibration/cases/**/damage_mask.png
+            face-smartphone-v4-calibration/cases/**/output.png
+            face-smartphone-v4-calibration/cases/**/blocks.zip
+            face-smartphone-v4-calibration/cases/**/final_provenance.json
+            face-domain-guard-v4-candidate-freeze.json
             benchmarks/face-smartphone-v3-final-holdout/sources.json
             benchmarks/face-smartphone-v3-final-holdout/cases.json
             benchmarks/face-smartphone-v3-final-holdout/freeze.json
             benchmarks/face-smartphone-v3-final-holdout/contract.json
-            face-smartphone-v3-final-holdout-result/baseline.json
-            face-smartphone-v3-final-holdout-result/gate.json
-            face-smartphone-v3-final-holdout-result/cases/**/final_provenance.json
+            benchmarks/face-smartphone-v4-final-holdout/sources.json
+            benchmarks/face-smartphone-v4-final-holdout/cases.json
+            benchmarks/face-smartphone-v4-final-holdout/freeze.json
+            benchmarks/face-smartphone-v4-final-holdout/contract.json
