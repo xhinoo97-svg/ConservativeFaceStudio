@@ -6,11 +6,11 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `integration/final-paper-quality-local` is the single active integration line, created exactly from immutable `main`. Track A, protocol hardening and Track B remain traceable read-only source/evidence lines.
-- CURRENT TECHNICAL HEAD: integration `4cdc439a80887f3852a816417645900ad3af40b2`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
-- CURRENT PHASE: the selected model-independent foundations, resource/lifecycle/fusion contracts and duration-only progress timeline are integrated/tested. Production-runtime wiring is now the active phase; V4 remains CONSUMED_FAIL and V5 does not exist.
+- CURRENT TECHNICAL HEAD: integration `b8b635670afee6e457702bc6f39a3d2dffc3c43a`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
+- CURRENT PHASE: the selected model-independent foundations and a fail-closed Paper Quality orchestration boundary are integrated/tested. Production readiness gating and qualified-backend evidence are now the active phase; V4 remains CONSUMED_FAIL and V5 does not exist.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
-- WHAT WAS JUST COMPLETED: calibration-required candidate selector `f6caff6... -> 4cdc439...`: all safety/identity/geometry/healthy-region hard gates run before ranking; weights require DEVELOPMENT/VALIDATION provenance; targeted `10/10`, full `536/536` PASS.
-- WHAT IS BEING WORKED ON: a fail-closed Paper Quality orchestration boundary that composes damage evidence, reference-first repair, optional generated candidates, selection and fusion without enabling an unqualified backend.
+- WHAT WAS JUST COMPLETED: fail-closed Paper Quality orchestration `b8b6356...`: missing damage or safety evidence abstains; nonzero identity/provenance counters and authority violations roll back; generated candidates require an explicit calibrated policy; targeted `22/22`, full `541/541` PASS.
+- WHAT IS BEING WORKED ON: a machine-readable production-readiness gate that prevents Paper Quality/V5 promotion while model, dataset, Windows/offline and target-PC evidence is absent.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; overall DEVELOPMENT gates pass on 2- and 40-identity evaluations, but domain robustness and weight licensing are not qualified.
 - WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
@@ -19,7 +19,7 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: implement a synthetic-DEV-tested orchestration contract that returns ABSTAIN when damage evidence or calibrated model candidates are unavailable, preserves MAIN outside explicit authority, and records complete route/provenance decisions.
+- NEXT EXACT STEP: add and test a fail-closed machine-readable readiness evaluation over checkpoint/license/runtime/quality/domain/Windows/offline/Target95 prerequisites; keep all real backends disabled until their evidence is complete.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -34,7 +34,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@6d57725aae087bb4a3144d521d91346999f9a4fd`
-- Active integration HEAD: `integration/final-paper-quality-local@4cdc439a80887f3852a816417645900ad3af40b2`; exact tree `8576fbe94a13251ce6388d2877e1321b12464cfc`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- Active integration HEAD: `integration/final-paper-quality-local@b8b635670afee6e457702bc6f39a3d2dffc3c43a`; exact tree `31c691bc0b3d525cdd62635f5b46f2e5c5448553`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -73,7 +73,7 @@ The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`
 | Branch | Purpose | HEAD | State | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
-| `integration/final-paper-quality-local` | single final product integration | `4cdc439...` | ACTIVE / CANDIDATE HARD GATES PASS | targeted 10/10, full 536/536; no backend/weight change | fail-closed orchestration contract |
+| `integration/final-paper-quality-local` | single final product integration | `b8b6356...` | ACTIVE / ORCHESTRATION FAIL-CLOSED | targeted 22/22, full 541/541; no backend/weight change | machine-readable production-readiness gate |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
@@ -338,6 +338,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-047 runtime telemetry `6bd5488...`: 13-block worker/UI timeline now exposes learned local ETA, measured process CPU/RAM and system RAM, and exact checkpoint path/SHA only when block-result evidence proves that model executed. Targeted 18/18 and full 524/524 PASS; first CPU sample and unavailable fields remain unknown rather than guessed.
 - HIST-20260824-048 cancellation/semantics `268088a...`: thread-safe Cancel is honored before the next block, preserves the last accepted state/checkpoint and is reported separately from runtime failure. Completed events expose compact decision, reason, mask, provenance and identity summaries. Targeted 31/31 and full 526/526 PASS.
 - HIST-20260824-049 candidate selector `f6caff6... -> 4cdc439...`: calibrated eight-metric ranking is reachable only after immutable SFace `0.363`, wrong-person zero, provenance zero, healthy-region MAE ≤8 and calibrated geometry gates pass. Targeted 10/10 and full 536/536 PASS; no candidate backend activated.
+- HIST-20260824-050 Paper Quality orchestration `b8b6356...`: qualified upstream evidence is composed without loading a model or inventing calibration. Missing damage/safety evidence abstains; nonzero wrong-person/provenance counters, invalid reference provenance and outside-authority changes roll back to MAIN. Generated candidates require an explicit DEVELOPMENT/VALIDATION policy. Targeted 22/22 and full 541/541 PASS; no backend, checkpoint, threshold, holdout or V5 object activated.
 
 ---
 
@@ -702,6 +703,19 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - LIMIT: standalone selector with synthetic evidence; no real GPEN/GFPGAN/CodeFormer/InstantRestore candidate was executed or promoted. Ranking weights are a required input, not a fabricated default.
 - MODEL/HOLDOUT EFFECT: none. No checkpoint, threshold, dataset, installer, workflow, consumed marker or holdout changed.
 - NEXT EXACT ACTION: implement and test a fail-closed orchestration boundary over damage evidence, reference-first repair, candidate selection and fusion; default to ABSTAIN when any qualified input is absent.
+
+### PUSH-20260824-026
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD: `4cdc439a80887f3852a816417645900ad3af40b2`; tree `8576fbe94a13251ce6388d2877e1321b12464cfc`.
+- NEW REMOTE HEAD: `b8b635670afee6e457702bc6f39a3d2dffc3c43a`; exact tested tree `31c691bc0b3d525cdd62635f5b46f2e5c5448553`.
+- FILES: `app/paper_quality_runtime.py`, `tests/test_paper_quality_runtime.py`.
+- CONTRACT: the route accepts only already-qualified damage, observed-reference and generated-candidate evidence. Missing damage evidence or explicit safety counters returns ABSTAIN unchanged. Nonzero wrong-person/provenance counters, invalid reference maps and any outside-authority change return ROLLBACK to immutable MAIN. Generated placements cannot be selected without an explicit DEVELOPMENT/VALIDATION calibration; observed provenance retains absolute priority during component-aware fusion.
+- TESTS: targeted orchestration/selector/fusion `22/22 PASS`; full pytest `541/541 PASS`; diff check PASS.
+- LIMIT: this is an orchestration boundary, not a model implementation. It performs no checkpoint download/load/inference, no mask inference, no threshold calibration and no V5 action. LR-ASPP, FBCNN and all face restorers remain disabled for production until independently qualified.
+- MODEL/HOLDOUT EFFECT: none. No model, checkpoint, license classification, threshold, dataset, installer, workflow, V3/V4 marker or holdout changed.
+- NEXT EXACT ACTION: add and test a fail-closed machine-readable production-readiness evaluation covering model/checkpoint/license/runtime/quality/domain, Windows/offline, identity-disjoint Target95 and target-PC prerequisites; keep Paper Quality and V5 blocked until every required field is proven.
 
 ---
 
