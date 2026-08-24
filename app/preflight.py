@@ -253,6 +253,10 @@ def preprocess_and_select_front_base(workspace, model_paths: dict[str, str | Pat
     workspace.metadata["preflight_nafnet_inference_count"] = len(nafnet_indices)
     workspace.metadata["preflight_original_occlusion_masks"] = [item.copy() for item in original_occlusion]
     workspace.metadata["preflight_detail_reliability_maps"] = [item.copy() for item in original_reliability]
+    workspace.metadata["preflight_face_bboxes"] = [
+        None if item is None else tuple(int(value) for value in item.bbox)
+        for item in observations
+    ]
 
     pose_engine = HeadPoseEngine(pose_raw) if pose_raw is not None and Path(pose_raw).is_file() else None
     candidates: list[PreflightCandidate] = []

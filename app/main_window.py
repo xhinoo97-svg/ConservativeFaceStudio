@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QProgressBar,
+    QListWidget,
+    QListWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -118,7 +120,17 @@ class MainWindow(QMainWindow):
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 13)
+        self.progress.setFormat("%v / 13 — %p%")
         layout.addWidget(self.progress)
+        self.timeline = QListWidget()
+        self.timeline.setMaximumHeight(150)
+        self._timeline_titles = [
+            "Import", "Deblur", "Enhance", "Face / Landmarks", "Align References",
+            "Detect Damage", "Select Best Regions", "Repair / Inpaint", "Fusion",
+            "Pose", "Identity Check", "Upscale", "Export",
+        ]
+        self._reset_timeline()
+        layout.addWidget(self.timeline)
 
         controls = QHBoxLayout()
         self.load_primary_button = QPushButton("Carica MAIN IMAGE")
@@ -373,19 +385,22 @@ class MainWindow(QMainWindow):
                     raise ValueError(f"Immagine del progetto non leggibile: {path}")
                 images.append(image)
             main = images[0]
-            fitted: list[np.ndarray] = []
+            native_references: list[np.ndarray] = []
             normalization: list[dict[str, float | int]] = []
             for image in images[1:]:
-                item, details = fit_to_canvas(image, main.shape[:2])
-                fitted.append(item)
+                _, details = fit_to_canvas(image, main.shape[:2])
+                details["analysis_uses_native_resolution"] = True
+                details["native_width"] = int(image.shape[1])
+                details["native_height"] = int(image.shape[0])
+                native_references.append(image.copy())
                 normalization.append(details)
-            validate_reference_count(len(fitted))
+            validate_reference_count(len(native_references))
         except (OSError, ValueError, TypeError) as exc:
             QMessageBox.critical(self, "Progetto non valido", str(exc))
             return
 
         self.primary = main
-        self.references = fitted
+        self.references = native_references
         self.reference_normalization = normalization
         self.primary_path = paths[0]
         self.reference_paths = paths[1:]
@@ -402,7 +417,7 @@ class MainWindow(QMainWindow):
         self.progress.setValue(0)
         self.confidence_label.setText("Original Information Confidence: —")
         self.status.setText(
-            f"Progetto caricato: 1 MAIN IMAGE + {len(fitted)} reference. Ripresa sicura dalle sorgenti immutabili."
+            f"Progetto caricato: 1 MAIN IMAGE + {len(native_references)} reference. Ripresa sicura dalle sorgenti native immutabili."
         )
         self._update_controls()
 
@@ -428,7 +443,7 @@ class MainWindow(QMainWindow):
             return
 
         primary_shape = self.primary.shape[:2]
-        fitted_items: list[np.ndarray] = []
+        native_items: list[np.ndarray] = []
         metadata_items: list[dict[str, float | int]] = []
         paths: list[Path] = []
         for filename in filenames:
@@ -436,12 +451,15 @@ class MainWindow(QMainWindow):
             if image is None:
                 QMessageBox.critical(self, "Errore", f"Impossibile leggere:\n{filename}")
                 return
-            fitted, metadata = fit_to_canvas(image, primary_shape)
-            fitted_items.append(fitted)
+            _, metadata = fit_to_canvas(image, primary_shape)
+            metadata["analysis_uses_native_resolution"] = True
+            metadata["native_width"] = int(image.shape[1])
+            metadata["native_height"] = int(image.shape[0])
+            native_items.append(image.copy())
             metadata_items.append(metadata)
             paths.append(Path(filename))
 
-        self.references.extend(fitted_items)
+        self.references.extend(native_items)
         self.reference_normalization.extend(metadata_items)
         self.reference_paths.extend(paths)
         validate_reference_count(len(self.references))
@@ -490,6 +508,7 @@ class MainWindow(QMainWindow):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._on_progress)
+        worker.block_completed.connect(self._on_block_completed)
         worker.completed.connect(self._on_completed)
         worker.failed.connect(self._on_failed)
         worker.completed.connect(thread.quit)
@@ -501,6 +520,7 @@ class MainWindow(QMainWindow):
         self.worker = worker
         self.progress.setRange(0, 13)
         self.progress.setValue(0)
+        self._reset_timeline()
         self.confidence_label.setText("Original Information Confidence: calcolo in corso")
         self.status.setText("Pipeline automatica in esecuzione")
         self._update_controls()
@@ -522,6 +542,30 @@ class MainWindow(QMainWindow):
                     except (OSError, ValueError):
                         checkpoint = None
             save_project(self._project_document(status="running", last_checkpoint=checkpoint), self.recovery_project_path)
+
+    def _reset_timeline(self) -> None:
+        self.timeline.clear()
+        for index, title in enumerate(self._timeline_titles, start=1):
+            item = QListWidgetItem(f"{index:02d}  {title}  — PENDING")
+            item.setForeground(Qt.GlobalColor.gray)
+            self.timeline.addItem(item)
+
+    def _on_block_completed(self, index: int, title: str, status: str, image: object, details: object) -> None:
+        if 1 <= int(index) <= self.timeline.count():
+            item = self.timeline.item(int(index) - 1)
+            duration = float(details.get("duration_ms", 0.0)) if isinstance(details, dict) else 0.0
+            item.setText(f"{int(index):02d}  {title}  — {status}  ({duration:.0f} ms)")
+            colors = {
+                "PASS": Qt.GlobalColor.green,
+                "SKIPPED": Qt.GlobalColor.darkYellow,
+                "ROLLBACK": Qt.GlobalColor.darkYellow,
+                "FAILED": Qt.GlobalColor.red,
+            }
+            item.setForeground(colors.get(str(status), Qt.GlobalColor.gray))
+            self.timeline.setCurrentItem(item)
+            self.timeline.scrollToItem(item)
+        if isinstance(image, np.ndarray) and image.size:
+            self.after_panel.set_cv_image(image)
 
     def _on_completed(self, result: object) -> None:
         if not isinstance(result, AutomaticRunResult):

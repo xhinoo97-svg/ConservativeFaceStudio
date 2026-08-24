@@ -12,8 +12,45 @@ from app.component_bank import build_component_bank, warped_support_mask
 from app.execution import BlockExecutionError, ExecutionResult
 from app.face_analysis import cosine_similarity
 from app.opencv_zoo_face import OpenCVZooFaceEngine
+from app.opencv_semantic_models import FaceParsingEngine
 from app.pipeline import BlockKind, BlockSpec
 from app.pretrained_values import FACE_MODEL_DEFAULTS
+
+
+def reliability_aware_identity_flags(
+    scores: list[float | None],
+    preflight_candidates: Any,
+    runtime_order: list[int],
+) -> tuple[list[bool], list[str]]:
+    """Extend direct MAIN verification only through a cluster bridged to MAIN.
+
+    Cross-reference agreement alone is never authority. Promotion requires both the
+    imported MAIN and at least one directly verified reference in the same frozen
+    preflight identity component.
+    """
+    threshold = FACE_MODEL_DEFAULTS.sface_same_identity_cosine
+    flags = [score is not None and float(score) >= threshold for score in scores]
+    reasons = ["direct_sface" if flag else "rejected" for flag in flags]
+    if not isinstance(preflight_candidates, list):
+        return flags, reasons
+    accepted_sources = {
+        int(item.get("source_index"))
+        for item in preflight_candidates
+        if isinstance(item, dict) and bool(item.get("accepted_identity", False)) and item.get("source_index") is not None
+    }
+    main_bridged = 0 in accepted_sources
+    direct_bridge = any(
+        flag and index + 1 < len(runtime_order) and int(runtime_order[index + 1]) in accepted_sources
+        for index, flag in enumerate(flags)
+    )
+    if not (main_bridged and direct_bridge):
+        return flags, reasons
+    for index, flag in enumerate(flags):
+        source = int(runtime_order[index + 1]) if index + 1 < len(runtime_order) else index + 1
+        if not flag and source in accepted_sources:
+            flags[index] = True
+            reasons[index] = "main_bridged_cross_reference_cluster"
+    return flags, reasons
 
 
 def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path]) -> None:
@@ -53,13 +90,64 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
 
     def landmarks_handler(block: BlockSpec, parameters: dict[str, Any]) -> ExecutionResult:
         try:
-            primary = landmark_engine.analyze(executor.workspace.primary)
+            primary = None
+            primary_failure: Exception | None = None
+            try:
+                primary = landmark_engine.analyze(executor.workspace.primary)
+            except Exception as exc:
+                primary_failure = exc
             refs = []
             for image in executor.workspace.references:
                 try:
                     refs.append(landmark_engine.analyze(image))
-                except ValueError:
+                except Exception:
                     refs.append(None)
+
+            if primary is None:
+                parsing_bbox = None
+                parsing_path = model_paths.get("face_parsing_resnet18_onnx")
+                if parsing_path is not None and Path(parsing_path).is_file():
+                    try:
+                        parser = FaceParsingEngine(Path(parsing_path), target="cpu")
+                        labels = parser.predict(executor.workspace.primary)
+                        support = parser.support_mask(labels)
+                        points = cv2.findNonZero(np.where(support > 0, 255, 0).astype(np.uint8))
+                        if points is not None:
+                            parsing_bbox = tuple(int(value) for value in cv2.boundingRect(points))
+                            executor.workspace.metadata["face_semantic_support"] = support
+                    except Exception as parsing_exc:
+                        executor.workspace.metadata["face_parsing_geometry_failure"] = str(parsing_exc)
+                if parsing_bbox is None:
+                    executor.workspace.metadata["face_analysis_failure_code"] = "MODEL_LOADED_BUT_NO_FACE_DETECTED"
+                    raise BlockExecutionError(
+                        "FACE_TOO_OCCLUDED: YuNet caricato correttamente ma nessun volto rilevato; geometria facciale non disponibile"
+                    ) from primary_failure
+                executor.workspace.metadata.update({
+                    "primary_landmarks5": None,
+                    "primary_bbox": parsing_bbox,
+                    "primary_landmark_confidence": 0.0,
+                    "reference_landmarks5": [None if item is None else item.landmarks5 for item in refs],
+                    "reference_bboxes": [None if item is None else item.bbox for item in refs],
+                    "reference_landmark_confidence": [0.0 if item is None else item.score for item in refs],
+                    "reference_identity_scores": [None for _ in refs],
+                    "reference_identity_verified": [False for _ in refs],
+                    "reference_identity_reasons": ["main_embedding_unavailable" for _ in refs],
+                    "reference_identity_verification_available": False,
+                    "reference_partial_candidates": [item is None for item in refs],
+                    "face_backend": "face-parsing-low-confidence-geometry",
+                    "face_analysis_failure_code": "FACE_TOO_OCCLUDED",
+                })
+                return ExecutionResult(block.key, executor.workspace.copy_primary(), {
+                    "backend": "face-parsing-low-confidence-geometry",
+                    "pretrained": True,
+                    "primary_detector_failed": True,
+                    "failure_code": "FACE_TOO_OCCLUDED",
+                    "bbox": list(parsing_bbox),
+                    "landmark_count": 0,
+                    "reference_faces": int(sum(item is not None for item in refs)),
+                    "geometry_authority": "analysis_bbox_only",
+                    "pixel_reconstruction_authority": False,
+                })
 
             identity_scores: list[float | None] = []
             if primary.embedding is not None:
@@ -71,10 +159,14 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
             else:
                 identity_scores = [None for _ in refs]
 
-            identity_verified = [
-                score is not None and score >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
-                for score in identity_scores
-            ]
+            runtime_order = executor.workspace.metadata.get("runtime_source_order")
+            if not isinstance(runtime_order, list) or len(runtime_order) != len(refs) + 1:
+                runtime_order = list(range(len(refs) + 1))
+            identity_verified, identity_reasons = reliability_aware_identity_flags(
+                identity_scores,
+                executor.workspace.metadata.get("preflight_candidates"),
+                [int(item) for item in runtime_order],
+            )
             backend = (
                 f"opencv-zoo-yunet-sface-{landmark_engine.target_name}"
                 if primary.embedding is not None
@@ -90,6 +182,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "reference_landmark_confidence": [0.0 if item is None else item.score for item in refs],
                     "reference_identity_scores": identity_scores,
                     "reference_identity_verified": identity_verified,
+                    "reference_identity_reasons": identity_reasons,
                     "reference_identity_verification_available": primary.embedding is not None,
                     "reference_partial_candidates": [item is None for item in refs],
                     "face_backend": backend,
@@ -110,11 +203,14 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "partial_reference_candidates": int(sum(item is None for item in refs)),
                     "reference_identity_scores": identity_scores,
                     "reference_identity_verified": int(sum(identity_verified)),
+                    "reference_identity_reasons": identity_reasons,
                     "reference_bbox_count": int(sum(item is not None for item in executor.workspace.metadata["reference_bboxes"])),
                     "sface_reference_threshold": FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
                 },
             )
         except Exception as exc:
+            if isinstance(exc, BlockExecutionError):
+                raise
             if original_landmarks is None:
                 raise BlockExecutionError(str(exc)) from exc
             fallback = original_landmarks(block, parameters)
@@ -138,6 +234,8 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
         primary_points = executor.workspace.metadata.get("primary_landmarks5")
         ref_points = executor.workspace.metadata.get("reference_landmarks5", [])
         identity_scores = executor.workspace.metadata.get("reference_identity_scores", [])
+        identity_verified_flags = executor.workspace.metadata.get("reference_identity_verified", [])
+        identity_reasons = executor.workspace.metadata.get("reference_identity_reasons", [])
         identity_available = bool(executor.workspace.metadata.get("reference_identity_verification_available", False))
         runtime_order = executor.workspace.metadata.get("runtime_source_order")
         if not isinstance(runtime_order, list) or len(runtime_order) != len(executor.workspace.references) + 1:
@@ -149,7 +247,8 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
 
         for index, reference in enumerate(executor.workspace.references):
             score = identity_scores[index] if isinstance(identity_scores, list) and index < len(identity_scores) else None
-            if identity_available and score is not None and float(score) < FACE_MODEL_DEFAULTS.sface_same_identity_cosine:
+            verified = bool(identity_verified_flags[index]) if isinstance(identity_verified_flags, list) and index < len(identity_verified_flags) else (score is not None and float(score) >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine)
+            if identity_available and score is not None and not verified:
                 rejected_identity += 1
                 diagnostics.append({
                     "source_index": index,
@@ -157,6 +256,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "rejected": True,
                     "reason": "sface_identity_mismatch",
                     "identity_score": float(score),
+                    "identity_status": identity_reasons[index] if isinstance(identity_reasons, list) and index < len(identity_reasons) else "rejected",
                 })
                 continue
 
@@ -219,7 +319,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
             runtime_source_indices.append(index)
             original_source_indices.append(original_index)
             aligned_scores.append(None if score is None else float(score))
-            full_identity_verified = score is not None and float(score) >= FACE_MODEL_DEFAULTS.sface_same_identity_cosine
+            full_identity_verified = bool(verified)
             aligned_verified.append(bool(full_identity_verified))
             partial_geometry_verified.append(bool(score is None and geometry_verified))
             reliable_fraction = float(np.mean((support > 0) & (aligned_reliability >= reliability_threshold)))
@@ -233,7 +333,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                 "support_fraction": float(np.mean(support > 0)),
                 "reliable_support_fraction": reliable_fraction,
                 "identity_score": None if score is None else float(score),
-                "identity_status": "sface_verified" if full_identity_verified else "partial_geometry_verified",
+                "identity_status": (identity_reasons[index] if isinstance(identity_reasons, list) and index < len(identity_reasons) else "sface_verified") if full_identity_verified else "partial_geometry_verified",
             })
 
         executor.workspace.aligned_references = aligned

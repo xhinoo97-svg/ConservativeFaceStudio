@@ -9,6 +9,7 @@ from app.observed_restoration_policy import (
     apply_observed_restoration_policy,
     conservative_strong_defocus_repair,
     normalized_laplacian_variance,
+    face_local_blur_analysis,
 )
 
 
@@ -72,3 +73,27 @@ def test_policy_respects_runtime_source_reordering() -> None:
 
     assert np.array_equal(workspace.primary, second)
     assert np.array_equal(workspace.references[0], first)
+
+
+def test_sharp_background_cannot_hide_local_face_blur() -> None:
+    clean = _textured_face(256)
+    for x in range(0, 256, 8):
+        cv2.line(clean, (x, 0), (x, 255), (255, 255, 255) if x % 16 else (0, 0, 0), 1)
+    bbox = (56, 48, 144, 168)
+    locally_blurred = clean.copy()
+    x, y, w, h = bbox
+    locally_blurred[y:y+h, x:x+w] = cv2.GaussianBlur(locally_blurred[y:y+h, x:x+w], (25, 25), 6.0)
+    learned = locally_blurred.copy()
+    learned[y:y+h, x:x+w] = cv2.detailEnhance(locally_blurred[y:y+h, x:x+w], sigma_s=10, sigma_r=0.15)
+    workspace = SimpleNamespace(
+        primary=learned,
+        references=[],
+        metadata={"runtime_source_order": [0], "preflight_face_bboxes": [bbox]},
+    )
+    decisions = apply_observed_restoration_policy(workspace, [locally_blurred])
+    face_score, component_score, category = face_local_blur_analysis(locally_blurred, bbox)
+    assert normalized_laplacian_variance(locally_blurred) >= 120.0
+    assert min(face_score, component_score) < 55.0
+    assert category in {"heavy_blur", "severe_blur_or_destroyed_information"}
+    assert decisions[0].action == "retain-preflight-nafnet"
+    assert np.array_equal(workspace.primary, learned)

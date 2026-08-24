@@ -17,6 +17,7 @@ class PipelineWorker(QObject):
     """Esegue verifica dei modelli locali e pipeline fuori dal thread UI."""
 
     progress = Signal(int, str)
+    block_completed = Signal(int, str, str, object, object)
     completed = Signal(object)
     failed = Signal(str)
 
@@ -71,6 +72,7 @@ class PipelineWorker(QObject):
 
                 runner = AutomaticPipelineRunner(self.workspace)
                 runner.on_progress = lambda index, name: self.progress.emit(int(index), str(name))
+                runner.on_block_completed = lambda index, title, status, image, details: self.block_completed.emit(index, title, status, image, details)
                 result = runner.run(self.output, upscale=self.upscale)
                 self.completed.emit(result)
         except Exception as exc:
