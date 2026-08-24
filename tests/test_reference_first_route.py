@@ -33,12 +33,11 @@ reference_bank = _load("app.personalized_reference_bank", APP / "personalized_re
 selector = _load("app.personalized_component_selector", APP / "personalized_component_selector.py")
 damage_runtime = _load("app.damage_mask_runtime", APP / "damage_mask_runtime.py")
 
-# Narrow stub: the route is tested with an injected deterministic repair function, so
-# this test must not execute the production repair kernel or its wider app bootstrap.
-reference_inpainting = types.ModuleType("app.reference_inpainting")
-reference_inpainting.VerifiedReferenceRepairResult = object
-reference_inpainting.verified_reference_repair = lambda *args, **kwargs: None
-sys.modules["app.reference_inpainting"] = reference_inpainting
+# Load the real lightweight repair contract. The route tests still inject deterministic
+# repair functions, but must not leave a fake app.reference_inpainting module in the
+# shared pytest process and corrupt later production-kernel tests.
+_load("app.strict_repair", APP / "strict_repair.py")
+_load("app.reference_inpainting", APP / "reference_inpainting.py")
 route = _load("app.reference_first_route", APP / "reference_first_route.py")
 
 DamageMaskResult = damage_runtime.DamageMaskResult
