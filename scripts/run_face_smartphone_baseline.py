@@ -29,6 +29,7 @@ from app.practical_benchmark import Scenario, _fit_portrait, _motion_blur, _mosa
 from app.production_model_smoke import PRODUCTION_MODEL_KEYS
 from app.model_catalog import all_model_manifests
 from scripts import freeze_face_smartphone_benchmark as freeze
+from scripts.frozen_benchmark_adapter import prepare_frozen_benchmark
 
 
 def _sha256(path: Path) -> str:
@@ -265,8 +266,9 @@ def run_baseline(
     case_ids: set[str] | None = None,
     candidate_id: str | None = None,
 ) -> dict[str, Any]:
-    cases_payload = freeze.build_cases()
-    freeze_payload = freeze.build_freeze(cases_payload)
+    frozen = prepare_frozen_benchmark(freeze)
+    cases_payload = frozen.cases_payload
+    freeze_payload = frozen.freeze_payload
     sources_payload = json.loads((freeze.BENCHMARK_ROOT / "sources.json").read_text(encoding="utf-8"))
     sources = {item["source_id"]: item for item in sources_payload["sources"]}
     source_paths = acquire_sources(cache, offline=offline_sources)
