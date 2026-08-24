@@ -1,0 +1,1354 @@
+{
+  "counts": {
+    "BROKEN": 0,
+    "DEAD_CODE": 0,
+    "FUNCTIONAL_BUT_UNVERIFIED": 8,
+    "INCOMPLETE": 0,
+    "OPTIONAL_RESEARCH": 21,
+    "PLACEHOLDER": 0,
+    "PRODUCTION_READY": 236,
+    "TESTING": 0
+  },
+  "format": "ConservativeFaceStudio product completion audit",
+  "model_catalog": [
+    {
+      "key": "opencv_yunet",
+      "reason": "Real checksum-pinned weight, loader, routing, CPU inference smoke and offline staging contract",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "key": "opencv_sface",
+      "reason": "Real checksum-pinned weight, loader, routing, CPU inference smoke and offline staging contract",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "key": "nafnet_gopro_width32",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "nafnet_sidd_width32",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "restormer_motion_deblur",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "restormer_real_denoise",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "mirnet_fivek_enhance",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "zero_dce_plus",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "mediapipe_face_landmarker",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "bisenet_face_parsing",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "dmdnet",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "lama_big",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "3ddfa_mb1",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "insightface_identity",
+      "reason": "Runtime status DISABLED; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "realesrgan_x2plus",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "opencv_nafnet_deblur",
+      "reason": "Real checksum-pinned weight, loader, routing, CPU inference smoke and offline staging contract",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "key": "face_parsing_resnet18_onnx",
+      "reason": "Real checksum-pinned weight, loader, routing, CPU inference smoke and offline staging contract",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "key": "head_pose_mobilenetv2_onnx",
+      "reason": "Real checksum-pinned weight, loader, routing, CPU inference smoke and offline staging contract",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "key": "opencv_lama_inpaint",
+      "reason": "Real checksum-pinned weight, loader, routing, CPU inference smoke and offline staging contract",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "key": "codeformer_v010",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "gfpgan_v13",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "restoreformer_v13_asset",
+      "reason": "Runtime status TESTING; excluded from the production pack",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "refstar_research",
+      "reason": "Catalog-only; code/weights/license/hardware remain deliberately unverified",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "instantrestore_research",
+      "reason": "Catalog-only; code/weights/license/hardware remain deliberately unverified",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "key": "osdface_research",
+      "reason": "Catalog-only; code/weights/license/hardware remain deliberately unverified",
+      "status": "OPTIONAL_RESEARCH"
+    }
+  ],
+  "product_complete_pre_tuning": false,
+  "source_modules": [
+    {
+      "path": "app/__init__.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/__main__.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/activity.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/adaptive_guardrail_state_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/adaptive_restoration_autoinstall.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/adaptive_restoration_cascade.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/alignment.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/automatic.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/automatic_integrity_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/automatic_quality_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/benchmark.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/block_artifacts.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/case_aware_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/case_router.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/component_alignment.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/component_bank.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/component_bank_evidence_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/conservative_observed_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/coordinate_reference_evidence_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/core_model_fallbacks.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/core_models.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/core_quality_gate_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/cross_reference_preclean.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/cross_reference_preclean_autoinstall.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/current_context_transaction_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/edge_connected_seed_expansion_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/evaluation.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/evidence_confidence.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/evidence_confidence_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/execution.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/explicit_damage_domain_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/exporting.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/face_analysis.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/face_resilience_binding_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/female_domain_benchmark.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/fixed_primary_contract_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/fixed_primary_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/frontalization.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/full_residual_reconstruction_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/hardware.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/history.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/imaging.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/immutable_input_autoinstall.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/immutable_input_store.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/installation_verifier.py",
+      "reason": "Implementation and tests exist; current Windows package gate has not completed",
+      "status": "FUNCTIONAL_BUT_UNVERIFIED"
+    },
+    {
+      "path": "app/logging_setup.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/main_window.py",
+      "reason": "Implementation and tests exist; current Windows package gate has not completed",
+      "status": "FUNCTIONAL_BUT_UNVERIFIED"
+    },
+    {
+      "path": "app/model_catalog.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/model_registry.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/model_runtime_registry.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/model_selection.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/modules.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/multi_reference_runtime_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/observed_restoration_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/observed_target_fusion_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/observed_target_photometric_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/observed_target_repair_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/opencv_lama.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/opencv_nafnet.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/opencv_semantic_models.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/opencv_zoo_face.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/optional_heavy_models.py",
+      "reason": "Catalog only; no release routing or automatic installation",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "path": "app/partial_reference_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/paths.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/pipeline.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/practical_benchmark.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/practical_benchmark_matrix.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/preexisting_observed_protection_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/preflight.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/preflight_selective_deblur_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/pretrained_face_handlers.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/pretrained_face_resilience_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/pretrained_inpaint_handler.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/pretrained_plan.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/pretrained_restoration_handlers.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/pretrained_semantic_handlers.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/pretrained_values.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/primary_anchor_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/production_model_smoke.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/production_models.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/project.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/provenance_firewall_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/reference_guided_seed_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/reference_hint_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/reference_inpainting.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/reference_limits.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/reference_memory.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/reference_memory_legacy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/regional_fusion.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/research_models.py",
+      "reason": "Catalog only; no release routing or automatic installation",
+      "status": "OPTIONAL_RESEARCH"
+    },
+    {
+      "path": "app/restoration.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/safety.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/same_canvas_repair_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/same_canvas_seed_precision_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/same_canvas_seed_support_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/seed_only_damage_overlap_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/settings.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/severity_aware_deblur_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/single_image_core_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/standard_pretrained.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/strict_execution.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/strict_repair.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/symmetry_repair.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/tiny_observed_evidence_autoinstall.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/tiny_observed_evidence_policy.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/update_manager.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/update_worker.py",
+      "reason": "Implementation and tests exist; current Windows package gate has not completed",
+      "status": "FUNCTIONAL_BUT_UNVERIFIED"
+    },
+    {
+      "path": "app/validation.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/validation_suite.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/version.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/visibility_stress_benchmark.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "app/worker.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/audit_product_modules.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/build_windows.ps1",
+      "reason": "Implementation and tests exist; current Windows package gate has not completed",
+      "status": "FUNCTIONAL_BUT_UNVERIFIED"
+    },
+    {
+      "path": "scripts/check_for_updates.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/generate_update_manifest.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/generate_validation_summary.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/prefetch_public_portraits.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/run_face_anchored_practical_benchmark.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/run_female_domain_benchmark_80.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/run_female_domain_benchmark_observed.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/run_female_domain_benchmark_resilient.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/smoke_lama_runtime.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/smoke_production_models.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/smoke_reference_counts.py",
+      "reason": "Implemented, runtime-wired and covered by local compile/test/integration gates",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "scripts/stage_production_models.ps1",
+      "reason": "Implementation and tests exist; current Windows package gate has not completed",
+      "status": "FUNCTIONAL_BUT_UNVERIFIED"
+    },
+    {
+      "path": "installer/ConservativeFaceStudio.iss",
+      "reason": "Implementation and tests exist; current Windows package gate has not completed",
+      "status": "FUNCTIONAL_BUT_UNVERIFIED"
+    },
+    {
+      "path": ".github/workflows/female-domain-benchmark.yml",
+      "reason": "Implementation and tests exist; current Windows package gate has not completed",
+      "status": "FUNCTIONAL_BUT_UNVERIFIED"
+    },
+    {
+      "path": ".github/workflows/windows-build.yml",
+      "reason": "Implementation and tests exist; current Windows package gate has not completed",
+      "status": "FUNCTIONAL_BUT_UNVERIFIED"
+    },
+    {
+      "path": "tests/test_activity_lock.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_adaptive_restoration_cascade.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_adaptive_state_hardening.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_alignment_abstention_regression.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_audit_regressions.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_automatic.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_automatic_conservative_frontalize.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_automatic_integrity_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_benchmark.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_benchmark_evidence_completeness.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_block_code_completeness.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_case_aware_automatic.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_component_alignment_runtime.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_component_bank.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_component_bank_evidence_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_component_memory_refinement.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_conservative_observed_runtime.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_coordinate_reference_evidence_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_core_5_9_code_complete.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_core_models.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_cross_reference_preclean.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_current_context_transaction_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_detail_reliability.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_edge_connected_seed_expansion_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_evaluation.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_execution.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_explicit_damage_domain_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_face_analysis.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_face_anchored_release_matrix.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_face_resilience_binding.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_female_domain_80_catalog.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_female_domain_benchmark.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_female_domain_observed.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_frontalization.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_frozen_occlusion_runtime.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_full_residual_outer_target.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_guardrail_workspace_rollback.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_hardware.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_identity_retention.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_imaging.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_immutable_input_and_provenance_firewall.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_installation_verifier.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_logging_setup.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_model_integrity.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_model_registry.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_model_runtime_registry_release.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_model_selection.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_multi_reference_runtime_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_nine_reference_support.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_observed_restoration_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_observed_target_fusion_runtime.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_observed_target_nonfinite_reliability.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_observed_target_photometric_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_observed_target_repair_runtime.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_opencv5_dnn_engine_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_opencv_nafnet_padding.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_optional_heavy_models.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_partial_reference_reliability.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_partial_reference_stage_gates.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_pipeline.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_pipeline_wiring.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_practical_benchmark.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_practical_benchmark_matrix.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_preflight_identity_backend.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_preflight_main_contract.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_preflight_selective_deblur_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_pretrained_face_resilience_regressions.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_pretrained_plan.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_pretrained_restoration.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_pretrained_semantic_pose_sources.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_primary_anchor_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_product_audit.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_production_models.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_project.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_provenance_source_mapping.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_real_case_reliability.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_realistic_occlusion_regressions.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_recovery_checkpoints.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_reference_guided_seed_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_reference_hint_runtime.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_reference_inpainting.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_reference_inpainting_exposure_consensus.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_reference_memory.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_reference_memory_damage_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_reference_memory_nine.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_regional_fusion_strict.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_restoration.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_runner_readiness.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_safety.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_same_canvas_baseline_fail_closed.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_same_canvas_partial_alignment.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_same_canvas_repair_runtime.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_same_canvas_seed_precision_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_same_canvas_seed_support_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_seed_only_damage_overlap_policy.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_semantic_model_math.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_settings.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_standard_pretrained.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_strict_abstention.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_strict_executor.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_strict_repair.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_tiny_observed_evidence_authority.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_update_manager.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_update_manifest.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_update_worker.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_validation_regional.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_validation_summary.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_verified_inpaint_bootstrap.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_version_consistency.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_visibility_stress_benchmark.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    },
+    {
+      "path": "tests/test_workflow_modules.py",
+      "reason": "Executed by the mandatory complete pytest gate",
+      "status": "PRODUCTION_READY"
+    }
+  ],
+  "status_vocabulary": [
+    "BROKEN",
+    "DEAD_CODE",
+    "FUNCTIONAL_BUT_UNVERIFIED",
+    "INCOMPLETE",
+    "OPTIONAL_RESEARCH",
+    "PLACEHOLDER",
+    "PRODUCTION_READY",
+    "TESTING"
+  ],
+  "version": 1
+}

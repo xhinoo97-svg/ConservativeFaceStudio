@@ -1,0 +1,58 @@
+{
+  "benchmark_id": "cfs-face-smartphone-v1",
+  "benchmark_status": "FROZEN_BEFORE_TUNING",
+  "canvas_size": 384,
+  "case_count": 100,
+  "category_counts": {
+    "black_paint_scribble": 10,
+    "extreme_low_evidence": 5,
+    "face_blur_censor": 20,
+    "face_mosaic_pixelation": 20,
+    "mixed_smartphone": 10,
+    "natural_facial_occluder": 10,
+    "opaque_graphic_face_occlusion": 25
+  },
+  "evaluation_priority": [
+    "identity_preservation",
+    "main_geometry_preservation",
+    "observed_evidence_fidelity",
+    "provenance_correctness",
+    "face_damage_recovery",
+    "undamaged_region_preservation",
+    "artifact_minimization",
+    "visual_attractiveness"
+  ],
+  "face_domain": [
+    "left_eye",
+    "right_eye",
+    "left_brow",
+    "right_brow",
+    "nose",
+    "philtrum",
+    "mouth",
+    "lips",
+    "left_cheek",
+    "right_cheek",
+    "chin",
+    "jaw",
+    "forehead",
+    "face_contour",
+    "hairline"
+  ],
+  "ground_truth_policy": "Real clean source pixels are immutable ground truth. Synthetic operations create damage only.",
+  "holdout_policy": "Holdout results may be measured only after calibration is frozen and must never drive tuning.",
+  "minimum_primary_face_case_ratio": 0.95,
+  "ordinary_damage_face_overlap_target": 0.95,
+  "primary_case_count": 100,
+  "reference_count_range": [0, 9],
+  "release_ready": false,
+  "set_a": "Controlled ground-truth benchmark with real reusable clean photographs and deterministic synthetic facial damage.",
+  "set_b": "Real-world damaged challenge images; qualitative conservative/provenance/abstention/artifact review only, with no invented quantitative ground truth.",
+  "split_counts": {
+    "calibration": 60,
+    "holdout": 40
+  },
+  "target95_policy": "REPORT_ONLY",
+  "tuning_started": false,
+  "version": 1
+}

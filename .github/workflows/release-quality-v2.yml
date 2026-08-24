@@ -1,0 +1,274 @@
+name: Release quality v2
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - RELEASE_STATE.md
+      - release-state.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-quality-v2-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  calibration-and-independent-final-holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Freeze new independent final holdout before candidate evaluation
+        run: |
+          python scripts/freeze_face_smartphone_v3_final_holdout.py
+          python scripts/freeze_face_smartphone_v3_final_holdout.py --verify
+
+      - name: Targeted source-eligibility, partial-reference, MAIN and provenance regressions
+        run: |
+          python -m pytest -q \
+            tests/test_face_domain_guard_v2_policy.py \
+            tests/test_pretrained_face_resilience_regressions.py \
+            tests/test_partial_reference_stage_gates.py \
+            tests/test_preflight_main_contract.py \
+            tests/test_nine_reference_support.py \
+            tests/test_immutable_input_and_provenance_firewall.py \
+            tests/test_provenance_source_mapping.py
+
+      - name: Full pytest
+        run: python -m pytest -q
+
+      - name: Restore same-HEAD verified local production model pack
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 3600 ))
+          windows_run_id=""
+          windows_status=""
+          windows_conclusion=""
+
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            run_line="$(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                "/repos/${GITHUB_REPOSITORY}/actions/workflows/windows-build.yml/runs?event=pull_request&head_sha=${EXPECTED_HEAD}&per_page=20" \
+                --jq '.workflow_runs | sort_by(.created_at) | reverse | .[0] | select(. != null) | [.id, .status, (.conclusion // "pending"), .head_sha] | @tsv' \
+                2>/dev/null || true
+            )"
+
+            if [ -n "$run_line" ]; then
+              IFS=$'\t' read -r windows_run_id windows_status windows_conclusion windows_head <<< "$run_line"
+              if [ "$windows_head" != "$EXPECTED_HEAD" ]; then
+                echo "Same-HEAD Windows lookup resolved unexpected head: $windows_head != $EXPECTED_HEAD"
+                exit 1
+              fi
+              echo "Windows prerequisite run=$windows_run_id status=$windows_status conclusion=${windows_conclusion:-pending} head=$windows_head"
+              if [ "$windows_status" = "completed" ]; then
+                if [ "$windows_conclusion" != "success" ]; then
+                  echo "Same-HEAD Windows qualification did not succeed: $windows_conclusion"
+                  exit 1
+                fi
+                break
+              fi
+            else
+              echo "Waiting for same-HEAD Windows qualification for $EXPECTED_HEAD"
+            fi
+            sleep 60
+          done
+
+          if [ -z "$windows_run_id" ] || [ "$windows_status" != "completed" ] || [ "$windows_conclusion" != "success" ]; then
+            echo "Timed out waiting for successful same-HEAD Windows qualification"
+            exit 1
+          fi
+
+          rm -rf .same-head-local-models .same-head-release-metadata
+          gh run download "$windows_run_id" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name ConservativeFaceStudio-Production-Model-Updates \
+            --dir .same-head-local-models
+          gh run download "$windows_run_id" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name ConservativeFaceStudio-Release-Metadata \
+            --dir .same-head-release-metadata
+
+          mkdir -p models
+          cp -R .same-head-local-models/. models/
+          test -f .same-head-release-metadata/models/model-registry.json
+          cp .same-head-release-metadata/models/model-registry.json models/model-registry.json
+
+      - name: Verify frozen local model pack and SHA-256 without downloads
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from app.model_registry import sha256_path
+          from app.production_models import resolve_local_production_models
+
+          required = {
+              "opencv_yunet",
+              "opencv_sface",
+              "opencv_nafnet_deblur",
+              "face_parsing_resnet18_onnx",
+              "head_pose_mobilenetv2_onnx",
+              "opencv_lama_inpaint",
+          }
+
+          bundle = resolve_local_production_models(".", ".")
+          assert bundle.face_ready and bundle.standard_ready and bundle.inpaint_ready, bundle.errors
+          assert not bundle.errors, bundle.errors
+          assert required.issubset(bundle.paths), sorted(required - set(bundle.paths))
+
+          registry_path = Path("models/model-registry.json")
+          payload = json.loads(registry_path.read_text(encoding="utf-8"))
+          entries = {
+              str(item.get("key")): item
+              for item in payload.get("models", [])
+              if isinstance(item, dict) and item.get("key")
+          }
+          assert required.issubset(entries), sorted(required - set(entries))
+
+          verified = {}
+          for key in sorted(required):
+              item = entries[key]
+              path = Path(str(item.get("path", "")))
+              assert path.is_file(), f"missing local model {key}: {path}"
+              digest = sha256_path(path).lower()
+              expected = str(item.get("sha256_expected") or "").lower()
+              recorded = str(item.get("sha256_local") or "").lower()
+              assert item.get("installed") is True, f"registry not installed: {key}"
+              assert item.get("checksum_ok") is True, f"registry checksum not verified: {key}"
+              assert len(expected) == 64, f"missing frozen SHA-256: {key}"
+              assert digest == expected == recorded, f"SHA-256 mismatch: {key}"
+              verified[key] = digest
+
+          print({"local_model_pack": "PASS", "models": verified})
+          PY
+
+      - name: Real local production-model CPU smoke tests
+        run: |
+          python scripts/smoke_production_models.py --only face
+          python scripts/smoke_production_models.py --only nafnet
+          python scripts/smoke_production_models.py --only parsing
+          python scripts/smoke_production_models.py --only headpose
+          python scripts/smoke_lama_runtime.py
+
+      - name: Prefetch frozen calibration sources with 429-only backoff
+        run: |
+          python - <<'PY'
+          import time
+          from pathlib import Path
+          from urllib.error import HTTPError
+
+          from scripts.run_face_smartphone_baseline import acquire_sources
+
+          cache = Path(".benchmark-cache/face-smartphone-v1")
+          delays = (0, 30, 90, 180)
+          for attempt, delay in enumerate(delays, start=1):
+              if delay:
+                  time.sleep(delay)
+              try:
+                  sources = acquire_sources(cache, offline=False)
+              except HTTPError as exc:
+                  if exc.code != 429 or attempt == len(delays):
+                      raise
+                  print(f"Wikimedia returned HTTP 429 on source acquisition; retry {attempt + 1}/{len(delays)} after backoff.")
+                  continue
+              print(f"Verified {len(sources)} frozen calibration source files.")
+              break
+          PY
+
+      - name: V2 calibration on existing frozen 60-case calibration split
+        run: |
+          python scripts/run_face_smartphone_baseline.py \
+            --output face-smartphone-v2-calibration \
+            --cache .benchmark-cache/face-smartphone-v1 \
+            --model-root . \
+            --split calibration \
+            --candidate-id face-domain-guard-v3 \
+            --offline-sources \
+            --fail-on-errors
+
+      - name: Enforce 60/60 calibration admission
+        run: |
+          python scripts/validate_face_smartphone_release_gate.py \
+            face-smartphone-v2-calibration/baseline.json \
+            --expected-count 60 \
+            --expected-benchmark cfs-face-smartphone-v1 \
+            --expected-split calibration \
+            --expected-candidate face-domain-guard-v3 \
+            --output face-smartphone-v2-calibration/gate.json
+
+      - name: Freeze committed candidate after calibration and before final holdout
+        run: |
+          python scripts/freeze_face_domain_guard_v3_candidate.py \
+            --calibration-gate face-smartphone-v2-calibration/gate.json \
+            --model-root . \
+            --output face-domain-guard-v3-candidate-freeze.json
+
+      - name: One-shot independent 40-case final holdout
+        run: |
+          python scripts/run_face_smartphone_v3_final_holdout.py \
+            --output face-smartphone-v3-final-holdout-result \
+            --cache .benchmark-cache/face-smartphone-v3-final-holdout \
+            --model-root . \
+            --candidate-freeze face-domain-guard-v3-candidate-freeze.json
+
+      - name: Enforce 40/40 independent final-holdout admission
+        run: |
+          python scripts/validate_face_smartphone_release_gate.py \
+            face-smartphone-v3-final-holdout-result/baseline.json \
+            --expected-count 40 \
+            --expected-benchmark cfs-face-smartphone-v3-final-holdout \
+            --expected-split final_holdout \
+            --expected-candidate face-domain-guard-v3 \
+            --output face-smartphone-v3-final-holdout-result/gate.json
+
+      - name: Upload V2 release-quality evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-quality-v2-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            models/model-registry.json
+            face-smartphone-v2-calibration/baseline.json
+            face-smartphone-v2-calibration/gate.json
+            face-smartphone-v2-calibration/cases/**/input.png
+            face-smartphone-v2-calibration/cases/**/clean.png
+            face-smartphone-v2-calibration/cases/**/damage_mask.png
+            face-smartphone-v2-calibration/cases/**/output.png
+            face-smartphone-v2-calibration/cases/**/blocks.zip
+            face-smartphone-v2-calibration/cases/**/final_provenance.json
+            face-domain-guard-v3-candidate-freeze.json
+            benchmarks/face-smartphone-v3-final-holdout/sources.json
+            benchmarks/face-smartphone-v3-final-holdout/cases.json
+            benchmarks/face-smartphone-v3-final-holdout/freeze.json
+            benchmarks/face-smartphone-v3-final-holdout/contract.json
+            face-smartphone-v3-final-holdout-result/baseline.json
+            face-smartphone-v3-final-holdout-result/gate.json
+            face-smartphone-v3-final-holdout-result/cases/**/final_provenance.json
