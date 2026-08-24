@@ -43,13 +43,12 @@ def canonical_component_masks(
     landmarks5: np.ndarray,
     bbox: tuple[int, int, int, int],
 ) -> dict[str, np.ndarray]:
-    """Build tight component ROIs for full and partial reference photographs.
+    """Build tight evidence-routing ROIs for full and partial references.
 
-    Every mask is an evidence routing region, not a shape prior.  It only determines
-    where an already-observed reference crop is allowed to contribute.  Eyes and brows
-    are kept separate so an eye-only or brow-only crop cannot silently claim the other
-    structure. Lower-face regions are likewise separated into philtrum, mouth, chin and
-    jaw for partial-reference restoration.
+    These masks are never generative shape priors. They only say where pixels that are
+    already observed in a geometrically aligned reference may claim component-local
+    authority. Dedicated structures are kept disjoint wherever practical so a sparse
+    crop cannot silently claim another facial component.
     """
     height, width = (int(v) for v in image_shape)
     points = np.asarray(landmarks5, dtype=np.float32)
@@ -74,9 +73,8 @@ def canonical_component_masks(
         cv2.ellipse(mask, tuple(np.round(center).astype(int)), eye_axes, 0, 0, 360, 255, -1)
         masks[name] = mask
 
-    # Five-point landmarks do not locate eyebrow hairs directly.  These are therefore
-    # conservative routing bands positioned relative to the corresponding observed eye
-    # and face scale; they never synthesize or geometrically reshape the brow itself.
+    # Five-point landmarks do not locate eyebrow hairs directly. These are conservative
+    # routing bands positioned relative to the corresponding observed eye and face scale.
     brow_half_width = max(4, int(round(0.30 * eye_distance)))
     brow_half_height = max(2, int(round(0.055 * h)))
     brow_offset = max(4, int(round(0.13 * h)))
@@ -94,7 +92,6 @@ def canonical_component_masks(
             255,
             -1,
         )
-        # Keep brow routing disjoint from the eye routing region.
         eye_name = "left_eye" if name == "left_brow" else "right_eye"
         mask[masks[eye_name] > 0] = 0
         masks[name] = mask
@@ -183,7 +180,6 @@ def canonical_component_masks(
         255,
         -1,
     )
-    # Forehead is broad skin evidence; do not double-count the dedicated brows.
     forehead[masks["left_brow"] > 0] = 0
     forehead[masks["right_brow"] > 0] = 0
     masks["forehead"] = forehead
@@ -198,6 +194,32 @@ def canonical_component_masks(
     )
     jaw[chin > 0] = 0
     masks["jaw"] = jaw
+
+    # FACE_CONTOUR is a narrow observed-evidence band, not an inferred silhouette.
+    # The outer/inner ellipse pair creates an annulus near the face boundary. Every
+    # already-defined central component is then removed so a crop of an eye, cheek,
+    # jaw or forehead cannot gain contour authority merely through overlap.
+    face_contour = blank()
+    contour_center = (
+        int(round(x + 0.50 * w)),
+        int(round(y + 0.51 * h)),
+    )
+    outer_axes = (
+        max(5, int(round(0.48 * w))),
+        max(6, int(round(0.49 * h))),
+    )
+    inner_axes = (
+        max(3, int(round(0.37 * w))),
+        max(4, int(round(0.39 * h))),
+    )
+    outer = blank()
+    inner = blank()
+    cv2.ellipse(outer, contour_center, outer_axes, 0, 0, 360, 255, -1)
+    cv2.ellipse(inner, contour_center, inner_axes, 0, 0, 360, 255, -1)
+    face_contour[(outer > 0) & (inner == 0)] = 255
+    for existing in masks.values():
+        face_contour[existing > 0] = 0
+    masks["face_contour"] = face_contour
     return masks
 
 
