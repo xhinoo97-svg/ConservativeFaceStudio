@@ -10,7 +10,7 @@ import numpy as np
 import app.automatic as automatic_module
 
 from app.automatic import AutomaticPipelineRunner
-from app.execution import ExecutionResult, Workspace
+from app.execution import BlockExecutionError, ExecutionResult, Workspace
 from app.pipeline import BlockKind, default_pipeline
 
 
@@ -207,3 +207,37 @@ def test_guardrail_preserves_verified_partial_reference_transfer() -> None:
     assert guard["accepted"] is True
     assert guard["engine"] == "trusted-observed-reference-provenance"
     assert guard["trusted_observed_reference_transfer"] is True
+
+
+def test_final_identity_failure_rolls_back_to_immutable_main_and_exports(
+    tmp_path: Path, monkeypatch
+) -> None:
+    primary = sample_image()
+    workspace = Workspace(primary=primary.copy())
+    runner = AutomaticPipelineRunner(workspace)
+    _install_synthetic_landmark_handler(runner)
+    original_execute = runner.executor.execute
+
+    def fail_identity(block, **parameters):
+        if block.kind is BlockKind.IDENTITY_CHECK:
+            runner.executor.workspace.primary[:] = 219
+            raise BlockExecutionError(
+                "Controllo identità senza confronto SFace reale: "
+                "il fallback proxy non è autorità V4"
+            )
+        return original_execute(block, **parameters)
+
+    monkeypatch.setattr(runner.executor, "execute", fail_identity)
+    result = runner.run(tmp_path / "rollback.png", upscale=1)
+
+    final = cv2.imread(str(result.final_image), cv2.IMREAD_COLOR)
+    assert np.array_equal(final, primary)
+    identity = next(item for item in result.results if item.block == "identity_check")
+    assert identity.details["status"] == "ROLLBACK"
+    assert identity.details["identity_safe"] is True
+    assert identity.details["restoration_effective"] is False
+    assert identity.details["wrong_person_final_pixels"] == 0
+    assert runner.executor.workspace.metadata["zero_recovery_is_restoration_pass"] is False
+    assert np.count_nonzero(runner.executor.workspace.provenance_map) == 0
+    assert len(runner.executor.block_artifacts.snapshots) == 13
+    assert runner.executor.history.can_redo is False

@@ -119,8 +119,69 @@ class AutomaticPipelineRunner:
         callback = self.on_block_completed
         if callback is None:
             return
-        status = "ROLLBACK" if result.details.get("rolled_back") else ("SKIPPED" if result.details.get("skipped") else "PASS")
+        status = str(result.details.get("status", ""))
+        if status not in {"PASS", "ROLLBACK", "ABSTAIN", "SKIPPED", "UNRESOLVED"}:
+            status = "ROLLBACK" if result.details.get("rolled_back") else ("SKIPPED" if result.details.get("skipped") else "PASS")
         callback(int(index), str(block.title), status, result.image.copy(), dict(result.details))
+
+    def _record_final_identity_rollback(self, block, reason: str) -> ExecutionResult:
+        """Fail closed to immutable MAIN without reporting rejection as a crash."""
+        workspace = self.executor.workspace
+        rejected = workspace.copy_primary()
+        restored = self._original_anchor.copy()
+        changed = (
+            np.any(rejected != restored, axis=2)
+            if rejected.shape == restored.shape
+            else np.ones(restored.shape[:2], dtype=bool)
+        )
+        unresolved = self._binary_mask(
+            workspace.metadata.get("inpaint_unresolved_mask"), restored.shape[:2]
+        )
+        unresolved |= changed
+
+        workspace.primary = restored.copy()
+        workspace.provenance_map = np.zeros(restored.shape[:2], dtype=np.uint16)
+        workspace.metadata["inpaint_unresolved_mask"] = np.where(
+            unresolved, 255, 0
+        ).astype(np.uint8)
+        workspace.metadata.update({
+            "runtime_success": True,
+            "identity_safe": True,
+            "restoration_effective": False,
+            "abstained": False,
+            "unresolved": bool(np.any(unresolved)),
+            "hard_guardrail_pass": True,
+            "final_identity_status": "ROLLBACK",
+            "final_identity_failure_reason": str(reason),
+            "identity_fail_closed_source": "IMMUTABLE_MAIN",
+            "zero_recovery_is_restoration_pass": False,
+        })
+        self.executor.history.restore_discarding_later(restored, "identity-rollback")
+
+        result = self.executor.record_skipped(block, str(reason))
+        details = dict(result.details)
+        details.update({
+            "status": "ROLLBACK",
+            "skipped": False,
+            "rolled_back": True,
+            "runtime_success": True,
+            "identity_safe": True,
+            "restoration_effective": False,
+            "abstained": False,
+            "unresolved": bool(np.any(unresolved)),
+            "hard_guardrail_pass": True,
+            "rollback_source": "IMMUTABLE_MAIN",
+            "rollback_reason": str(reason),
+            "rejected_candidate_changed_pixels": int(np.count_nonzero(changed)),
+            "unresolved_pixels": int(np.count_nonzero(unresolved)),
+            "wrong_person_final_pixels": 0,
+            "zero_recovery_is_restoration_pass": False,
+        })
+        replacement = self.executor.block_artifacts.replace_last(restored, details)
+        details["snapshot_sha256"] = replacement.sha256
+        if self.executor.project.operations:
+            self.executor.project.operations[-1].parameters.update(details)
+        return ExecutionResult(block.key, restored, details)
 
     @staticmethod
     def _binary_mask(value: Any, shape: tuple[int, int]) -> np.ndarray:
@@ -478,8 +539,14 @@ class AutomaticPipelineRunner:
                 self._emit_block_completed(index, block, result)
                 self._emit_progress(index, block.title + (" — rollback" if result.details.get("rolled_back") else ""))
             except BlockExecutionError as exc:
-                if block.kind in {BlockKind.IMPORT, BlockKind.IDENTITY_CHECK}:
+                if block.kind is BlockKind.IMPORT:
                     raise
+                if block.kind is BlockKind.IDENTITY_CHECK:
+                    result = self._record_final_identity_rollback(block, str(exc))
+                    results.append(result)
+                    self._emit_block_completed(index, block, result)
+                    self._emit_progress(index, f"{block.title} — rollback")
+                    continue
                 skipped = self.executor.record_skipped(block, str(exc))
                 results.append(skipped)
                 self._emit_block_completed(index, block, skipped)

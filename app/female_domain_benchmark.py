@@ -234,6 +234,19 @@ def evaluate_domain_scenario(clean: np.ndarray, scenario: Scenario, output_dir: 
     identity, identity_engine = identity_anchor_score(final, [clean], backend=workspace.metadata.get("_identity_backend"))
     generated_fraction = float(np.count_nonzero(generated_pixels) / max(1, provenance.size))
     score, components = _score(identity, after_ssim, damage_mae, outside_mae, generated_fraction)
+    identity_result = next(
+        (item for item in reversed(result.results) if item.block == "identity_check"),
+        None,
+    )
+    identity_details = {} if identity_result is None else dict(identity_result.details)
+    runtime_success = bool(workspace.metadata.get("runtime_success", True))
+    identity_safe = bool(workspace.metadata.get("identity_safe", True))
+    restoration_effective = bool(
+        workspace.metadata.get("restoration_effective", True)
+        and damage_mae + 1e-9 < _masked_mae(clean, scenario.primary, scenario.damage_mask)
+    )
+    unresolved = bool(workspace.metadata.get("unresolved", False))
+    rolled_back = bool(identity_details.get("rolled_back", False))
 
     landmark_nme = None
     landmarks5 = None
@@ -288,7 +301,15 @@ def evaluate_domain_scenario(clean: np.ndarray, scenario: Scenario, output_dir: 
         "conservative_recovery_score": score,
         "score_components": components,
         "target95_applicable": target95_applicable,
-        "target95_passed": bool(score >= 95.0) if target95_applicable else None,
+        "target95_passed": bool(score >= 95.0 and restoration_effective and not rolled_back) if target95_applicable else None,
+        "runtime_success": runtime_success,
+        "identity_safe": identity_safe,
+        "restoration_effective": restoration_effective,
+        "unresolved": unresolved,
+        "rolled_back": rolled_back,
+        "final_identity_status": workspace.metadata.get("final_identity_status"),
+        "final_identity_failure_reason": workspace.metadata.get("final_identity_failure_reason"),
+        "wrong_person_final_pixels": int(identity_details.get("wrong_person_final_pixels", 0)),
     }
 
 
