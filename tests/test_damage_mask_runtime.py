@@ -92,8 +92,10 @@ def test_strong_scribble_over_left_eye_reports_component_and_class() -> None:
     masks = component_bank.canonical_component_masks((64, 64), landmarks, bbox)
     eye = masks["left_eye"] > 0
     scribble_index = taxonomy.CLASS_TO_INDEX["SCRIBBLE"]
-    logits[0, taxonomy.HEALTHY_INDEX, eye] = -4.0
-    logits[0, scribble_index, eye] = 9.0
+    healthy_plane = logits[0, taxonomy.HEALTHY_INDEX]
+    scribble_plane = logits[0, scribble_index]
+    healthy_plane[eye] = -4.0
+    scribble_plane[eye] = 9.0
 
     result = DamageMaskRuntime(
         session=FakeSession(logits),
