@@ -6,11 +6,11 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `integration/final-paper-quality-local` is the single active integration line, created exactly from immutable `main`. Track A, protocol hardening and Track B remain traceable read-only source/evidence lines.
-- CURRENT TECHNICAL HEAD: integration `51941d847d9b76155943589cd1ff5da46d5d4235`; Track A branch `77687b3b...`; candidate `b6ce7ebd...`; protocol source `268188c5...`; Track B `6d57725a...`.
-- CURRENT PHASE: personalized and damage-contract foundations are integrated/tested but not production-runtime wired. Reference-first routing is next; V4 remains CONSUMED_FAIL and V5 does not exist.
+- CURRENT TECHNICAL HEAD: integration `d53316d030bae11572588cc14e6317dcea16c3af`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
+- CURRENT PHASE: personalized, damage-contract and reference-first route foundations are integrated/tested but not production-runtime wired. Component-aware fusion/resource control is next; V4 remains CONSUMED_FAIL and V5 does not exist.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
-- WHAT WAS JUST COMPLETED: damage contract `ed2e72d... -> 51941d8...`: 12-class taxonomy and fail-closed ONNX result adapter, targeted `8/8`, full `488/488` PASS; no checkpoint/model activated.
-- WHAT IS BEING WORKED ON: integrate reference-first routing against the tested damage/personalized contracts, then prove exact original-reference provenance.
+- WHAT WAS JUST COMPLETED: reference-first route `0ed9c52... -> d53316d...`: exact 1–9 provenance, information-loss routing and unresolved preservation; targeted `6/6`, full `494/494` PASS.
+- WHAT IS BEING WORKED ON: integrate resource budget and component-aware fusion so generated candidates remain below observed MAIN/reference authority.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; overall DEVELOPMENT gates pass on 2- and 40-identity evaluations, but domain robustness and weight licensing are not qualified.
 - WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
@@ -19,7 +19,7 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: integrate `reference_first_route` and its provenance tests, adapting only research-file isolation if needed; run targeted/full suites. Do not promote LR-ASPP or run RefFace.
+- NEXT EXACT STEP: integrate `resource_budget` and its tests, then `face_restorer_adapter`/component-aware fusion without any checkpoint; full suite after each group.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -34,7 +34,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@6d57725aae087bb4a3144d521d91346999f9a4fd`
-- Active integration HEAD: `integration/final-paper-quality-local@51941d847d9b76155943589cd1ff5da46d5d4235`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- Active integration HEAD: `integration/final-paper-quality-local@d53316d030bae11572588cc14e6317dcea16c3af`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -73,7 +73,7 @@ The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`
 | Branch | Purpose | HEAD | State | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
-| `integration/final-paper-quality-local` | single final product integration | `51941d8...` | ACTIVE / DAMAGE CONTRACT PASS | targeted 8/8, full 488/488; no model/weight change | integrate reference-first route |
+| `integration/final-paper-quality-local` | single final product integration | `d53316d...` | ACTIVE / REFERENCE ROUTE PASS | targeted 6/6, full 494/494; no model/weight change | integrate resource budget then component fusion |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
@@ -329,6 +329,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-038 integration protocol `871556b... -> b05e5aa...`: generic signature adapter and one-shot lifecycle transferred from `268188c5...`, then rebound to the final integration branch. Remote synthetic DEV run `32730724851` SUCCESS; 461/461; no real holdout or V5 object created.
 - HIST-20260824-039 personalized foundation `e7ce058... -> 58c89ea...`: ten Track B micro-commits transferred with origin trailers; 13-component bank/selector plus face-contour support. Targeted 26/26 and full 480/480 PASS; standalone foundation only, not yet production-runtime wired.
 - HIST-20260824-040 damage contract `ed2e72d... -> 51941d8...`: 12-class taxonomy and fail-closed diagnostic ONNX adapter transferred without a checkpoint. Targeted 8/8 and full 488/488 PASS; LR-ASPP/DamageMaskNet remain inactive.
+- HIST-20260824-041 reference-first route `0ed9c52... -> d53316d...`: sticker/scribble/mosaic/information-loss routing with exact original-reference provenance and fail-closed unresolved output. Targeted 6/6 and full 494/494 PASS; not yet automatic-runtime wired.
 
 ---
 
@@ -574,6 +575,19 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - MODEL EFFECT: none. No ONNX/checkpoint/model-registry/installer change; stopped small U-Net not relaunched; LR-ASPP not promoted; RefFace NOT_RUN.
 - CLASSIFICATION: `DAMAGE_CONTRACT_TEST_PASS_NO_QUALIFIED_MODEL_NOT_RUNTIME_WIRED`.
 - NEXT EXACT ACTION: integrate and test reference-first routing with exact original-reference provenance against the personalized and damage contracts.
+
+### PUSH-20260824-017
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD: `51941d847d9b76155943589cd1ff5da46d5d4235`.
+- NEW REMOTE HEAD: `d53316d030bae11572588cc14e6317dcea16c3af`; exact tree `18e01be0575d71dfbe90b0cd5f50b75e7a16535b`.
+- ORIGINS: Track B `f8f1351...`, `2bd2d19...`, `a86ac2c...`; test-isolation portion of `30eaf364...` only.
+- FILES: `app/reference_first_route.py`, `tests/test_reference_first_route.py`.
+- CONTRACT: reference-first only for information-loss classes; blur remains outside this path; source subset indices are remapped to exact original references 1–9; provenance outside target or invalid local source fails closed; missing authorized evidence remains unresolved and MAIN unchanged.
+- TESTS: targeted `6/6 PASS`; full pytest `494/494 PASS`; diff check PASS.
+- MODEL/QUALITY EFFECT: none; no checkpoint/model/installer/workflow/threshold/holdout change. Standalone tested foundation, not yet invoked by `AutomaticPipelineRunner`.
+- NEXT EXACT ACTION: integrate the measured resource-budget foundation, then the model-independent restoration candidate/fusion contracts; keep models disabled.
 
 ---
 
