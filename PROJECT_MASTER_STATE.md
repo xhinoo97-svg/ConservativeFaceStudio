@@ -6,11 +6,11 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `integration/final-paper-quality-local` is the single active integration line, created exactly from immutable `main`. Track A, protocol hardening and Track B remain traceable read-only source/evidence lines.
-- CURRENT TECHNICAL HEAD: integration `0be6a34f8f8a2ff5b2f85147aa51ca2e34e787ee`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
+- CURRENT TECHNICAL HEAD: integration `68619ec8e2c781750c014cda3608aa87afcee870`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
 - CURRENT PHASE: model-independent foundations, fail-closed orchestration/readiness and the first disabled official upstream specialist are integrated/tested. Existing artifact reconciliation and qualified-backend evidence are now the active phase; V4 remains CONSUMED_FAIL and V5 does not exist.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
-- WHAT WAS JUST COMPLETED: LR-ASPP DEVELOPMENT evidence `0be6a34...`: artifact `9502870418` and 880-case report verified, aggregate frozen gate PASS but Asian/age-50 gaps and checkpoint-license blocker recorded; targeted `19/19`, full `569/569` PASS.
-- WHAT IS BEING WORKED ON: read-only DamageMaskNet attempt-3 artifact reconciliation to preserve its failed per-class result and make the no-attempt-4 decision machine-readable.
+- WHAT WAS JUST COMPLETED: DamageMaskNet attempt-3 evidence `68619ec...`: infrastructure PASS but macro-F1 `0.173198` and six zero-F1 classes make the hypothesis a stopped model/data-quality failure; targeted `23/23`, full `573/573` PASS; attempt 4 and RefFace remain unauthorized.
+- WHAT IS BEING WORKED ON: fail-closed damage routing decisions over the 12-class taxonomy, with production execution blocked unless a route's model evidence is explicitly qualified.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official FBCNN at `jiaxi-jiang/FBCNN@54d183...`, color checkpoint SHA-256 `8b0e4ef...`; one-identity DEVELOPMENT compression matrix passes, but production qualification does not.
 - WHY THAT MODEL: it is the measured JPEG/recompression leader, has an official Apache-2.0 source implementation and CPU evidence, while routing and generated provenance can be narrowly constrained.
@@ -19,7 +19,7 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: retrieve artifact `9307331508` from DamageMaskNet attempt 3, verify its archive/checkpoint/ONNX hashes and failed class metrics, then record `STOPPED_MODEL_DATA_QUALITY_FAIL` without an attempt 4.
+- NEXT EXACT STEP: implement and test a route-plan contract for all 12 damage classes that exposes selected specialist, mask/confidence/provenance and PASS/ABSTAIN reason while refusing every unqualified production backend.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -34,7 +34,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@6d57725aae087bb4a3144d521d91346999f9a4fd`
-- Active integration HEAD: `integration/final-paper-quality-local@0be6a34f8f8a2ff5b2f85147aa51ca2e34e787ee`; exact tree `e7929c9e2fa01a9ebfc583603bf4b63a6b5419ee`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- Active integration HEAD: `integration/final-paper-quality-local@68619ec8e2c781750c014cda3608aa87afcee870`; exact tree `3c2dad7c55ab3f03a832d988de49db23c0e39980`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -73,7 +73,7 @@ The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`
 | Branch | Purpose | HEAD | State | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
-| `integration/final-paper-quality-local` | single final product integration | `0be6a34...` | ACTIVE / LR-ASPP DEV NOT PRODUCTION | targeted 19/19, full 569/569; damage gate BLOCKED, RefFace unauthorized | record DamageMask attempt 3 failure; no attempt 4 |
+| `integration/final-paper-quality-local` | single final product integration | `68619ec...` | ACTIVE / DAMAGEMASK SMALL U-NET STOPPED | targeted 23/23, full 573/573; damage gate BLOCKED, RefFace unauthorized | fail-closed 12-class route plan |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
@@ -343,6 +343,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-052 official FBCNN adapter `6ea2871...`: Track B registry/bootstrap/thin adapter transferred with origins, exact official code revision and color checkpoint identity frozen, checkpoint terms separately NOT_VERIFIED, production routing disabled. A direct-CLI import defect found during integration was fixed and regression-tested. Targeted 24/24 and full 560/560 PASS; no checkpoint bytes or automatic downloader added.
 - HIST-20260824-053 FBCNN artifact record `08d7879...`: existing unexpired artifact `9502200502` downloaded and locally matched GitHub SHA-256 `365251ee...`; 38 files and all six reports inspected. 6/6 DEVELOPMENT profiles improve PSNR/SSIM and pass SFace `0.363` with zero errors/rollbacks/abstentions/wrong-person pixels/provenance violations. Record remains one identity and `production_qualified=false`; targeted 23/23 and full 564/564 PASS.
 - HIST-20260824-054 LR-ASPP artifact record `0be6a34...`: artifact `9502870418` locally matched SHA-256 `1357c983...`; 40 identity-disjoint synthetic identities and 880/880 cases. Aggregate frozen DEVELOPMENT gate passes (`macro-F1 0.716639`, `macro-IoU 0.579849`, min-class F1 `0.387499`), but Asian macro/min-class and age-50 min-class gaps plus unverified checkpoint redistribution terms block production/RefFace. Targeted 19/19 and full 569/569 PASS.
+- HIST-20260824-055 DamageMaskNet attempt 3 `68619ec...`: recovered artifact `9307331508` locally matched SHA-256 `e3b7aa05...`; checkpoint `e3b05272...`, ONNX `64e032d8...`, exact argmax parity and CPU inference prove infrastructure. Quality is stopped: macro-F1 `0.173198`, macro-IoU `0.113028`, six classes F1 zero. Machine-readable state fixes attempt4 false, production false and RefFace unauthorized; targeted 23/23 and full 573/573 PASS.
 
 ---
 
@@ -777,6 +778,20 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - TESTS: targeted evidence/damage/readiness `19/19 PASS`; full pytest `569/569 PASS`; readiness remains false with 12/14 blockers.
 - MODEL/HOLDOUT EFFECT: no retraining/tuning, checkpoint addition, damage routing activation, RefFace run, threshold, installer, V3/V4 marker, V5 or final holdout change.
 - NEXT EXACT ACTION: retrieve and inspect DamageMaskNet attempt-3 artifact `9307331508`, verify its archive/checkpoint/ONNX hashes and failed per-class metrics, record the stopped hypothesis and do not launch attempt 4.
+
+### PUSH-20260824-031
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD: `0be6a34f8f8a2ff5b2f85147aa51ca2e34e787ee`; tree `e7929c9e2fa01a9ebfc583603bf4b63a6b5419ee`.
+- NEW REMOTE HEAD: `68619ec8e2c781750c014cda3608aa87afcee870`; exact tested tree `3c2dad7c55ab3f03a832d988de49db23c0e39980`.
+- FILES: `config/damage-mask-attempt3-evidence.json`, `config/paper-quality-readiness.json`, `tests/test_damage_mask_attempt3_evidence.py`.
+- ARTIFACT RECONCILIATION: run `32087249287`, Track B `08df316...`, artifact `9307331508`, 2,101,877 bytes/5 files, local/GitHub archive SHA-256 `e3b7aa05bcfdc9d48a803595218727f84bc255a4095caab84239c1850f7b52b8`; checkpoint `e3b05272...`, ONNX `64e032d8...`.
+- CLASSIFICATION: infrastructure/export/parity/CPU PASS; model/data quality FAIL. Validation macro-F1 `0.1731976977`, macro-IoU `0.1130282318`; BLUR, MOTION_BLUR, PIXELATION, BLOCK_MOSAIC, JPEG_ARTIFACT and STICKER F1 are all zero.
+- IMMUTABLE DECISION: small-U-Net hypothesis `STOPPED_MODEL_DATA_QUALITY_FAIL`; `attempt4_launched=false`; `production_qualified=false`; `refface_execution_authorized=false`.
+- TESTS: targeted attempt3/LR-ASPP/damage/readiness `23/23 PASS`; full pytest `573/573 PASS`; readiness remains false with 12/14 blockers.
+- MODEL/HOLDOUT EFFECT: evidence-only record. No retry, attempt 4, retraining, RefFace run, checkpoint addition, threshold, installer, certification workflow, V3/V4 marker, V5 or final holdout change.
+- NEXT EXACT ACTION: implement and test a fail-closed route-plan contract for all 12 damage classes that records specialist, mask/confidence/provenance and PASS/ABSTAIN reason but cannot execute an unqualified production backend.
 
 ---
 
