@@ -6,11 +6,11 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `integration/final-paper-quality-local` is the single active integration line, created exactly from immutable `main`. Track A, protocol hardening and Track B remain traceable read-only source/evidence lines.
-- CURRENT TECHNICAL HEAD: integration `6bd5488479781a49eaee6edb6d94ae76d83e90c6`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
+- CURRENT TECHNICAL HEAD: integration `268088a76dff3d12ac744e8c59c04507d6927bcc`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
 - CURRENT PHASE: the selected model-independent foundations, resource/lifecycle/fusion contracts and duration-only progress timeline are integrated/tested. Production-runtime wiring is now the active phase; V4 remains CONSUMED_FAIL and V5 does not exist.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
-- WHAT WAS JUST COMPLETED: measured per-block runtime telemetry `6bd5488...`: worker/UI timeline, learned ETA, actual engine/model/checkpoint/SHA attribution, and live process CPU/RAM plus system RAM; targeted `18/18`, full `524/524` PASS.
-- WHAT IS BEING WORKED ON: cooperative cancellation at safe block boundaries and a structured semantic decision/reason payload for the UI and audit trail.
+- WHAT WAS JUST COMPLETED: safe cooperative cancellation and semantic runtime events `268088a...`: cancellation at block boundaries preserves the last accepted image/checkpoint; decision/reason/mask/provenance/identity summaries are first-class telemetry; targeted `31/31`, full `526/526` PASS.
+- WHAT IS BEING WORKED ON: calibration-required candidate ranking as the last missing model-independent Paper Quality selection gate before deeper runtime integration.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; overall DEVELOPMENT gates pass on 2- and 40-identity evaluations, but domain robustness and weight licensing are not qualified.
 - WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
@@ -19,7 +19,7 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: add and test cooperative Cancel at block boundaries, preserving the last accepted checkpoint, and expose decision/reason/provenance summary fields in every completed timeline event.
+- NEXT EXACT STEP: integrate and test the Track B candidate selector that rejects before ranking, requires DEVELOPMENT/VALIDATION calibration IDs and freezes SFace/healthy-region gates; do not enable any model backend.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -34,7 +34,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@6d57725aae087bb4a3144d521d91346999f9a4fd`
-- Active integration HEAD: `integration/final-paper-quality-local@6bd5488479781a49eaee6edb6d94ae76d83e90c6`; exact tree `58e635102dc404a2d9fb8045af5c2fb44872ef7e`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- Active integration HEAD: `integration/final-paper-quality-local@268088a76dff3d12ac744e8c59c04507d6927bcc`; exact tree `8efdc619f1bb7614780b0ffedf3937378d15b033`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -73,7 +73,7 @@ The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`
 | Branch | Purpose | HEAD | State | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
-| `integration/final-paper-quality-local` | single final product integration | `6bd5488...` | ACTIVE / MEASURED UI TELEMETRY PASS | targeted 18/18, full 524/524; no backend/weight change | safe cancellation + semantic events |
+| `integration/final-paper-quality-local` | single final product integration | `268088a...` | ACTIVE / CANCELLATION + SEMANTIC EVENTS PASS | targeted 31/31, full 526/526; no backend/weight change | calibrated candidate selection gate |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
@@ -336,6 +336,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-045 progress timeline `b653a35... -> 525e7c9...`: 13-block duration-only history, learned target-PC ETA and per-block role/status events transferred as a standalone contract. Targeted 6/6 and full 519/519 PASS; worker/UI wiring is intentionally deferred to the next tested group.
 - HIST-20260824-046 ENHANCE semantics `36030f4...`: reference-backed automatic execution is an explicit `ABSTAIN`, not a zero-blend PASS; exact prior output is retained and zero recovery cannot count as restoration. Targeted 21/21 and full 520/520 PASS; no checkpoint or threshold changed.
 - HIST-20260824-047 runtime telemetry `6bd5488...`: 13-block worker/UI timeline now exposes learned local ETA, measured process CPU/RAM and system RAM, and exact checkpoint path/SHA only when block-result evidence proves that model executed. Targeted 18/18 and full 524/524 PASS; first CPU sample and unavailable fields remain unknown rather than guessed.
+- HIST-20260824-048 cancellation/semantics `268088a...`: thread-safe Cancel is honored before the next block, preserves the last accepted state/checkpoint and is reported separately from runtime failure. Completed events expose compact decision, reason, mask, provenance and identity summaries. Targeted 31/31 and full 526/526 PASS.
 
 ---
 
@@ -672,6 +673,20 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - LIMIT: cancellation is not yet implemented; semantic reason/mask/provenance summaries remain in block detail artifacts rather than first-class timeline fields. Current measurements are Linux-container tests, not Windows/EliteBook performance evidence.
 - MODEL/HOLDOUT EFFECT: none. No checkpoint, threshold, dataset, installer, workflow, consumed marker or holdout changed.
 - NEXT EXACT ACTION: implement cooperative UI cancellation at block boundaries with last-accepted-state preservation, and add decision/reason/provenance summary fields to completed timeline events.
+
+### PUSH-20260824-024
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD: `6bd5488479781a49eaee6edb6d94ae76d83e90c6`; tree `58e635102dc404a2d9fb8045af5c2fb44872ef7e`.
+- NEW REMOTE HEAD: `268088a76dff3d12ac744e8c59c04507d6927bcc`; exact tested tree `8efdc619f1bb7614780b0ffedf3937378d15b033`.
+- FILES: `app/automatic.py`, `app/worker.py`, `app/main_window.py`, `tests/test_automatic.py`, `tests/test_progress_timeline.py`.
+- CANCELLATION CONTRACT: UI request sets a thread-safe event; runner checks it before starting each block; the current block may finish and pass its guardrail, then execution stops before the next block. The worker emits `CANCELLED`, last image/checkpoint and completed-block count; UI preserves the checkpoint/recovery project and does not show cancellation as an error or final-quality result.
+- SEMANTIC EVENT CONTRACT: completed events include actual decision/reason, mask pixel counts, provenance source counts/generated code, selected identity metrics and only execution-proven model evidence.
+- TESTS: targeted `31/31 PASS`; full pytest `526/526 PASS`; Python compile and diff check PASS.
+- LIMIT: cancellation is cooperative, not a mid-kernel kill; current tests are synthetic/Linux and do not replace a Windows UI responsiveness run. No model checkpoint or Target95 evidence was added.
+- MODEL/HOLDOUT EFFECT: none. No threshold, dataset, installer, workflow, V3/V4 marker or holdout changed.
+- NEXT EXACT ACTION: integrate/test the calibration-required hard-gated Paper Quality candidate selector without wiring or enabling any research backend.
 
 ---
 
