@@ -6,11 +6,11 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `integration/final-paper-quality-local` is the single active integration line, created exactly from immutable `main`. Track A, protocol hardening and Track B remain traceable read-only source/evidence lines.
-- CURRENT TECHNICAL HEAD: integration `e5ea08a756a751c4b6372d140b38fbcffc035506`; Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; protocol hardening `268188c5a2540455ff804383cb583b16546b62f1`; Track B `6d57725aae087bb4a3144d521d91346999f9a4fd`.
-- CURRENT PHASE: Phase 0 and the first selective Track A operational/safety group are complete with green full suites. Generic protocol hardening is the next isolated integration group; V4 remains permanently consumed FAIL/NO-GO and no V5 exists.
+- CURRENT TECHNICAL HEAD: integration `b05e5aa595e44e391110b61866b98c1f18c92a28`; Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; protocol hardening source `268188c5a2540455ff804383cb583b16546b62f1`; Track B `6d57725aae087bb4a3144d521d91346999f9a4fd`.
+- CURRENT PHASE: Phase 0, selective Track A group 1 and generic one-shot protocol integration are complete with green local and remote suites. Selective Track B product integration is next; V4 remains permanently consumed FAIL/NO-GO and no V5 exists.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
-- WHAT WAS JUST COMPLETED: Track A group 1 at `e5ea08a...`: four traceable commits integrate runtime accounting/observability, verified-donor preservation, exact-canvas authority and identity-failure rollback. Targeted `47/47` and full pytest `449/449` PASS; all V4 files excluded.
-- WHAT IS BEING WORKED ON: integrate only the generic DEV-tested one-shot protocol adapter/lifecycle and its synthetic tests, without V4 manifests, markers, requests, workflows or holdout access. RefFace remains NOT_RUN.
+- WHAT WAS JUST COMPLETED: generic protocol at `b05e5aa...`; run `32730724851` SUCCESS on exact HEAD, targeted `12/12`, full `461/461`, synthetic success/pre-marker/post-marker ordering PASS; artifact `9521289394` SHA-256 `2e596bb2...`.
+- WHAT IS BEING WORKED ON: select the first Track B product modules that are code-complete, model-independent and covered by tests; do not promote FBCNN/LR-ASPP or run RefFace until their product gates are met.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; overall DEVELOPMENT gates pass on 2- and 40-identity evaluations, but domain robustness and weight licensing are not qualified.
 - WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
@@ -19,7 +19,7 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: integrate `app/one_shot_certification.py`, `scripts/frozen_benchmark_adapter.py`, the synthetic DEV entrypoint/tests and a branch-appropriate DEV workflow from protocol source `268188c5...`; prove pre/post-marker ordering and run the full suite before any Track B module.
+- NEXT EXACT STEP: integrate the Track B personalized-reference/component-selection, damage-taxonomy/router metadata, resource-budget and progress-timeline foundations as separate tested groups; keep research models disabled and preserve the ENHANCE no-op blocker until a truthful product fix is implemented.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -34,7 +34,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@6d57725aae087bb4a3144d521d91346999f9a4fd`
-- Active integration HEAD: `integration/final-paper-quality-local@e5ea08a756a751c4b6372d140b38fbcffc035506`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- Active integration HEAD: `integration/final-paper-quality-local@b05e5aa595e44e391110b61866b98c1f18c92a28`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -73,7 +73,7 @@ The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`
 | Branch | Purpose | HEAD | State | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
-| `integration/final-paper-quality-local` | single final product integration | `e5ea08a...` | ACTIVE / TRACK A GROUP 1 PASS | targeted 47/47 and full 449/449 PASS; current-branch CI not yet run | integrate generic protocol hardening without V4 artifacts |
+| `integration/final-paper-quality-local` | single final product integration | `b05e5aa...` | ACTIVE / PROTOCOL DEV PASS | run `32730724851` SUCCESS; targeted 12/12, full 461/461; artifact `9521289394` | selectively integrate model-independent Track B foundations |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
@@ -326,6 +326,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-035 final autonomous integration mandate recorded verbatim in `PROJECT_EXECUTION_RULES.md` with source SHA-256 `af0d8e35f67d9ceac4544f72c860963b6a99e571eab7332fb96dd8dac936ff75`. The mandated next technical line is `integration/final-paper-quality-local` from immutable `main`; no technical branch, model, threshold, dataset, holdout or release state changed by this ledger-only record.
 - HIST-20260824-036 integration Phase 0 `eaca320d...`: branch created exactly from immutable `main`; inventory separates documentation, code wiring, weight presence, installer contract and same-candidate evidence. Baseline and post-inventory full suite PASS; ENHANCE no-op, incomplete timeline/resource telemetry and missing damage/dense-geometry/product qualification recorded as blockers.
 - HIST-20260824-037 integration Track A group 1 `f558ac8... -> e5ea08a...`: four source commits selectively transferred with origin trailers; 25 files, targeted 47/47 and full 449/449 PASS. V4 request/freeze/manifests/marker/workflows/runners and V4-named runtime modules were not transferred.
+- HIST-20260824-038 integration protocol `871556b... -> b05e5aa...`: generic signature adapter and one-shot lifecycle transferred from `268188c5...`, then rebound to the final integration branch. Remote synthetic DEV run `32730724851` SUCCESS; 461/461; no real holdout or V5 object created.
 
 ---
 
@@ -528,6 +529,21 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - EXPLICIT EXCLUSIONS: every V4 request/freeze/manifest/marker/workflow/runner; every V4-named identity runtime module; no V3/V4 access or reuse. PR #2 remains OPEN/DRAFT/NO-GO.
 - QUALITY EFFECT: safety/operability only. Rollback is not restoration success; Target95 remains NOT_MEASURED; current-branch Windows/offline/EliteBook NOT_RUN.
 - NEXT EXACT ACTION: transfer the generic DEV-tested protocol adapter/lifecycle plus synthetic pre/post-marker tests as an isolated group; do not create a V5 benchmark, request, marker or holdout.
+
+### PUSH-20260824-014
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD: `e5ea08a756a751c4b6372d140b38fbcffc035506`.
+- NEW REMOTE HEAD: `b05e5aa595e44e391110b61866b98c1f18c92a28`; exact remote tree `8aa6e9f4b6baebdf18e2cf6377c505de609b8bf4` equals the tested local tree.
+- COMMITS: `871556be...` integrates generic source `protocol/v5-certification-hardening@268188c5...`; `b05e5aa...` binds only the DEV workflow/test to the active integration branch.
+- FILES: generic lifecycle, frozen-benchmark signature adapter, real baseline entrypoint wiring, synthetic DEV runner, unit/E2E tests and DEV-only workflow. No benchmark manifest, source list, candidate request or consumed marker.
+- LOCAL TESTS: protocol targeted `12/12 PASS`; full pytest `461/461 PASS`; synthetic success, failure-before-marker and failure-after-marker ordering PASS. Local evidence ZIP SHA-256 values: success `e5ede507...`, before `29873f11...`, after `d901300b...`.
+- WORKFLOW: `Final integration one-shot protocol DEV`, run `32730724851`, exact HEAD, attempt 1, SUCCESS; targeted `12/12`, full `461/461`, every step PASS.
+- ARTIFACT: `one-shot-protocol-hardening-32730724851`, ID `9521289394`, archive SHA-256 `2e596bb2e365aec5a6910a3d5083cb38b8090cf88009ef7c34bee9a70c88b846`, unexpired.
+- PROTOCOL RESULT: adapter binds one- or two-argument `build_freeze` before execution and never retries provider TypeError; marker is immediately before first case access; pre-marker injection is PRECONSUMPTION_FAIL; post-marker injection is terminal CONSUMED_FAIL.
+- HOLDOUT EFFECT: none. Fixture policy is synthetic DEV only. V3/V4 unchanged and unaccessed; V5 NOT_CREATED/NOT_AUTHORIZED.
+- NEXT EXACT ACTION: selectively integrate model-independent Track B product foundations with a green suite after each group; do not promote any research checkpoint.
 
 ---
 
