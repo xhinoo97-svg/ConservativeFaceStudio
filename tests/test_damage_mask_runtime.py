@@ -166,7 +166,7 @@ def test_runtime_rejects_onnx_with_multiple_inputs() -> None:
         DamageMaskRuntime(session=BadInputSession(_base_logits()), input_size=64)
 
 
-def test_research_generator_imports_the_same_frozen_taxonomy() -> None:
-    source = (ROOT / "research" / "damage_mask_dataset.py").read_text(encoding="utf-8")
-    assert "from app.damage_taxonomy import CLASS_TO_INDEX, DAMAGE_CLASSES" in source
+def test_runtime_imports_the_single_frozen_taxonomy() -> None:
+    source = (APP / "damage_mask_runtime.py").read_text(encoding="utf-8")
+    assert "from app.damage_taxonomy import DAMAGE_CLASSES, HEALTHY_INDEX, INDEX_TO_CLASS" in source
     assert "DAMAGE_CLASSES = (" not in source
