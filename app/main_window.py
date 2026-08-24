@@ -4,11 +4,12 @@ import json
 import logging
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 import cv2
 import numpy as np
-from PySide6.QtCore import QThread, Qt
+from PySide6.QtCore import QThread, QTimer, Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -31,6 +32,12 @@ from .execution import Workspace
 from .hardware import detect_hardware_profile
 from .imaging import fit_to_canvas, read_image
 from .paths import model_search_roots, user_data_root
+from .progress_timeline import (
+    BLOCK_TITLES,
+    ProcessResourceSampler,
+    format_bytes,
+    format_duration,
+)
 from .project import ProjectDocument, load_project, save_project
 from .reference_limits import MAX_PROJECT_IMAGES, MAX_REFERENCE_IMAGES, validate_reference_count
 from .settings import load_runtime_settings
@@ -94,6 +101,10 @@ class MainWindow(QMainWindow):
         self.update_applying = False
         self.pending_update_apply = False
         self.pending_installer_path: str | None = None
+        self._progress_event: dict[str, object] | None = None
+        self._progress_event_started_monotonic: float | None = None
+        self._timeline_items: list[QListWidgetItem] = []
+        self._ui_resources = ProcessResourceSampler()
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -122,13 +133,13 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, 13)
         self.progress.setFormat("%v / 13 — %p%")
         layout.addWidget(self.progress)
+        self.progress_detail_label = QLabel("Timeline: —")
+        self.progress_detail_label.setWordWrap(True)
+        self.progress_detail_label.setStyleSheet("font-size: 12px; font-weight: 600;")
+        layout.addWidget(self.progress_detail_label)
         self.timeline = QListWidget()
         self.timeline.setMaximumHeight(150)
-        self._timeline_titles = [
-            "Import", "Deblur", "Enhance", "Face / Landmarks", "Align References",
-            "Detect Damage", "Select Best Regions", "Repair / Inpaint", "Fusion",
-            "Pose", "Identity Check", "Upscale", "Export",
-        ]
+        self._timeline_titles = list(BLOCK_TITLES)
         self._reset_timeline()
         layout.addWidget(self.timeline)
 
@@ -159,6 +170,9 @@ class MainWindow(QMainWindow):
         self.update_button.clicked.connect(self.check_updates)
         self.start_button.clicked.connect(self.start_pipeline)
         self.download_button.clicked.connect(self.download_results)
+        self.progress_timer = QTimer(self)
+        self.progress_timer.setInterval(1000)
+        self.progress_timer.timeout.connect(self._refresh_progress_clock)
         self._refresh_hardware_status()
         self._update_controls()
 
@@ -508,6 +522,7 @@ class MainWindow(QMainWindow):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._on_progress)
+        worker.progress_detail.connect(self._on_progress_detail)
         worker.block_completed.connect(self._on_block_completed)
         worker.completed.connect(self._on_completed)
         worker.failed.connect(self._on_failed)
@@ -521,6 +536,7 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, 13)
         self.progress.setValue(0)
         self._reset_timeline()
+        self.progress_timer.start()
         self.confidence_label.setText("Original Information Confidence: calcolo in corso")
         self.status.setText("Pipeline automatica in esecuzione")
         self._update_controls()
@@ -545,10 +561,118 @@ class MainWindow(QMainWindow):
 
     def _reset_timeline(self) -> None:
         self.timeline.clear()
+        self._timeline_items = []
         for index, title in enumerate(self._timeline_titles, start=1):
             item = QListWidgetItem(f"{index:02d}  {title}  — PENDING")
             item.setForeground(Qt.GlobalColor.gray)
             self.timeline.addItem(item)
+            self._timeline_items.append(item)
+        self._progress_event = None
+        self._progress_event_started_monotonic = None
+        if hasattr(self, "progress_detail_label"):
+            self.progress_detail_label.setText("Timeline: —")
+
+    @staticmethod
+    def _progress_text(
+        payload: dict[str, object],
+        *,
+        elapsed_override: float | None = None,
+    ) -> str:
+        index = int(payload.get("block_index", 0) or 0)
+        total = int(payload.get("block_total", 13) or 13)
+        title = str(payload.get("block_title", "Preparazione"))
+        status = str(payload.get("status", "RUNNING"))
+        role = str(payload.get("model_role", "—"))
+        engine = payload.get("engine")
+        engine_text = "—" if engine in (None, "") else str(engine)
+        elapsed = elapsed_override
+        if elapsed is None:
+            try:
+                elapsed = float(payload.get("elapsed_block_seconds", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                elapsed = 0.0
+        remaining = payload.get("estimated_remaining_seconds")
+        try:
+            remaining_value = None if remaining is None else float(remaining)
+        except (TypeError, ValueError):
+            remaining_value = None
+
+        keys = payload.get("model_keys")
+        paths = payload.get("checkpoint_paths")
+        hashes = payload.get("checkpoint_sha256")
+        model_keys = [str(item) for item in keys] if isinstance(keys, list) else []
+        checkpoint_paths = [str(item) for item in paths] if isinstance(paths, list) else []
+        checkpoint_hashes = [str(item) for item in hashes] if isinstance(hashes, list) else []
+        model_text = ", ".join(model_keys) or "nessun checkpoint dichiarato"
+        checkpoint_text = ", ".join(
+            Path(path).name for path in checkpoint_paths
+        ) or "—"
+        hash_text = ", ".join(checkpoint_hashes) or "—"
+
+        cpu = payload.get("process_cpu_percent")
+        cpu_text = "—" if cpu is None else f"{float(cpu):.1f}%"
+        ram_text = format_bytes(payload.get("process_rss_bytes"))
+        system_ram_text = format_bytes(payload.get("system_used_ram_bytes"))
+        prefix = "Preparazione" if index <= 0 else f"Blocco {index}/{total}"
+        return (
+            f"{prefix} • {title} • {status} • ruolo {role} • engine {engine_text} • "
+            f"modello {model_text} • checkpoint {checkpoint_text} • SHA-256 {hash_text} • "
+            f"trascorso {format_duration(elapsed)} • ETA ~{format_duration(remaining_value)} • "
+            f"CPU processo {cpu_text} • RAM processo {ram_text} • RAM sistema {system_ram_text}"
+        )
+
+    def _on_progress_detail(self, payload: object) -> None:
+        if not isinstance(payload, dict):
+            return
+        event = dict(payload)
+        self._progress_event = event
+        status = str(event.get("status", "RUNNING"))
+        index = int(event.get("block_index", 0) or 0)
+        if status == "RUNNING":
+            self._progress_event_started_monotonic = time.monotonic()
+        else:
+            self._progress_event_started_monotonic = None
+        self.progress_detail_label.setText(self._progress_text(event))
+        self.progress_detail_label.setToolTip(json.dumps(event, indent=2, sort_keys=True))
+        if 1 <= index <= len(self._timeline_items):
+            title = str(event.get("block_title", self._timeline_titles[index - 1]))
+            role = str(event.get("model_role", "—"))
+            elapsed = event.get("elapsed_block_seconds")
+            try:
+                elapsed_value = None if elapsed is None else float(elapsed)
+            except (TypeError, ValueError):
+                elapsed_value = None
+            item = self._timeline_items[index - 1]
+            item.setText(
+                f"{index:02d}  {title}  — {status} — {role} — {format_duration(elapsed_value)}"
+            )
+            colors = {
+                "PASS": Qt.GlobalColor.green,
+                "ABSTAIN": Qt.GlobalColor.darkYellow,
+                "SKIPPED": Qt.GlobalColor.darkYellow,
+                "ROLLBACK": Qt.GlobalColor.darkYellow,
+                "ERROR": Qt.GlobalColor.red,
+                "FAILED": Qt.GlobalColor.red,
+            }
+            item.setForeground(colors.get(status, Qt.GlobalColor.gray))
+            self.timeline.setCurrentItem(item)
+            self.timeline.scrollToItem(item)
+
+    def _refresh_progress_clock(self) -> None:
+        event = self._progress_event
+        started = self._progress_event_started_monotonic
+        if not isinstance(event, dict) or started is None or event.get("status") != "RUNNING":
+            return
+        try:
+            baseline = float(event.get("elapsed_block_seconds", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            baseline = 0.0
+        elapsed = baseline + max(0.0, time.monotonic() - started)
+        live = dict(event)
+        live.update(self._ui_resources.sample())
+        self.progress_detail_label.setText(
+            self._progress_text(live, elapsed_override=elapsed)
+        )
 
     def _on_block_completed(self, index: int, title: str, status: str, image: object, details: object) -> None:
         if 1 <= int(index) <= self.timeline.count():
@@ -557,8 +681,10 @@ class MainWindow(QMainWindow):
             item.setText(f"{int(index):02d}  {title}  — {status}  ({duration:.0f} ms)")
             colors = {
                 "PASS": Qt.GlobalColor.green,
+                "ABSTAIN": Qt.GlobalColor.darkYellow,
                 "SKIPPED": Qt.GlobalColor.darkYellow,
                 "ROLLBACK": Qt.GlobalColor.darkYellow,
+                "ERROR": Qt.GlobalColor.red,
                 "FAILED": Qt.GlobalColor.red,
             }
             item.setForeground(colors.get(str(status), Qt.GlobalColor.gray))
@@ -568,6 +694,8 @@ class MainWindow(QMainWindow):
             self.after_panel.set_cv_image(image)
 
     def _on_completed(self, result: object) -> None:
+        self.progress_timer.stop()
+        self._progress_event_started_monotonic = None
         if not isinstance(result, AutomaticRunResult):
             self._on_failed("Risultato pipeline non valido")
             return
@@ -596,6 +724,7 @@ class MainWindow(QMainWindow):
                 f"Original Information Confidence: {evidence:.1f}%   |   Generated: {generated:.1f}%   |   Symmetry: {symmetry:.1f}%   |   Unresolved: {unresolved:.1f}%"
             )
         self.status.setText("Elaborazione completata. Premi Scarica risultati ZIP.")
+        self.progress_detail_label.setText("Timeline: 13/13 completati — ETA 00:00")
         if self.recovery_project_path is not None:
             save_project(
                 self._project_document(status="completed", last_checkpoint=str(result.final_image)),
@@ -605,8 +734,11 @@ class MainWindow(QMainWindow):
 
     def _on_failed(self, message: str) -> None:
         LOGGER.error("Pipeline failed: %s", message)
+        self.progress_timer.stop()
+        self._progress_event_started_monotonic = None
         self.progress.setValue(0)
         self.status.setText("Elaborazione non completata")
+        self.progress_detail_label.setText("Timeline: elaborazione interrotta")
         self.confidence_label.setText("Original Information Confidence: non disponibile")
         if self.recovery_project_path is not None:
             save_project(self._project_document(status="failed"), self.recovery_project_path)
@@ -614,6 +746,7 @@ class MainWindow(QMainWindow):
         self._update_controls()
 
     def _on_thread_finished(self) -> None:
+        self.progress_timer.stop()
         self.worker_thread = None
         self.worker = None
         self._update_controls()

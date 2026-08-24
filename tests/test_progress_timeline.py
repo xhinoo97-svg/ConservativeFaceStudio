@@ -7,7 +7,9 @@ from app.progress_timeline import (
     BLOCK_TOTAL,
     BLOCK_TITLES,
     BlockTimingHistory,
+    ProcessResourceSampler,
     ProgressTimelineTracker,
+    format_bytes,
     format_duration,
 )
 
@@ -101,3 +103,65 @@ def test_format_duration_handles_minutes_and_hours() -> None:
     assert format_duration(None) == "—"
     assert format_duration(65) == "01:05"
     assert format_duration(3661) == "1:01:01"
+
+
+def test_process_resource_sampler_reports_measured_deltas_without_guessing() -> None:
+    values = {"wall": 10.0, "cpu": 4.0}
+    snapshot = {
+        "process_rss_bytes": 64 * 1024 * 1024,
+        "system_used_ram_bytes": 2 * 1024 * 1024 * 1024,
+        "total_ram_bytes": 8 * 1024 * 1024 * 1024,
+    }
+    sampler = ProcessResourceSampler(
+        clock=lambda: values["wall"],
+        cpu_clock=lambda: values["cpu"],
+        logical_processors=2,
+        snapshot_provider=lambda: snapshot,
+    )
+    first = sampler.sample()
+    assert first["process_cpu_percent"] is None
+    assert first["process_rss_bytes"] == 64 * 1024 * 1024
+
+    values.update(wall=12.0, cpu=5.0)
+    second = sampler.sample()
+    assert second["process_cpu_percent"] == 25.0
+    assert second["system_used_ram_bytes"] == 2 * 1024 * 1024 * 1024
+
+
+def test_format_bytes_is_explicit_for_unknown_and_binary_units() -> None:
+    assert format_bytes(None) == "—"
+    assert format_bytes(1024) == "1.0 KiB"
+    assert format_bytes(3 * 1024 * 1024) == "3.0 MiB"
+
+
+def test_model_attribution_requires_actual_success_evidence() -> None:
+    from app.worker import PipelineWorker
+
+    assert PipelineWorker._actual_model_keys(2, {"pretrained": False}) == ()
+    assert PipelineWorker._actual_model_keys(
+        2,
+        {"pretrained": True, "engine": "opencv-zoo-nafnet-2025may"},
+    ) == ("opencv_nafnet_deblur",)
+    assert PipelineWorker._actual_model_keys(
+        8,
+        {"generated_pixels": 0, "engine": "verified-reference-inpaint"},
+    ) == ()
+    assert PipelineWorker._actual_model_keys(
+        8,
+        {"generated_pixels": 4, "engine": "verified-reference-inpaint"},
+    ) == ("opencv_lama_inpaint",)
+
+
+def test_worker_and_ui_are_wired_to_structured_runtime_evidence() -> None:
+    root = Path(__file__).resolve().parents[1]
+    worker = (root / "app" / "worker.py").read_text(encoding="utf-8")
+    ui = (root / "app" / "main_window.py").read_text(encoding="utf-8")
+
+    assert "progress_detail = Signal(object)" in worker
+    assert "runner.on_block_completed = self._runner_block_completed" in worker
+    assert '"checkpoint_sha256"' in worker
+    assert "ProcessResourceSampler" in worker
+    assert "worker.progress_detail.connect(self._on_progress_detail)" in ui
+    assert "self.progress_timer.setInterval(1000)" in ui
+    assert "CPU processo" in ui
+    assert "SHA-256" in ui

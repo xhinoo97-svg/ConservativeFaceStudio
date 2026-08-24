@@ -13,7 +13,7 @@ import json
 import math
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, Callable
 
 BLOCK_TOTAL = 13
 BLOCK_TITLES: tuple[str, ...] = (
@@ -294,6 +294,91 @@ class ProgressTimelineTracker:
             overall_percent=100.0 * len(self._completed) / BLOCK_TOTAL,
             status=str(status or "PASS").upper(),
         )
+
+
+class ProcessResourceSampler:
+    """Cross-platform process/system resource samples without invented values.
+
+    Process CPU is the fraction of total logical-CPU capacity consumed between two
+    samples. The first sample is necessarily unknown. RAM values reuse the same
+    Windows/Linux probes as the Paper Quality resource guard.
+    """
+
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        cpu_clock: Callable[[], float] = time.process_time,
+        logical_processors: int | None = None,
+        snapshot_provider: Callable[[], dict[str, object]] | None = None,
+    ) -> None:
+        self._clock = clock
+        self._cpu_clock = cpu_clock
+        self._logical_processors = max(
+            1,
+            int(logical_processors or __import__("os").cpu_count() or 1),
+        )
+        self._snapshot_provider = snapshot_provider or self._default_snapshot_provider()
+        self._previous_wall: float | None = None
+        self._previous_cpu: float | None = None
+
+    @staticmethod
+    def _default_snapshot_provider() -> Callable[[], dict[str, object]]:
+        try:
+            from app.resource_budget import detect_resource_budget, resource_snapshot
+
+            budget = detect_resource_budget()
+            return lambda: resource_snapshot(budget)
+        except Exception:
+            return lambda: {}
+
+    def sample(self) -> dict[str, object]:
+        wall = float(self._clock())
+        cpu = float(self._cpu_clock())
+        cpu_percent: float | None = None
+        if self._previous_wall is not None and self._previous_cpu is not None:
+            elapsed = wall - self._previous_wall
+            consumed = max(0.0, cpu - self._previous_cpu)
+            if elapsed > 0.0:
+                cpu_percent = min(
+                    100.0,
+                    100.0 * consumed / (elapsed * self._logical_processors),
+                )
+        self._previous_wall = wall
+        self._previous_cpu = cpu
+
+        try:
+            snapshot = dict(self._snapshot_provider())
+        except Exception:
+            snapshot = {}
+        return {
+            "process_cpu_percent": (
+                None if cpu_percent is None else round(cpu_percent, 2)
+            ),
+            "logical_processors": self._logical_processors,
+            "process_rss_bytes": snapshot.get("process_rss_bytes"),
+            "process_ram_fraction": snapshot.get("process_ram_fraction"),
+            "system_used_ram_bytes": snapshot.get("system_used_ram_bytes"),
+            "system_available_ram_bytes": snapshot.get("system_available_ram_bytes"),
+            "system_ram_fraction": snapshot.get("system_ram_fraction"),
+            "total_ram_bytes": snapshot.get("total_ram_bytes"),
+        }
+
+
+def format_bytes(value: int | float | None) -> str:
+    if value is None:
+        return "—"
+    try:
+        amount = max(0.0, float(value))
+    except (TypeError, ValueError):
+        return "—"
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    unit = units[0]
+    for unit in units:
+        if amount < 1024.0 or unit == units[-1]:
+            break
+        amount /= 1024.0
+    return f"{amount:.1f} {unit}"
 
 
 def format_duration(seconds: float | None) -> str:
