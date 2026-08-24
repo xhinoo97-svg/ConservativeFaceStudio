@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import numpy as np
 
@@ -16,6 +16,7 @@ from app.component_aware_fusion_v2 import (
     component_aware_fusion,
 )
 from app.damage_mask_runtime import DamageMaskResult
+from app.damage_router import DamageRoutePlan
 from app.reference_first_route import ReferenceFirstRepairResult
 
 
@@ -118,6 +119,7 @@ def run_paper_quality_route(
     bbox: tuple[int, int, int, int],
     reference_result: ReferenceFirstRepairResult | None = None,
     generated_placements: Sequence[GeneratedPlacement] = (),
+    generated_route_plans: Mapping[int, DamageRoutePlan] | None = None,
     candidate_evidence: Sequence[CandidateQualityEvidence] = (),
     selection_policy: CandidateSelectionPolicy | None = None,
     wrong_person_final_pixels: int | None = None,
@@ -244,6 +246,41 @@ def run_paper_quality_route(
                 provenance_violations=1,
             )
 
+    route_rejections: list[str] = []
+    if placements:
+        route_plans = generated_route_plans or {}
+        authorized_placements: list[GeneratedPlacement] = []
+        authorized_evidence: list[CandidateQualityEvidence] = []
+        evidence_by_candidate = (
+            {placement.candidate_id: item for placement, item in zip(placements, evidence)}
+            if len(placements) == len(evidence)
+            else {}
+        )
+        for placement in placements:
+            candidate = placement.candidate
+            plan = route_plans.get(int(placement.candidate_id))
+            rejection: str | None = None
+            if plan is None:
+                rejection = "generated_route_authorization_missing"
+            elif plan.mask.shape != shape:
+                rejection = "generated_route_mask_shape_mismatch"
+            elif not plan.qualified_for_execution or plan.selected_model_key is None:
+                rejection = "generated_route_not_production_qualified"
+            elif str(plan.selected_model_key) != str(candidate.model_key):
+                rejection = "generated_route_model_mismatch"
+            elif np.any((candidate.generated_mask > 0) & ~(plan.mask > 0)):
+                rejection = "generated_candidate_outside_route_authority"
+            if rejection is not None:
+                candidate.accepted = False
+                candidate.rejection_reason = rejection
+                route_rejections.append(rejection)
+                continue
+            authorized_placements.append(placement)
+            if placement.candidate_id in evidence_by_candidate:
+                authorized_evidence.append(evidence_by_candidate[placement.candidate_id])
+        placements = authorized_placements
+        evidence = authorized_evidence
+
     selection: CandidateSelectionResult | None = None
     if placements:
         if selection_policy is None:
@@ -311,6 +348,8 @@ def run_paper_quality_route(
     decision = "PASS" if effective else "ABSTAIN"
     if effective:
         reason = "qualified_observed_or_generated_pixels_fused"
+    elif route_rejections:
+        reason = route_rejections[0]
     elif placements and selection_policy is None:
         reason = "calibrated_selection_policy_missing"
     elif selection is not None and selection.winner_index is None:
