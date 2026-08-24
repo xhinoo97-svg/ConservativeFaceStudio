@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import re
 from typing import Mapping, Sequence
 
 
 EVIDENCE_TIERS = ("DEVELOPMENT", "VALIDATION", "PRODUCTION")
 
-# A model is not executable as a Paper Quality generated-pixel donor until every
-# model-local gate below has explicit evidence. Product-wide readiness (Target95,
-# final installer, V5, etc.) remains a separate higher-level gate.
+# Model-local gates. Product-wide readiness (Target95, final installer, V5, etc.)
+# remains a separate higher-level decision in production_readiness.py.
 REQUIRED_MODEL_PRODUCTION_GATES: tuple[str, ...] = (
     "official_repository_verified",
     "revision_pinned",
@@ -25,9 +25,8 @@ REQUIRED_MODEL_PRODUCTION_GATES: tuple[str, ...] = (
     "target_hardware_resource_budget_pass",
 )
 
-# Evidence references are deliberately typed. This does not replace verification of
-# the referenced artifact; it prevents a generic string such as "looks good" from
-# becoming production authority and makes the release tooling auditable.
+# Typed refs stop an arbitrary prose string from becoming model authority. Release
+# tooling must still verify that every referenced run/artifact/file really exists.
 _REQUIRED_REF_PREFIXES: dict[str, tuple[str, ...]] = {
     "official_repository_verified": ("repo:",),
     "revision_pinned": ("commit:",),
@@ -41,6 +40,9 @@ _REQUIRED_REF_PREFIXES: dict[str, tuple[str, ...]] = {
     "windows_installed_offline_pass": ("github-run:", "artifact-sha256:", "candidate-sha:"),
     "target_hardware_resource_budget_pass": ("elitebook-evidence:", "candidate-sha:"),
 }
+
+_HEX_40_OR_64 = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
+_HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,7 @@ class ModelEvidenceGate:
                 raise ValueError(
                     f"model production gate {self.gate_id} lacks required evidence prefix {prefix}"
                 )
+        _validate_typed_hash_refs(self.evidence_refs)
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,18 @@ class ModelQualification:
             raise ValueError("non-production qualification cannot carry production attestation")
 
 
+def _validate_typed_hash_refs(refs: Sequence[str]) -> None:
+    for ref in refs:
+        if ref.startswith("commit:") or ref.startswith("candidate-sha:"):
+            value = ref.split(":", 1)[1].lower()
+            if not _HEX_40_OR_64.fullmatch(value):
+                raise ValueError(f"invalid commit/candidate hash evidence: {ref}")
+        elif ref.startswith(("checkpoint-sha256:", "artifact-sha256:", "benchmark-artifact-sha256:")):
+            value = ref.split(":", 1)[1].lower()
+            if not _HEX_64.fullmatch(value):
+                raise ValueError(f"invalid SHA-256 evidence: {ref}")
+
+
 def _gate_payload(gates: Sequence[ModelEvidenceGate]) -> list[dict[str, object]]:
     return [
         {"gate_id": gate.gate_id, "evidence_refs": list(gate.evidence_refs)}
@@ -109,6 +124,18 @@ def _attestation_digest(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _validate_candidate_binding(gates: Sequence[ModelEvidenceGate]) -> None:
+    candidate_refs = {
+        ref
+        for gate in gates
+        if gate.gate_id in {"windows_installed_offline_pass", "target_hardware_resource_budget_pass"}
+        for ref in gate.evidence_refs
+        if ref.startswith("candidate-sha:")
+    }
+    if len(candidate_refs) != 1:
+        raise ValueError("Windows and target-hardware evidence must bind the same candidate SHA")
+
+
 def _validate_production_attestation(qualification: ModelQualification) -> None:
     gates = qualification.gate_evidence
     ids = [gate.gate_id for gate in gates]
@@ -120,6 +147,7 @@ def _validate_production_attestation(qualification: ModelQualification) -> None:
         raise ValueError(
             f"incomplete model production gate evidence: missing={missing}, extra={extra}"
         )
+    _validate_candidate_binding(gates)
     flattened = {ref for gate in gates for ref in gate.evidence_refs}
     if not flattened.issubset(set(qualification.evidence_refs)):
         raise ValueError("model qualification evidence_refs do not cover gate evidence")
@@ -138,12 +166,7 @@ def build_production_model_qualification(
     *,
     extra_evidence_refs: Sequence[str] = (),
 ) -> ModelQualification:
-    """Create the only supported production-qualified model attestation.
-
-    Every required gate must be present and carry typed evidence references. The
-    resulting digest binds the model key and complete evidence set, so a DEVELOPMENT
-    artifact or an arbitrary caller-supplied boolean cannot authorize execution.
-    """
+    """Build a fail-closed model authority bound to complete production evidence."""
     unknown = sorted(set(gate_evidence) - set(REQUIRED_MODEL_PRODUCTION_GATES))
     missing = sorted(set(REQUIRED_MODEL_PRODUCTION_GATES) - set(gate_evidence))
     if unknown or missing:
@@ -154,6 +177,7 @@ def build_production_model_qualification(
         ModelEvidenceGate(gate_id, tuple(str(ref) for ref in gate_evidence[gate_id]))
         for gate_id in REQUIRED_MODEL_PRODUCTION_GATES
     )
+    _validate_candidate_binding(gates)
     refs: list[str] = [str(ref) for ref in extra_evidence_refs]
     for gate in gates:
         refs.extend(gate.evidence_refs)

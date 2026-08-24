@@ -12,9 +12,11 @@ from app.damage_router import (
     plan_damage_route,
 )
 from app.damage_taxonomy import CLASS_TO_INDEX, DAMAGE_CLASSES
+from app.model_qualification import build_production_model_qualification
 
 
 SHAPE = (24, 28)
+CANDIDATE_SHA = "a" * 40
 
 
 def _damage(name: str, *, second_class: str | None = None, pixels: bool = True) -> DamageMaskResult:
@@ -36,6 +38,29 @@ def _damage(name: str, *, second_class: str | None = None, pixels: bool = True) 
         dominant_confidence=0.9 if pixels and name != "HEALTHY" else 0.0,
         affected_components=(),
     )
+
+
+def _production_gate_evidence(*, candidate_sha: str = CANDIDATE_SHA) -> dict[str, tuple[str, ...]]:
+    return {
+        "official_repository_verified": ("repo:fixture/official-model",),
+        "revision_pinned": (f"commit:{CANDIDATE_SHA}",),
+        "checkpoint_hash_verified": (f"checkpoint-sha256:{'b' * 64}",),
+        "code_license_compatible": ("code-license-evidence:fixture-code-license",),
+        "weights_license_compatible": ("weights-license-evidence:fixture-weights-license",),
+        "upstream_smoke_pass": ("upstream-smoke:fixture-pass",),
+        "cfs_adapter_contract_pass": ("cfs-test:fixture-adapter-pass",),
+        "identity_and_provenance_regressions_pass": ("cfs-test:fixture-identity-provenance-pass",),
+        "validation_benchmark_pass": (f"benchmark-artifact-sha256:{'c' * 64}",),
+        "windows_installed_offline_pass": (
+            "github-run:123",
+            f"artifact-sha256:{'d' * 64}",
+            f"candidate-sha:{candidate_sha}",
+        ),
+        "target_hardware_resource_budget_pass": (
+            "elitebook-evidence:fixture-pass",
+            f"candidate-sha:{CANDIDATE_SHA}",
+        ),
+    }
 
 
 @pytest.mark.parametrize("damage_class", DAMAGE_CLASSES)
@@ -120,13 +145,42 @@ def test_development_fbcnn_evidence_cannot_select_a_production_route() -> None:
     assert plan.reason == "no_production_qualified_model_for_route"
 
 
-def test_even_production_qualified_model_only_creates_a_plan_not_a_restoration_pass() -> None:
-    production = ModelQualification(
+def test_arbitrary_production_boolean_and_generic_ref_cannot_create_authority() -> None:
+    with pytest.raises(ValueError, match="incomplete model production gate evidence"):
+        ModelQualification(
+            "fbcnn",
+            "PRODUCTION",
+            True,
+            ("synthetic-test:looks-qualified",),
+        )
+
+
+def test_production_attestation_requires_same_windows_and_elitebook_candidate() -> None:
+    with pytest.raises(ValueError, match="must bind the same candidate SHA"):
+        build_production_model_qualification(
+            "fbcnn",
+            _production_gate_evidence(candidate_sha="e" * 40),
+        )
+
+
+def test_production_attestation_rejects_missing_or_untyped_checkpoint_evidence() -> None:
+    gates = _production_gate_evidence()
+    gates.pop("validation_benchmark_pass")
+    with pytest.raises(ValueError, match="incomplete model production gate evidence"):
+        build_production_model_qualification("fbcnn", gates)
+
+    gates = _production_gate_evidence()
+    gates["checkpoint_hash_verified"] = ("checkpoint-sha256:not-a-sha256",)
+    with pytest.raises(ValueError, match="invalid SHA-256 evidence"):
+        build_production_model_qualification("fbcnn", gates)
+
+
+def test_evidence_attested_production_model_only_creates_plan_not_restoration_pass() -> None:
+    production = build_production_model_qualification(
         "fbcnn",
-        "PRODUCTION",
-        True,
-        ("synthetic-test:production-evidence",),
+        _production_gate_evidence(),
     )
+    assert production.attestation_sha256 is not None
     plan = plan_damage_route(
         _damage("JPEG_ARTIFACT"),
         image_shape=SHAPE,

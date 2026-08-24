@@ -7,6 +7,7 @@ import numpy as np
 
 from app.damage_mask_runtime import DamageMaskResult
 from app.damage_taxonomy import DAMAGE_CLASSES, HEALTHY_INDEX, validate_damage_class
+from app.model_qualification import ModelQualification
 
 
 DAMAGE_KINDS: tuple[str, ...] = (
@@ -49,24 +50,6 @@ class DamageKindEvidence:
     confidence: float
     source: str
     verified: bool
-
-
-@dataclass(frozen=True)
-class ModelQualification:
-    model_key: str
-    evidence_tier: str
-    production_qualified: bool
-    evidence_refs: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        if not self.model_key.strip():
-            raise ValueError("model_key is required")
-        if self.evidence_tier not in {"DEVELOPMENT", "VALIDATION", "PRODUCTION"}:
-            raise ValueError("invalid model evidence_tier")
-        if self.production_qualified and self.evidence_tier != "PRODUCTION":
-            raise ValueError("production-qualified model must have PRODUCTION evidence")
-        if self.production_qualified and not self.evidence_refs:
-            raise ValueError("production-qualified model requires evidence refs")
 
 
 @dataclass(frozen=True)

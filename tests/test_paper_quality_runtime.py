@@ -10,11 +10,15 @@ from app.candidate_selector_v2 import (
 )
 from app.component_aware_fusion_v2 import GeneratedPlacement, WHOLE_FACE
 from app.damage_mask_runtime import DamageMaskResult
-from app.damage_router import ModelQualification, plan_damage_route
+from app.damage_router import plan_damage_route
 from app.damage_taxonomy import CLASS_TO_INDEX
 from app.face_restorer_adapter import RestorationCandidate
+from app.model_qualification import build_production_model_qualification
 from app.paper_quality_runtime import run_paper_quality_route
 from app.reference_first_route import ReferenceFirstRepairResult
+
+
+CANDIDATE_SHA = "a" * 40
 
 
 def _geometry() -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]]:
@@ -87,18 +91,38 @@ def _evidence() -> CandidateQualityEvidence:
     )
 
 
+def _production_gate_evidence() -> dict[str, tuple[str, ...]]:
+    return {
+        "official_repository_verified": ("repo:fixture/official-model",),
+        "revision_pinned": (f"commit:{CANDIDATE_SHA}",),
+        "checkpoint_hash_verified": (f"checkpoint-sha256:{'b' * 64}",),
+        "code_license_compatible": ("code-license-evidence:fixture-code-license",),
+        "weights_license_compatible": ("weights-license-evidence:fixture-weights-license",),
+        "upstream_smoke_pass": ("upstream-smoke:fixture-pass",),
+        "cfs_adapter_contract_pass": ("cfs-test:fixture-adapter-pass",),
+        "identity_and_provenance_regressions_pass": ("cfs-test:fixture-identity-provenance-pass",),
+        "validation_benchmark_pass": (f"benchmark-artifact-sha256:{'c' * 64}",),
+        "windows_installed_offline_pass": (
+            "github-run:123",
+            f"artifact-sha256:{'d' * 64}",
+            f"candidate-sha:{CANDIDATE_SHA}",
+        ),
+        "target_hardware_resource_budget_pass": (
+            "elitebook-evidence:fixture-pass",
+            f"candidate-sha:{CANDIDATE_SHA}",
+        ),
+    }
+
+
 def _authorized_plan(damage: DamageMaskResult, model_key: str = "ref_face_inpainting"):
+    qualification = build_production_model_qualification(
+        model_key,
+        _production_gate_evidence(),
+    )
     return plan_damage_route(
         damage,
         image_shape=damage.binary_damage_mask.shape,
-        model_qualifications={
-            model_key: ModelQualification(
-                model_key=model_key,
-                evidence_tier="PRODUCTION",
-                production_qualified=True,
-                evidence_refs=("synthetic-test:qualified",),
-            )
-        },
+        model_qualifications={model_key: qualification},
     )
 
 
