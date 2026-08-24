@@ -13,14 +13,12 @@ SPEC = importlib.util.spec_from_file_location("cfs_personalized_reference_bank_t
 assert SPEC is not None and SPEC.loader is not None
 module = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = module
-# Supply the small reference_limits dependency without importing app/__init__.
 limits_path = Path(__file__).resolve().parents[1] / "app" / "reference_limits.py"
 limits_spec = importlib.util.spec_from_file_location("app.reference_limits", limits_path)
 assert limits_spec is not None and limits_spec.loader is not None
 limits_module = importlib.util.module_from_spec(limits_spec)
 sys.modules["app.reference_limits"] = limits_module
 limits_spec.loader.exec_module(limits_module)
-# Minimal package namespace for the direct module load.
 if "app" not in sys.modules:
     import types
     package = types.ModuleType("app")
@@ -30,6 +28,7 @@ SPEC.loader.exec_module(module)
 
 ReferenceObservation = module.ReferenceObservation
 build_personalized_reference_bank = module.build_personalized_reference_bank
+build_person_identity_profile = module.build_person_identity_profile
 
 
 def _full(source: int, embedding: list[float], *, eye=0.8, nose=0.8, accepted=True):
@@ -44,6 +43,15 @@ def _full(source: int, embedding: list[float], *, eye=0.8, nose=0.8, accepted=Tr
         pose_quality=0.8,
         resolution_quality=0.8,
         occlusion_quality=0.8,
+        blur_severity=0.15,
+        noise_severity=0.10,
+        exposure_mean_luma=0.52,
+        yaw_deg=7.0,
+        pitch_deg=-3.0,
+        roll_deg=2.0,
+        face_width_px=420,
+        face_height_px=480,
+        occlusion_fraction=0.05,
         component_visibility={"left_eye": eye, "nose": nose, "mouth": 0.8},
         component_sharpness={"left_eye": eye, "nose": nose, "mouth": 0.8},
         component_coverage={"left_eye": eye, "nose": nose, "mouth": 0.8},
@@ -63,7 +71,6 @@ def test_partial_eye_reference_uses_local_verification_without_becoming_global_a
     partial = ReferenceObservation(
         source_index=3,
         reference_kind="partial",
-        # A sparse eye crop may not have a valid full-face SFace comparison.
         identity_accepted=False,
         face_quality=0.9,
         exposure_quality=0.9,
@@ -132,6 +139,35 @@ def test_consensus_embedding_uses_only_accepted_full_references() -> None:
     expected = expected / np.linalg.norm(expected)
     assert bank.global_anchor_source_indices == (1, 2)
     np.testing.assert_allclose(bank.consensus_embedding, expected, atol=1e-6)
+
+
+def test_profile_retains_requested_raw_reference_diagnostics_locally() -> None:
+    reference = _full(1, [1.0, 0.0], eye=0.9, nose=0.7)
+    profile = build_person_identity_profile(build_personalized_reference_bank([reference]))
+    assert profile.global_anchor_source_indices == (1,)
+    assert set(profile.component_rankings) == set(module.COMPONENTS)
+    record = profile.reference_records[0]
+    assert record["blur_severity"] == 0.15
+    assert record["noise_severity"] == 0.10
+    assert record["exposure_mean_luma"] == 0.52
+    assert record["yaw_deg"] == 7.0
+    assert record["pitch_deg"] == -3.0
+    assert record["roll_deg"] == 2.0
+    assert record["face_width_px"] == 420
+    assert record["face_height_px"] == 480
+    assert record["occlusion_fraction"] == 0.05
+    np.testing.assert_allclose(profile.consensus_embedding, np.asarray([1.0, 0.0], np.float32))
+
+
+def test_raw_quality_metadata_fails_closed_on_invalid_values() -> None:
+    with pytest.raises(ValueError, match="blur_severity"):
+        ReferenceObservation(1, "full", True, blur_severity=1.1)
+    with pytest.raises(ValueError, match="yaw_deg"):
+        ReferenceObservation(1, "full", True, yaw_deg=float("nan"))
+    with pytest.raises(ValueError, match="face dimensions"):
+        ReferenceObservation(1, "full", True, face_width_px=-1)
+    with pytest.raises(ValueError, match="Unknown components"):
+        ReferenceObservation(1, "full", True, component_visibility={"ear": 0.8})
 
 
 def test_duplicate_original_source_indices_are_rejected() -> None:
