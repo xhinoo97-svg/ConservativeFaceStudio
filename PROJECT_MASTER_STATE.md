@@ -5,12 +5,12 @@
 ## OWNER DASHBOARD
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
-- CURRENT ACTIVE BRANCH: `hotfix/real-world-restoration-v1.1` preserves consumed Track A evidence; `protocol/v5-certification-hardening` contains DEV-only runner hardening; `research/paper-quality-local-v2` preserves the active Track B evidence. The governing mandate requires the next technical line to be `integration/final-paper-quality-local`, created exactly from immutable `main` and populated by selective, tested integration.
-- CURRENT TECHNICAL HEAD: Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; protocol hardening `268188c5a2540455ff804383cb583b16546b62f1`; Track B `6d57725aae087bb4a3144d521d91346999f9a4fd`.
-- CURRENT PHASE: V4 remains permanently consumed FAIL/NO-GO. The generic future one-shot runner is hardened on synthetic DEV fixtures; Track B is qualifying the official FBCNN compression specialist and replacing an inadequate DamageMaskNet hypothesis.
+- CURRENT ACTIVE BRANCH: `integration/final-paper-quality-local` is the single active integration line, created exactly from immutable `main`. Track A, protocol hardening and Track B remain traceable read-only source/evidence lines.
+- CURRENT TECHNICAL HEAD: integration `eaca320da72f8cd0fa3a629bba9ff25689d5e973`; Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; protocol hardening `268188c5a2540455ff804383cb583b16546b62f1`; Track B `6d57725aae087bb4a3144d521d91346999f9a4fd`.
+- CURRENT PHASE: Phase 0 inventory complete with a green baseline. Selective Track A operational/safety integration is next; V4 remains permanently consumed FAIL/NO-GO and no V5 exists.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
-- WHAT WAS JUST COMPLETED: frozen LR-ASPP external run `32676602851` completed 880/880 cases with zero errors and passed the unchanged overall gate (`F1 0.716639`, `IoU 0.579849`, minimum class F1 `0.387499`). Domain robustness did not qualify.
-- WHAT IS BEING WORKED ON: the final execution mandate is now canonical in `PROJECT_EXECUTION_RULES.md`. The next technical action is to create `integration/final-paper-quality-local` exactly from `main`, inventory the real 13-block product, and integrate only traceable, tested changes. RefFace remains NOT_RUN.
+- WHAT WAS JUST COMPLETED: integration Phase 0 at `eaca320d...`: machine-readable 13-block/model/installer inventory, explicit blocker classification, targeted `2/2` and full pytest `436/436` PASS. No model/holdout/release state changed.
+- WHAT IS BEING WORKED ON: selectively integrate valid Track A operational and safety changes while excluding every V4 request, freeze, manifest, marker, workflow and execution artifact. RefFace remains NOT_RUN.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; overall DEVELOPMENT gates pass on 2- and 40-identity evaluations, but domain robustness and weight licensing are not qualified.
 - WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
@@ -19,14 +19,14 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: create `integration/final-paper-quality-local` exactly from `main`; record the base SHA; perform the repository/model/installer inventory required by Phase 0; then selectively integrate Track A operations, the hardened generic protocol, and Track B modules with a green full suite after each group. Keep RefFace blocked and do not create/execute V5.
+- NEXT EXACT STEP: select the Track A operational/safety commits and paths required by the product, explicitly exclude all V4 files, integrate as one traceable group on `eaca320d...`, then run targeted and full tests before any protocol or Track B module is added.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
 
 ## 0. Document metadata
 
-- Updated: `2026-08-23`
+- Updated: `2026-08-24`
 - Repository: `xhinoo97-svg/ConservativeFaceStudio`
 - Canonical state branch: `meta/project-state`
 - Certified base: `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`
@@ -34,6 +34,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@6d57725aae087bb4a3144d521d91346999f9a4fd`
+- Active integration HEAD: `integration/final-paper-quality-local@eaca320da72f8cd0fa3a629bba9ff25689d5e973`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -72,6 +73,7 @@ The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`
 | Branch | Purpose | HEAD | State | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
+| `integration/final-paper-quality-local` | single final product integration | `eaca320d...` | ACTIVE / PHASE 0 PASS | local targeted 2/2 and full 436/436 PASS; current-branch CI not yet run | selectively integrate Track A without V4 artifacts |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
@@ -118,6 +120,7 @@ OBJ-010 HP EliteBook acceptance — PROPOSED.
 OBJ-011 Official upstream implementation registry — IMPLEMENTED; runtime qualification remains per-model.  
 OBJ-012 Official upstream adapters — IN_PROGRESS; FBCNN is first concrete implementation.
 OBJ-013 Future one-shot protocol hardening — DEV TEST_PASS; V5 NOT_CREATED/NOT_AUTHORIZED.
+OBJ-014 Single final integration line — PHASE0_INVENTORY_COMPLETE; baseline `436/436 PASS`; operational integration IN_PROGRESS.
 
 ---
 
@@ -321,6 +324,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-033 Track B `edc5da8b...`: 40-identity, 880-case frozen LR-ASPP external validation launched once; checkpoint unchanged; no training/holdout/RefFace action.
 - HIST-20260824-034 LR-ASPP external run `32676602851` SUCCESS; overall gate PASS, domain robustness NOT_QUALIFIED; 880/880, zero errors; RefFace remains blocked.
 - HIST-20260824-035 final autonomous integration mandate recorded verbatim in `PROJECT_EXECUTION_RULES.md` with source SHA-256 `af0d8e35f67d9ceac4544f72c860963b6a99e571eab7332fb96dd8dac936ff75`. The mandated next technical line is `integration/final-paper-quality-local` from immutable `main`; no technical branch, model, threshold, dataset, holdout or release state changed by this ledger-only record.
+- HIST-20260824-036 integration Phase 0 `eaca320d...`: branch created exactly from immutable `main`; inventory separates documentation, code wiring, weight presence, installer contract and same-candidate evidence. Baseline and post-inventory full suite PASS; ENHANCE no-op, incomplete timeline/resource telemetry and missing damage/dense-geometry/product qualification recorded as blockers.
 
 ---
 
@@ -494,6 +498,21 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - RECONCILIATION: `main`, Track A, Track B, protocol and ledger remote SHAs match the mandate; PR #2 is OPEN/DRAFT/not merged; `integration/final-paper-quality-local` did not exist before this entry; key protocol and LR-ASPP artifacts are present and unexpired.
 - TECHNICAL EFFECT: none. No application code, workflow, model, checkpoint, threshold, dataset, consumed marker or holdout changed. V3/V4 remain closed; V5 remains NOT_CREATED/NOT_AUTHORIZED.
 - NEXT EXACT ACTION: create `integration/final-paper-quality-local` at exact `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`, then execute Phase 0 inventory before any selective integration.
+
+### PUSH-20260824-012
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD / EXACT BASE: `2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- NEW REMOTE HEAD: `eaca320da72f8cd0fa3a629bba9ff25689d5e973`.
+- COMMIT: `Record final integration phase zero inventory`.
+- FILES ADDED: `config/final-integration-inventory.json`, `docs/FINAL_INTEGRATION_PHASE0_INVENTORY.md`, `tests/test_final_integration_inventory.py`.
+- TESTS: baseline full pytest `434/434 PASS`; inventory targeted `2/2 PASS`; post-change full pytest `436/436 PASS`; JSON parse and `git diff --check` PASS.
+- INVENTORY RESULT: all 13 blocks mapped to real handlers; six production-pack roles are checksum-pinned and installer-staged by contract but weights are absent from Git and current-branch Windows evidence is NOT_RUN. FBCNN/LR-ASPP are absent from the base product pipeline.
+- BLOCKERS RECORDED: automatic ENHANCE `blend=0.0` no-op; no multi-class damage router; no active dense geometry; timeline lacks exact model/ETA/live CPU-RAM/semantic result; one-heavy-model lifetime not proven; current-branch Windows/offline/EliteBook and Target95 not measured.
+- TECHNICAL EFFECT: documentation/config/test only. No runtime, model, checkpoint, threshold, dataset, benchmark, consumed marker, workflow or holdout changed. V5 remains NOT_CREATED/NOT_AUTHORIZED.
+- CLASSIFICATION: `PHASE0_INVENTORY_COMPLETE_BASELINE_TEST_PASS_NOT_YET_MEASURED`.
+- NEXT EXACT ACTION: selectively integrate valid Track A operational/safety changes while excluding every V4 request, freeze, manifest, marker, workflow and execution artifact; targeted and full tests before the next integration group.
 
 ---
 
