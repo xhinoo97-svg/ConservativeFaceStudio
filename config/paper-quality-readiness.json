@@ -55,7 +55,12 @@
       "id": "restorer_pack_qualified",
       "status": "NOT_VERIFIED",
       "required_for": ["PAPER_QUALITY", "V5_LAUNCH"],
-      "evidence_refs": ["github-run:32674085939"],
+      "evidence_refs": [
+        "github-run:32674085939",
+        "artifact:9502200502",
+        "artifact-sha256:365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842",
+        "config:fbcnn-development-evidence.json"
+      ],
       "detail": "FBCNN passed a one-identity DEVELOPMENT matrix; face restorers and reference inpainting are not production qualified."
     },
     {

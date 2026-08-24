@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "evidence_tier": "DEVELOPMENT",
+  "benchmark_id": "cfs-fbcnn-compression-dev-matrix-v1",
+  "fixture_policy": "PUBLIC_DEVELOPMENT_ONLY_NO_FINAL_HOLDOUT",
+  "identity_count": 1,
+  "workflow": {
+    "run_id": 32674085939,
+    "head_branch": "research/paper-quality-local-v2",
+    "head_sha": "7dfeb0a855f3f7c0840693bb2c03c25bc498d4eb",
+    "conclusion": "SUCCESS"
+  },
+  "artifact": {
+    "id": 9502200502,
+    "name": "fbcnn-compression-dev-matrix-4",
+    "size_bytes": 11500474,
+    "archive_sha256": "365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842",
+    "file_count": 38,
+    "expires_at": "2026-11-21T23:36:02Z"
+  },
+  "model": {
+    "key": "fbcnn",
+    "official_repository": "jiaxi-jiang/FBCNN",
+    "official_source_commit": "54d1831927506b3247e2d4d245abb4f4dab1a1cd",
+    "code_license": "Apache-2.0",
+    "architecture_reimplemented_by_cfs": false,
+    "device": "cpu",
+    "torch_version": "2.1.2+cpu",
+    "effective_threads": 3
+  },
+  "checkpoint": {
+    "asset": "fbcnn_color.pth",
+    "official_release": "v1.0",
+    "size_bytes": 287755111,
+    "sha256": "8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8",
+    "separate_terms_state": "NOT_VERIFIED"
+  },
+  "summary": {
+    "completed_cases": 6,
+    "restoration_pass_count": 6,
+    "error_cases": 0,
+    "rollback_count": 0,
+    "abstention_count": 0,
+    "wrong_person_final_pixels": 0,
+    "provenance_violations": 0,
+    "development_gate_pass": true,
+    "production_qualified": false
+  },
+  "cases": [
+    {
+      "profile_id": "jpeg-qf10-block-heavy",
+      "family": "block_artifacts",
+      "decision": "PASS",
+      "psnr_degraded": 30.811722554861866,
+      "psnr_fbcnn": 33.60587837222465,
+      "ssim_degraded": 0.900112509727478,
+      "ssim_fbcnn": 0.9404237270355225,
+      "sface_clean_vs_fbcnn": 0.8953862997774042,
+      "final_sha256": "51fac92de723e252542188b33d74f51af42323deaf5246aabbcea296037a5e42"
+    },
+    {
+      "profile_id": "jpeg-qf20",
+      "family": "jpeg_compression",
+      "decision": "PASS",
+      "psnr_degraded": 34.618399811008686,
+      "psnr_fbcnn": 36.78006650815024,
+      "ssim_degraded": 0.9486463069915771,
+      "ssim_fbcnn": 0.9634137153625488,
+      "sface_clean_vs_fbcnn": 0.9691375292693133,
+      "final_sha256": "5967baae7cb379011412ca10cbcb9596336322ee7c15a6927d9b22f3b12b7d06"
+    },
+    {
+      "profile_id": "jpeg-qf40",
+      "family": "jpeg_compression",
+      "decision": "PASS",
+      "psnr_degraded": 38.675645998591776,
+      "psnr_fbcnn": 39.76435127945916,
+      "ssim_degraded": 0.98160320520401,
+      "ssim_fbcnn": 0.9839318990707397,
+      "sface_clean_vs_fbcnn": 0.9877085197891466,
+      "final_sha256": "4d39f75f4afa148233aa20c4ffc04dc75b561420b2467dea3ffd50c7bac9b096"
+    },
+    {
+      "profile_id": "double-jpeg-qf40-qf15",
+      "family": "double_jpeg",
+      "decision": "PASS",
+      "psnr_degraded": 32.67718279358608,
+      "psnr_fbcnn": 35.10382126759894,
+      "ssim_degraded": 0.9268866181373596,
+      "ssim_fbcnn": 0.9507960677146912,
+      "sface_clean_vs_fbcnn": 0.9370903588676857,
+      "final_sha256": "ba9fdaabe64c11249d466f76ca461aa0e52d8e602e365248e9f2dfd0688879b0"
+    },
+    {
+      "profile_id": "social-resize-jpeg-qf20",
+      "family": "social_recompression",
+      "decision": "PASS",
+      "psnr_degraded": 33.54422372575676,
+      "psnr_fbcnn": 35.17276396157348,
+      "ssim_degraded": 0.9264037609100342,
+      "ssim_fbcnn": 0.9382733702659607,
+      "sface_clean_vs_fbcnn": 0.9560952900161486,
+      "final_sha256": "3d198b058bbddef326439c8a61e96692e1a9e3a9bfda88dba04362d2aa798428"
+    },
+    {
+      "profile_id": "mosquito-edges-qf12",
+      "family": "mosquito_noise",
+      "decision": "PASS",
+      "psnr_degraded": 31.858915261323464,
+      "psnr_fbcnn": 34.106535037744,
+      "ssim_degraded": 0.9135453104972839,
+      "ssim_fbcnn": 0.9428256750106812,
+      "sface_clean_vs_fbcnn": 0.9138882062867255,
+      "final_sha256": "d59d7139afdfa29b87261afe2d21263f4af8d0ee267250a828e70abb1d8f44c4"
+    }
+  ],
+  "production_blockers": [
+    "single_public_development_identity",
+    "checkpoint_separate_terms_not_verified",
+    "identity_disjoint_multi_identity_validation_not_run",
+    "same_candidate_windows_offline_installer_not_tested",
+    "hp_elitebook_not_measured"
+  ]
+}
