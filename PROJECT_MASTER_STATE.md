@@ -6,11 +6,11 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `integration/final-paper-quality-local` is the single active integration line, created exactly from immutable `main`. Track A, protocol hardening and Track B remain traceable read-only source/evidence lines.
-- CURRENT TECHNICAL HEAD: integration `5f0045b9f45208cf809684dedecb4f1babdf18e1`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
-- CURRENT PHASE: model-independent foundations, an 80% resource contract, restoration lifecycle and deterministic component-aware fusion are integrated/tested but not yet production-runtime wired; V4 remains CONSUMED_FAIL and V5 does not exist.
+- CURRENT TECHNICAL HEAD: integration `525e7c959ec085cb24874a8f60a2ad17d26b15c7`; Track A `77687b3b...`; candidate `b6ce7ebd...`; protocol `268188c5...`; Track B `6d57725a...`.
+- CURRENT PHASE: the selected model-independent foundations, resource/lifecycle/fusion contracts and duration-only progress timeline are integrated/tested. Production-runtime wiring is now the active phase; V4 remains CONSUMED_FAIL and V5 does not exist.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
-- WHAT WAS JUST COMPLETED: deterministic component-aware fusion `0d35f89... -> 5f0045b...`: MAIN > exact observed same-person reference > generated model, authority clipping and component-before-whole-face ordering; targeted `7/7`, full `513/513` PASS.
-- WHAT IS BEING WORKED ON: integrate the model-independent progress-timeline contract, then begin production runtime wiring while keeping unqualified model implementations disabled.
+- WHAT WAS JUST COMPLETED: duration-only 13-block progress/ETA foundation `b653a35... -> 525e7c9...`; no user content is persisted and unknown ETA is never fabricated; targeted `6/6`, full `519/519` PASS.
+- WHAT IS BEING WORKED ON: production runtime wiring, beginning with truthful automatic ENHANCE behavior and detailed worker/UI events while keeping unqualified model implementations disabled.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; overall DEVELOPMENT gates pass on 2- and 40-identity evaluations, but domain robustness and weight licensing are not qualified.
 - WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
@@ -19,7 +19,7 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: integrate and test the progress-timeline contract as the final standalone foundation, then wire truthful automatic routing/skip behavior without activating an unqualified checkpoint.
+- NEXT EXACT STEP: inspect and fix automatic ENHANCE so an unavailable/unqualified specialist is reported as SKIPPED/ABSTAIN rather than a successful zero-blend no-op; add regression tests before wiring richer UI telemetry.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -34,7 +34,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
 - Active Paper Quality HEAD: `research/paper-quality-local-v2@6d57725aae087bb4a3144d521d91346999f9a4fd`
-- Active integration HEAD: `integration/final-paper-quality-local@5f0045b9f45208cf809684dedecb4f1babdf18e1`; exact tree `108cebdc1b5192b7c00f0bb7c1e4537243380a7e`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
+- Active integration HEAD: `integration/final-paper-quality-local@525e7c959ec085cb24874a8f60a2ad17d26b15c7`; exact tree `531d884881f3e46403a2e596553a9e6c437649a8`; exact base `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`.
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -73,7 +73,7 @@ The complete final execution rules are canonical in `PROJECT_EXECUTION_RULES.md`
 | Branch | Purpose | HEAD | State | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f...` | FROZEN / RELEASED | historical certified green | preserve |
-| `integration/final-paper-quality-local` | single final product integration | `5f0045b...` | ACTIVE / COMPONENT FUSION PASS | targeted 7/7, full 513/513; no backend/weight change | integrate timeline contract, then runtime wiring |
+| `integration/final-paper-quality-local` | single final product integration | `525e7c9...` | ACTIVE / FOUNDATION SET PASS | targeted 6/6, full 519/519; no backend/weight change | truthful runtime wiring |
 | `feature/block-pipeline-v1` | V1 history | `5eff6673...` | MERGED / SUPERSEDED | historical | archive |
 | `release/v1-certified` | V1 candidate history | `f476c6f0...` | FROZEN / ARCHIVED | merged PR #1 | preserve |
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
@@ -333,6 +333,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260824-042 resource contract `ef30cde... -> 7eb08d4...`: CPU plus process/system RAM 80% cap and one-heavy-model maximum transferred with tests. Targeted 7/7 and full 501/501 PASS; target-PC measurement still NOT_RUN.
 - HIST-20260824-043 restorer lifecycle `b79b5b0... -> 9218dfd...`: common model load/infer/unload boundary and generated-only provenance contract transferred without a backend. Targeted 5/5 and full 506/506 PASS.
 - HIST-20260824-044 component fusion `0d35f89... -> 5f0045b...`: deterministic MAIN/reference/generated authority and generated-region clipping transferred without a backend. Targeted 7/7 and full 513/513 PASS. The connector initially emitted two incomplete-tree commits; a normal fast-forward recovery commit restored the exact tested tree `108cebdc...` without force-push or history rewrite.
+- HIST-20260824-045 progress timeline `b653a35... -> 525e7c9...`: 13-block duration-only history, learned target-PC ETA and per-block role/status events transferred as a standalone contract. Targeted 6/6 and full 519/519 PASS; worker/UI wiring is intentionally deferred to the next tested group.
 
 ---
 
@@ -631,6 +632,19 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - PUSH RECOVERY: connector commits `0d35f89...` and `8d4c2a...` were detected with unresolved/incomplete base trees before further work. Commit `5f0045b...` restored the complete exact tested tree by normal fast-forward. No force-push, deletion or history rewrite occurred.
 - LIMIT: deterministic foundation only; no generated backend/checkpoint is enabled and automatic runtime wiring remains pending. Windows/EliteBook NOT_RUN.
 - NEXT EXACT ACTION: integrate/test the progress-timeline contract, then implement truthful production runtime wiring and remove the ENHANCE automatic no-op without activating any unqualified model.
+
+### PUSH-20260824-021
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `integration/final-paper-quality-local`.
+- PREVIOUS HEAD: `5f0045b9f45208cf809684dedecb4f1babdf18e1`; tree `108cebdc1b5192b7c00f0bb7c1e4537243380a7e`.
+- NEW REMOTE HEAD: `525e7c959ec085cb24874a8f60a2ad17d26b15c7`; exact tested tree `531d884881f3e46403a2e596553a9e6c437649a8`.
+- ORIGINS: Track B `ce10155...`, `e1f0813...`. UI-assumption-only source test `dc4ac5c...` was not transferred because production wiring has not yet been implemented on this branch.
+- FILES: `app/progress_timeline.py`, `tests/test_progress_timeline.py`.
+- CONTRACT: fixed 13-block names/roles; per-block RUNNING/PASS-style events; elapsed and locally learned ETA; no invented estimate while history is incomplete; persisted JSON contains durations only and no source path, pixels, identity or model output.
+- TESTS: targeted `6/6 PASS`; full pytest `519/519 PASS`; diff check PASS.
+- LIMIT: standalone tracker only; it does not yet prove exact checkpoint display, live CPU/RAM, cancellation or worker/UI responsiveness. No model/checkpoint/installer/threshold/dataset/holdout changed.
+- NEXT EXACT ACTION: implement and test truthful automatic ENHANCE skip/abstention when no qualified specialist is active, then wire detailed timeline events into worker/UI in a separate green commit group.
 
 ---
 
