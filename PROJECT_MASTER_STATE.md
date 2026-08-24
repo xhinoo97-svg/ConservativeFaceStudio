@@ -6,11 +6,11 @@
 
 - CURRENT PRODUCT VERSION: `PRODUCT_V1_1` candidate is V4 NO-GO/CONSUMED_FAIL; `PRODUCT_V1` remains the immutable certified release.
 - CURRENT ACTIVE BRANCH: `hotfix/real-world-restoration-v1.1` preserves consumed Track A evidence; `protocol/v5-certification-hardening` contains DEV-only runner hardening; `research/paper-quality-local-v2` is the active isolated Track B research branch.
-- CURRENT TECHNICAL HEAD: Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; protocol hardening `268188c5a2540455ff804383cb583b16546b62f1`; Track B `0d4b5fa2d4fad36c9fde484d2ebdac0ae6a61053`.
+- CURRENT TECHNICAL HEAD: Track A branch `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate `b6ce7ebde87d4ce84e5849664716dc3e822ad762`; protocol hardening `268188c5a2540455ff804383cb583b16546b62f1`; Track B `edc5da8b55c39815cb34e10da6058ee0d2f4bc90`.
 - CURRENT PHASE: V4 remains permanently consumed FAIL/NO-GO. The generic future one-shot runner is hardened on synthetic DEV fixtures; Track B is qualifying the official FBCNN compression specialist and replacing an inadequate DamageMaskNet hypothesis.
 - CURRENT MAIN OBJECTIVE: preserve consumed V4 evidence, prove future protocol ordering before any V5 freeze, and advance Paper Quality only through measured DEVELOPMENT/VALIDATION evidence.
 - WHAT WAS JUST COMPLETED: official LR-ASPP run `32675225785` passed the frozen DEVELOPMENT mask gate: macro-F1 `0.711144`, macro-IoU `0.569570`, minimum class F1 `0.423585`; artifact/checkpoint/ONNX hashes are verified. It is not production qualified.
-- WHAT IS BEING WORKED ON: expand evaluation of the frozen LR-ASPP artifact to a substantially larger identity-disjoint DEVELOPMENT/VALIDATION bank without retraining. RefFace remains NOT_RUN.
+- WHAT IS BEING WORKED ON: frozen LR-ASPP external validation run `32676602851`: 40 new identity-disjoint ControlFace identities, 880 cases, no retraining. RefFace remains NOT_RUN.
 - WHAT IS BLOCKING PROGRESS: V4 cannot certify the Track A candidate. Paper Quality lacks a qualified multi-class damage mask, identity-disjoint multi-identity validation, Windows/offline qualification and the frozen 300–400 identity benchmark.
 - WHAT MODEL IS CURRENTLY BEING TESTED: official torchvision LR-ASPP/MobileNetV3 at `pytorch/vision@c6f39778...`; DEVELOPMENT gate PASS on two validation identities, broader identity-disjoint evaluation pending.
 - WHY THAT MODEL: the stopped small U-Net failed six damage classes at F1 zero; LR-ASPP is an official lightweight semantic-segmentation architecture with real CPU/ONNX feasibility.
@@ -19,7 +19,7 @@
 - CURRENT SAFETY RESULT: V4 pre-consumption checks passed targeted `110/110`, full pytest `547/547`, and calibration `60/60` with zero errors, provenance violations and wrong-person pixels. Final-holdout safety metrics are NOT_MEASURED because the runner failed before case 1. SFace `0.363` and frozen guardrails were unchanged.
 - CURRENT WINDOWS STATUS: #1317 `SUCCESS`; exact-HEAD installer, portable package, release metadata, production-model updates and validation artifacts published. Physical EliteBook acceptance remains `NOT_RUN`.
 - CURRENT ELITEBOOK STATUS: `NOT_RUN` for PRODUCT_V1_1 and Paper Quality.
-- NEXT EXACT STEP: evaluate the frozen LR-ASPP checkpoint/ONNX without retraining on a substantially larger identity-disjoint DEVELOPMENT/VALIDATION bank; keep RefFace blocked and do not create/execute V5.
+- NEXT EXACT STEP: monitor run `32676602851`, recover its artifact and classify the unchanged mask gate; keep RefFace blocked and do not create/execute V5.
 - ESTIMATED PROJECT COMPLETION STATE: overall `43%` — engineering estimate based on the consumed V4 NO-GO plus independent research, Windows and physical-PC gates below.
 
 Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calibration and packaging gates pass, but certification candidate is V4 NO-GO; new V5 and target-PC acceptance remain); Paper Quality V2 `38%`; personalized restoration `35%`; Windows productization `80%` (CI artifacts pass; physical EliteBook acceptance remains); overall `43%`.
@@ -33,7 +33,7 @@ Completion estimates: V1.1 operational `76%` (exact-head runtime, release, calib
 - Last Track A branch: `hotfix/real-world-restoration-v1.1`
 - Track A current branch HEAD: `77687b3b171f4e9989fcf486834f2d8b7a52f591`; evaluated candidate: `b6ce7ebde87d4ce84e5849664716dc3e822ad762`
 - Protocol hardening HEAD: `protocol/v5-certification-hardening@268188c5a2540455ff804383cb583b16546b62f1`
-- Active Paper Quality HEAD: `research/paper-quality-local-v2@0d4b5fa2d4fad36c9fde484d2ebdac0ae6a61053`
+- Active Paper Quality HEAD: `research/paper-quality-local-v2@edc5da8b55c39815cb34e10da6058ee0d2f4bc90`
 - Track A identity/source/provenance targeted suite: latest exact evidence `108/108 PASS` on Release Quality #134 at `b6ce7ebd...`.
 - Current Track A gate: Windows #1317, Release #134 and Female #584 remain SUCCESS on `b6ce7ebd...`. V4 Final Certification #1 (`32656139686`) is FAIL; request `d847798e...`, STARTED marker `d03d97c6...`, final disposition `77687b3b...`. V4 is `CONSUMED_FAIL`; 0/40 cases executed; no rerun.
 - Current Track B direction: **UPSTREAM-FIRST**. Official executable paper/model repositories are the architecture baseline; CFS owns thin adapters, identity/provenance safety, resource control, checkpoint/hash verification, Windows/offline packaging and qualification tests.
@@ -74,7 +74,7 @@ Paper Quality does not reimplement a published architecture when an official exe
 | `hotfix/real-world-restoration-v1.1` | Track A | branch `77687b3b...`; candidate `b6ce7ebd...` | V4 CONSUMED_FAIL / NO-GO | PR #2 OPEN/DRAFT; prerequisites PASS; V4 #1 FAIL before case 1 | preserve marker/evidence; no V4 rerun; create independent V5 lineage |
 | `protocol/v5-certification-hardening` | future protocol DEV hardening only | `268188c5...` | TEST_PASS / no V5 | run `32673504579` SUCCESS; 558/558; artifact `9502021996` | transfer by traceable commit to a future candidate only after quality prerequisites |
 | `research/face-restoration-v2` | early data/degradation research | `757a3f60...` | SUPERSEDED AS ACTIVE ARCHITECTURE | not merged | preserve useful assets |
-| `research/paper-quality-local-v2` | advanced Track B | `0d4b5fa2...` | ACTIVE / BENCHMARKING | LR-ASPP run `32675225785` SUCCESS; frozen DEV gate PASS; artifact `9502642834` verified | expand identity-disjoint validation; resolve checkpoint licensing |
+| `research/paper-quality-local-v2` | advanced Track B | `edc5da8b...` | ACTIVE / BENCHMARKING | frozen LR-ASPP external validation run `32676602851` in progress; no retraining | classify 40-identity/880-case artifact; resolve checkpoint licensing |
 | `meta/project-state` | canonical ledger | self-SHA omitted | ACTIVE META | docs only | update after every meaningful technical push |
 
 ---
@@ -254,7 +254,7 @@ Next exact action: preserve V4 `CONSUMED_FAIL` and its artifacts; never rerun or
 
 ## 20. TRACK B — PAPER QUALITY
 
-Active `research/paper-quality-local-v2@0d4b5fa2d4fad36c9fde484d2ebdac0ae6a61053`: real CPU BFR/JPEG evidence, 80% governor, Personalized Reference Bank, reference-first repair, hard-gated selector, deterministic fusion, parser adapter, gated RefFace workflow, official-upstream registry/bootstrap, FBCNN DEV matrix and documented LR-ASPP DEVELOPMENT result.
+Active `research/paper-quality-local-v2@edc5da8b55c39815cb34e10da6058ee0d2f4bc90`: real CPU BFR/JPEG evidence, 80% governor, Personalized Reference Bank, reference-first repair, hard-gated selector, deterministic fusion, parser adapter, gated RefFace workflow, official-upstream registry/bootstrap, FBCNN DEV matrix, LR-ASPP result and frozen-artifact external validation.
 
 `config/upstream-implementations.json` encodes the upstream-first contract. Registry/bootstrap and FBCNN source/hash/route/matrix tests pass locally and in run `32674085939`. Local full Track B pytest is `557/557 PASS`; test isolation no longer leaves a fake `app.reference_inpainting` module in the shared process.
 
@@ -268,7 +268,7 @@ PDF constraints remain: separate global identity from local texture; use corresp
 
 ## 21. CURRENT PAPER QUALITY BLOCKER
 
-Evaluate the frozen LR-ASPP artifact on a substantially larger identity-disjoint DEVELOPMENT/VALIDATION bank without retraining. The small U-Net is stopped; do not tune it. RefFace remains NOT_RUN until broader mask quality and compatible licensing pass.
+Recover and classify frozen LR-ASPP external validation run `32676602851` without retraining or changing thresholds. The small U-Net is stopped; do not tune it. RefFace remains NOT_RUN until broader mask quality and compatible licensing pass.
 
 In parallel: broaden the now-passing FBCNN DEV matrix to multiple identity-disjoint DEVELOPMENT/VALIDATION identities, then Windows/offline/EliteBook. Next upstream heavy candidates remain GPEN/GFPGAN/CodeFormer, then InstantRestore if CPU/Windows feasibility is credible. RefineFIR/RefFaceInpainting/OSDFace/RestoreFormer++ remain NOT_VERIFIED until exact revision/checkpoint/license/runtime evidence exists.
 
@@ -315,6 +315,7 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - HIST-20260823-030 Track B `94b37f13...`: timeline workflow dependency declared; run `32674575985` SUCCESS; no model, data, threshold or holdout change.
 - HIST-20260823-031 Track B `2b775b81...`: official LR-ASPP comparison prepared and launched once on DEVELOPMENT; local loader/export smoke and 563/563 tests PASS; remote result pending.
 - HIST-20260824-032 LR-ASPP run `32675225785` SUCCESS; frozen DEVELOPMENT mask gate PASS; artifact/checkpoint/ONNX verified; production/RefFace remain blocked by validation scale and checkpoint licensing.
+- HIST-20260824-033 Track B `edc5da8b...`: 40-identity, 880-case frozen LR-ASPP external validation launched once; checkpoint unchanged; no training/holdout/RefFace action.
 
 ---
 
@@ -447,6 +448,20 @@ Select winners on multiple identity-disjoint DEV/VALIDATION cases per damage; id
 - RUNTIME/SAFETY: offline reload drift `0`; ONNX argmax exact, max logit drift `3.81e-5`; ONNX CPU first call `0.00675s`; mask-only model, wrong-person pixels `0`, provenance violations `0`.
 - CLASSIFICATION: DEVELOPMENT_MASK_ADEQUACY_PASS_NOT_PRODUCTION_QUALIFIED. RefFace NOT_RUN; Windows/EliteBook NOT_RUN; checkpoint redistribution license not explicit.
 - NEXT EXACT ACTION: evaluate the frozen checkpoint/ONNX without retraining on a substantially larger identity-disjoint DEVELOPMENT/VALIDATION bank.
+
+### PUSH-20260824-009
+
+- DATE/TIME UTC: `2026-08-24`.
+- TECHNICAL BRANCH: `research/paper-quality-local-v2`.
+- PREVIOUS HEAD: `0d4b5fa2d4fad36c9fde484d2ebdac0ae6a61053`.
+- NEW REMOTE HEAD: `edc5da8b55c39815cb34e10da6058ee0d2f4bc90`.
+- COMMIT INCLUDED: `Validate frozen LRASPP on 40 new identities`.
+- FILES MODIFIED/ADDED: balanced ControlFace external-bank builder, frozen checkpoint/ONNX evaluator, five tests, dedicated push-only workflow and pending status.
+- VALIDATION CONTRACT: 40 new identities, 20 female/20 male, five per African/Asian/Caucasian/Indian x sex stratum; two deterministic cases per 11 damage classes = 880; all 16 prior ControlFace identities excluded.
+- IMMUTABILITY: exact checkpoint `d510e699...` and ONNX `708c7e9c...`; no optimizer/training path; same frozen F1/IoU/min-class thresholds; final holdout false.
+- TESTS: targeted `11/11 PASS`; full local pytest `568/568 PASS`; synthetic entrypoint smoke `440/440`, zero errors, checkpoint/ONNX argmax equal.
+- WORKFLOW: `Research LRASPP external validation`, run `32676602851`, in progress at this ledger update. No old U-Net, RefFace or other research workflow triggered.
+- NEXT EXACT ACTION: monitor run `32676602851`, verify artifact/hash and classify the unchanged gate without tuning.
 
 ---
 
