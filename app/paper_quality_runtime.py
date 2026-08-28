@@ -17,6 +17,7 @@ from app.component_aware_fusion_v2 import (
 )
 from app.damage_mask_runtime import DamageMaskResult
 from app.damage_router import DamageRoutePlan
+from app.model_qualification import ModelQualification
 from app.reference_first_route import ReferenceFirstRepairResult
 
 
@@ -120,6 +121,7 @@ def run_paper_quality_route(
     reference_result: ReferenceFirstRepairResult | None = None,
     generated_placements: Sequence[GeneratedPlacement] = (),
     generated_route_plans: Mapping[int, DamageRoutePlan] | None = None,
+    model_qualifications: Mapping[str, ModelQualification] | None = None,
     candidate_evidence: Sequence[CandidateQualityEvidence] = (),
     selection_policy: CandidateSelectionPolicy | None = None,
     wrong_person_final_pixels: int | None = None,
@@ -131,7 +133,8 @@ def run_paper_quality_route(
     downloads. Damage output, observed-reference repair, generated candidates and their
     evidence must be produced upstream. Missing safety counters are not interpreted as
     zero. Generated candidates cannot enter fusion without an explicit calibrated
-    DEVELOPMENT/VALIDATION policy.
+    DEVELOPMENT/VALIDATION policy and a production ModelQualification whose deterministic
+    attestation digest matches the DamageRoutePlan that authorized that exact model key.
     """
     base = np.asarray(main)
     if base.dtype != np.uint8 or base.ndim != 3 or base.shape[2] != 3:
@@ -249,6 +252,7 @@ def run_paper_quality_route(
     route_rejections: list[str] = []
     if placements:
         route_plans = generated_route_plans or {}
+        qualifications = model_qualifications or {}
         authorized_placements: list[GeneratedPlacement] = []
         authorized_evidence: list[CandidateQualityEvidence] = []
         evidence_by_candidate = (
@@ -268,8 +272,20 @@ def run_paper_quality_route(
                 rejection = "generated_route_not_production_qualified"
             elif str(plan.selected_model_key) != str(candidate.model_key):
                 rejection = "generated_route_model_mismatch"
-            elif np.any((candidate.generated_mask > 0) & ~(plan.mask > 0)):
-                rejection = "generated_candidate_outside_route_authority"
+            elif not str(plan.selected_model_attestation_sha256 or "").strip():
+                rejection = "generated_route_attestation_missing"
+            else:
+                qualification = qualifications.get(str(candidate.model_key))
+                if qualification is None:
+                    rejection = "generated_model_qualification_missing"
+                elif str(qualification.model_key) != str(candidate.model_key):
+                    rejection = "generated_model_qualification_mismatch"
+                elif not qualification.production_qualified or not qualification.attestation_sha256:
+                    rejection = "generated_model_not_production_qualified"
+                elif str(plan.selected_model_attestation_sha256) != str(qualification.attestation_sha256):
+                    rejection = "generated_route_attestation_mismatch"
+                elif np.any((candidate.generated_mask > 0) & ~(plan.mask > 0)):
+                    rejection = "generated_candidate_outside_route_authority"
             if rejection is not None:
                 candidate.accepted = False
                 candidate.rejection_reason = rejection
