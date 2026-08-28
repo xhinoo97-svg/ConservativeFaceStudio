@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 
 from app.candidate_selector_v2 import (
@@ -13,7 +15,7 @@ from app.damage_mask_runtime import DamageMaskResult
 from app.damage_router import plan_damage_route
 from app.damage_taxonomy import CLASS_TO_INDEX
 from app.face_restorer_adapter import RestorationCandidate
-from app.model_qualification import build_production_model_qualification
+from app.model_qualification import ModelQualification, build_production_model_qualification
 from app.paper_quality_runtime import run_paper_quality_route
 from app.reference_first_route import ReferenceFirstRepairResult
 
@@ -114,15 +116,26 @@ def _production_gate_evidence() -> dict[str, tuple[str, ...]]:
     }
 
 
-def _authorized_plan(damage: DamageMaskResult, model_key: str = "ref_face_inpainting"):
+def _authorization(damage: DamageMaskResult, model_key: str = "ref_face_inpainting"):
     qualification = build_production_model_qualification(
         model_key,
         _production_gate_evidence(),
     )
-    return plan_damage_route(
+    plan = plan_damage_route(
         damage,
         image_shape=damage.binary_damage_mask.shape,
         model_qualifications={model_key: qualification},
+    )
+    return plan, {model_key: qualification}
+
+
+def _generated_candidate(main: np.ndarray, mask: np.ndarray, model_key: str = "ref_face_inpainting") -> RestorationCandidate:
+    return RestorationCandidate(
+        image=np.full_like(main, 210),
+        model_key=model_key,
+        model_version="fixture",
+        backend="cpu",
+        generated_mask=mask.copy(),
     )
 
 
@@ -191,23 +204,19 @@ def test_generated_candidate_requires_calibration_then_stays_inside_authority() 
     main, landmarks, bbox = _geometry()
     mask = np.zeros(main.shape[:2], dtype=np.uint8)
     mask[38:47, 25:40] = 255
-    generated = np.full_like(main, 210)
-    candidate = RestorationCandidate(
-        image=generated,
-        model_key="ref_face_inpainting",
-        model_version="fixture",
-        backend="cpu",
-        generated_mask=mask.copy(),
-    )
+    damage = _damage(mask)
+    candidate = _generated_candidate(main, mask)
     placement = GeneratedPlacement(WHOLE_FACE, candidate, 1)
+    plan, qualifications = _authorization(damage)
 
     uncalibrated = run_paper_quality_route(
         main,
-        _damage(mask),
+        damage,
         landmarks5=landmarks,
         bbox=bbox,
         generated_placements=[placement],
-        generated_route_plans={1: _authorized_plan(_damage(mask))},
+        generated_route_plans={1: plan},
+        model_qualifications=qualifications,
         candidate_evidence=[_evidence()],
         wrong_person_final_pixels=0,
         provenance_violations=0,
@@ -220,11 +229,12 @@ def test_generated_candidate_requires_calibration_then_stays_inside_authority() 
     candidate.rejection_reason = None
     calibrated = run_paper_quality_route(
         main,
-        _damage(mask),
+        damage,
         landmarks5=landmarks,
         bbox=bbox,
         generated_placements=[placement],
-        generated_route_plans={1: _authorized_plan(_damage(mask))},
+        generated_route_plans={1: plan},
+        model_qualifications=qualifications,
         candidate_evidence=[_evidence()],
         selection_policy=_policy(),
         wrong_person_final_pixels=0,
@@ -243,13 +253,7 @@ def test_generated_candidate_without_route_authorization_abstains() -> None:
     main, landmarks, bbox = _geometry()
     mask = np.zeros(main.shape[:2], dtype=np.uint8)
     mask[30:40, 24:38] = 255
-    candidate = RestorationCandidate(
-        image=np.full_like(main, 210),
-        model_key="ref_face_inpainting",
-        model_version="fixture",
-        backend="cpu",
-        generated_mask=mask.copy(),
-    )
+    candidate = _generated_candidate(main, mask)
     result = run_paper_quality_route(
         main,
         _damage(mask),
@@ -268,25 +272,106 @@ def test_generated_candidate_without_route_authorization_abstains() -> None:
     assert np.array_equal(result.image, main)
 
 
+def test_generated_candidate_requires_runtime_model_qualification_not_only_route_boolean() -> None:
+    main, landmarks, bbox = _geometry()
+    mask = np.zeros(main.shape[:2], dtype=np.uint8)
+    mask[30:40, 24:38] = 255
+    damage = _damage(mask)
+    candidate = _generated_candidate(main, mask)
+    plan, _ = _authorization(damage)
+    result = run_paper_quality_route(
+        main,
+        damage,
+        landmarks5=landmarks,
+        bbox=bbox,
+        generated_placements=[GeneratedPlacement(WHOLE_FACE, candidate, 1)],
+        generated_route_plans={1: plan},
+        candidate_evidence=[_evidence()],
+        selection_policy=_policy(),
+        wrong_person_final_pixels=0,
+        provenance_violations=0,
+    )
+    assert result.decision == "ABSTAIN"
+    assert result.reason == "generated_model_qualification_missing"
+    assert candidate.rejection_reason == "generated_model_qualification_missing"
+    assert result.generated_pixels == 0
+
+
+def test_development_model_qualification_cannot_authorize_generated_pixels() -> None:
+    main, landmarks, bbox = _geometry()
+    mask = np.zeros(main.shape[:2], dtype=np.uint8)
+    mask[30:40, 24:38] = 255
+    damage = _damage(mask)
+    candidate = _generated_candidate(main, mask)
+    plan, _ = _authorization(damage)
+    development = ModelQualification(
+        "ref_face_inpainting",
+        "DEVELOPMENT",
+        False,
+        ("artifact:fixture-development",),
+    )
+    result = run_paper_quality_route(
+        main,
+        damage,
+        landmarks5=landmarks,
+        bbox=bbox,
+        generated_placements=[GeneratedPlacement(WHOLE_FACE, candidate, 1)],
+        generated_route_plans={1: plan},
+        model_qualifications={"ref_face_inpainting": development},
+        candidate_evidence=[_evidence()],
+        selection_policy=_policy(),
+        wrong_person_final_pixels=0,
+        provenance_violations=0,
+    )
+    assert result.decision == "ABSTAIN"
+    assert result.reason == "generated_model_not_production_qualified"
+    assert candidate.rejection_reason == "generated_model_not_production_qualified"
+    assert result.generated_pixels == 0
+
+
+def test_route_attestation_must_match_runtime_qualification() -> None:
+    main, landmarks, bbox = _geometry()
+    mask = np.zeros(main.shape[:2], dtype=np.uint8)
+    mask[30:40, 24:38] = 255
+    damage = _damage(mask)
+    candidate = _generated_candidate(main, mask)
+    plan, qualifications = _authorization(damage)
+    forged_plan = replace(plan, selected_model_attestation_sha256="f" * 64)
+    result = run_paper_quality_route(
+        main,
+        damage,
+        landmarks5=landmarks,
+        bbox=bbox,
+        generated_placements=[GeneratedPlacement(WHOLE_FACE, candidate, 1)],
+        generated_route_plans={1: forged_plan},
+        model_qualifications=qualifications,
+        candidate_evidence=[_evidence()],
+        selection_policy=_policy(),
+        wrong_person_final_pixels=0,
+        provenance_violations=0,
+    )
+    assert result.decision == "ABSTAIN"
+    assert result.reason == "generated_route_attestation_mismatch"
+    assert candidate.rejection_reason == "generated_route_attestation_mismatch"
+    assert result.generated_pixels == 0
+
+
 def test_route_model_mismatch_cannot_block_observed_reference_repair() -> None:
     main, landmarks, bbox = _geometry()
     mask = np.zeros(main.shape[:2], dtype=np.uint8)
     mask[28:38, 28:38] = 255
-    candidate = RestorationCandidate(
-        image=np.full_like(main, 210),
-        model_key="wrong-model",
-        model_version="fixture",
-        backend="cpu",
-        generated_mask=mask.copy(),
-    )
+    damage = _damage(mask)
+    candidate = _generated_candidate(main, mask, model_key="wrong-model")
+    plan, qualifications = _authorization(damage)
     result = run_paper_quality_route(
         main,
-        _damage(mask),
+        damage,
         landmarks5=landmarks,
         bbox=bbox,
         reference_result=_reference_result(main, mask),
         generated_placements=[GeneratedPlacement(WHOLE_FACE, candidate, 1)],
-        generated_route_plans={1: _authorized_plan(_damage(mask))},
+        generated_route_plans={1: plan},
+        model_qualifications=qualifications,
         candidate_evidence=[_evidence()],
         selection_policy=_policy(),
         wrong_person_final_pixels=0,
