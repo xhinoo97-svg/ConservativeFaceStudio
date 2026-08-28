@@ -35,6 +35,9 @@ class RestorationCandidate:
     model_version: str
     backend: str
     generated_mask: np.ndarray
+    upstream_repository: str | None = None
+    upstream_revision: str | None = None
+    checkpoint_sha256: str | None = None
     provenance_class: str = GENERATED_MODEL_INFERRED
     identity_score: float | None = None
     identity_pass: bool | None = None

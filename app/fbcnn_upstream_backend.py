@@ -166,6 +166,8 @@ class FBCNNUpstreamBackend:
             raise ValueError("face_bgr must be an HxWx3 numpy array")
         if face_bgr.dtype != np.uint8:
             raise ValueError("face_bgr must use uint8 pixels")
+        if self._checkpoint_sha256 is None:
+            raise RuntimeError("FBCNN checkpoint identity was not verified during load")
 
         torch = self._torch
         rgb = np.ascontiguousarray(face_bgr[:, :, ::-1])
@@ -211,6 +213,9 @@ class FBCNNUpstreamBackend:
             model_version=self.version,
             backend=self.backend_name,
             generated_mask=generated_mask,
+            upstream_repository=OFFICIAL_REPOSITORY,
+            upstream_revision=PINNED_REVISION,
+            checkpoint_sha256=self._checkpoint_sha256,
             provenance_class=GENERATED_MODEL_INFERRED,
             quality_metrics={
                 "predicted_jpeg_quality_factor": predicted_qf,

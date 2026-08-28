@@ -17,6 +17,7 @@ from app.component_aware_fusion_v2 import (
 )
 from app.damage_mask_runtime import DamageMaskResult
 from app.damage_router import DamageRoutePlan
+from app.model_artifact_identity import candidate_matches_qualification
 from app.model_qualification import ModelQualification
 from app.reference_first_route import ReferenceFirstRepairResult
 
@@ -134,7 +135,8 @@ def run_paper_quality_route(
     evidence must be produced upstream. Missing safety counters are not interpreted as
     zero. Generated candidates cannot enter fusion without an explicit calibrated
     DEVELOPMENT/VALIDATION policy and a production ModelQualification whose deterministic
-    attestation digest matches the DamageRoutePlan that authorized that exact model key.
+    attestation digest and exact repo/revision/checkpoint identity match the route and
+    generated candidate.
     """
     base = np.asarray(main)
     if base.dtype != np.uint8 or base.ndim != 3 or base.shape[2] != 3:
@@ -284,8 +286,17 @@ def run_paper_quality_route(
                     rejection = "generated_model_not_production_qualified"
                 elif str(plan.selected_model_attestation_sha256) != str(qualification.attestation_sha256):
                     rejection = "generated_route_attestation_mismatch"
-                elif np.any((candidate.generated_mask > 0) & ~(plan.mask > 0)):
-                    rejection = "generated_candidate_outside_route_authority"
+                else:
+                    artifact_ok, artifact_reason = candidate_matches_qualification(
+                        upstream_repository=candidate.upstream_repository,
+                        upstream_revision=candidate.upstream_revision,
+                        checkpoint_sha256=candidate.checkpoint_sha256,
+                        qualification=qualification,
+                    )
+                    if not artifact_ok:
+                        rejection = artifact_reason
+                    elif np.any((candidate.generated_mask > 0) & ~(plan.mask > 0)):
+                        rejection = "generated_candidate_outside_route_authority"
             if rejection is not None:
                 candidate.accepted = False
                 candidate.rejection_reason = rejection

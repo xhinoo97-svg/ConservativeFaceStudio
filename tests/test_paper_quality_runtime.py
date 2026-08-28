@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import numpy as np
+import pytest
 
 from app.candidate_selector_v2 import (
     CalibratedRankingWeights,
@@ -21,6 +22,8 @@ from app.reference_first_route import ReferenceFirstRepairResult
 
 
 CANDIDATE_SHA = "a" * 40
+CHECKPOINT_SHA = "b" * 64
+UPSTREAM_REPOSITORY = "fixture/official-model"
 
 
 def _geometry() -> tuple[np.ndarray, np.ndarray, tuple[int, int, int, int]]:
@@ -95,9 +98,9 @@ def _evidence() -> CandidateQualityEvidence:
 
 def _production_gate_evidence() -> dict[str, tuple[str, ...]]:
     return {
-        "official_repository_verified": ("repo:fixture/official-model",),
+        "official_repository_verified": (f"repo:{UPSTREAM_REPOSITORY}",),
         "revision_pinned": (f"commit:{CANDIDATE_SHA}",),
-        "checkpoint_hash_verified": (f"checkpoint-sha256:{'b' * 64}",),
+        "checkpoint_hash_verified": (f"checkpoint-sha256:{CHECKPOINT_SHA}",),
         "code_license_compatible": ("code-license-evidence:fixture-code-license",),
         "weights_license_compatible": ("weights-license-evidence:fixture-weights-license",),
         "upstream_smoke_pass": ("upstream-smoke:fixture-pass",),
@@ -129,13 +132,24 @@ def _authorization(damage: DamageMaskResult, model_key: str = "ref_face_inpainti
     return plan, {model_key: qualification}
 
 
-def _generated_candidate(main: np.ndarray, mask: np.ndarray, model_key: str = "ref_face_inpainting") -> RestorationCandidate:
+def _generated_candidate(
+    main: np.ndarray,
+    mask: np.ndarray,
+    model_key: str = "ref_face_inpainting",
+    *,
+    repository: str | None = UPSTREAM_REPOSITORY,
+    revision: str | None = CANDIDATE_SHA,
+    checkpoint: str | None = CHECKPOINT_SHA,
+) -> RestorationCandidate:
     return RestorationCandidate(
         image=np.full_like(main, 210),
         model_key=model_key,
         model_version="fixture",
         backend="cpu",
         generated_mask=mask.copy(),
+        upstream_repository=repository,
+        upstream_revision=revision,
+        checkpoint_sha256=checkpoint,
     )
 
 
@@ -353,6 +367,66 @@ def test_route_attestation_must_match_runtime_qualification() -> None:
     assert result.decision == "ABSTAIN"
     assert result.reason == "generated_route_attestation_mismatch"
     assert candidate.rejection_reason == "generated_route_attestation_mismatch"
+    assert result.generated_pixels == 0
+
+
+def test_generated_candidate_missing_artifact_identity_cannot_be_fused() -> None:
+    main, landmarks, bbox = _geometry()
+    mask = np.zeros(main.shape[:2], dtype=np.uint8)
+    mask[30:40, 24:38] = 255
+    damage = _damage(mask)
+    candidate = _generated_candidate(main, mask, repository=None, revision=None, checkpoint=None)
+    plan, qualifications = _authorization(damage)
+    result = run_paper_quality_route(
+        main,
+        damage,
+        landmarks5=landmarks,
+        bbox=bbox,
+        generated_placements=[GeneratedPlacement(WHOLE_FACE, candidate, 1)],
+        generated_route_plans={1: plan},
+        model_qualifications=qualifications,
+        candidate_evidence=[_evidence()],
+        selection_policy=_policy(),
+        wrong_person_final_pixels=0,
+        provenance_violations=0,
+    )
+    assert result.decision == "ABSTAIN"
+    assert result.reason == "generated_candidate_artifact_identity_missing"
+    assert result.generated_pixels == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    (
+        ("upstream_repository", "fixture/wrong-model", "generated_candidate_repository_mismatch"),
+        ("upstream_revision", "e" * 40, "generated_candidate_revision_mismatch"),
+        ("checkpoint_sha256", "e" * 64, "generated_candidate_checkpoint_mismatch"),
+    ),
+)
+def test_generated_candidate_artifact_identity_mismatch_fails_closed(field: str, value: str, reason: str) -> None:
+    main, landmarks, bbox = _geometry()
+    mask = np.zeros(main.shape[:2], dtype=np.uint8)
+    mask[30:40, 24:38] = 255
+    damage = _damage(mask)
+    candidate = _generated_candidate(main, mask)
+    setattr(candidate, field, value)
+    plan, qualifications = _authorization(damage)
+    result = run_paper_quality_route(
+        main,
+        damage,
+        landmarks5=landmarks,
+        bbox=bbox,
+        generated_placements=[GeneratedPlacement(WHOLE_FACE, candidate, 1)],
+        generated_route_plans={1: plan},
+        model_qualifications=qualifications,
+        candidate_evidence=[_evidence()],
+        selection_policy=_policy(),
+        wrong_person_final_pixels=0,
+        provenance_violations=0,
+    )
+    assert result.decision == "ABSTAIN"
+    assert result.reason == reason
+    assert candidate.rejection_reason == reason
     assert result.generated_pixels == 0
 
 

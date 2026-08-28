@@ -71,8 +71,6 @@ def test_fbcnn_wrong_checkpoint_hash_fails_before_model_import(tmp_path: Path) -
     _write_metadata(tmp_path)
     models = tmp_path / "models"
     models.mkdir()
-    # If this file were imported the test would explode. The checkpoint firewall must
-    # reject first, before any upstream architecture/PyTorch code is executed.
     (models / "network_fbcnn.py").write_text("raise AssertionError('must not import')\n", encoding="utf-8")
     checkpoint = tmp_path / "fbcnn_color.pth"
     checkpoint.write_bytes(b"not-the-approved-checkpoint")
@@ -102,12 +100,15 @@ def test_fbcnn_accepts_only_jpeg_or_explicit_recompression_routes() -> None:
     assert not _damage_route_allowed(RestorationContext(damage_class="healthy", severity="none"))
 
 
-def test_fbcnn_adapter_is_thin_and_does_not_embed_upstream_network() -> None:
+def test_fbcnn_adapter_is_thin_and_binds_candidate_to_verified_upstream_artifacts() -> None:
     source = Path(__file__).resolve().parents[1] / "app" / "fbcnn_upstream_backend.py"
     text = source.read_text(encoding="utf-8")
     assert "models\" / \"network_fbcnn.py" in text
     assert "class FBCNN(" not in text
     assert "architecture_reimplemented_by_cfs" in text
+    assert "upstream_repository=OFFICIAL_REPOSITORY" in text
+    assert "upstream_revision=PINNED_REVISION" in text
+    assert "checkpoint_sha256=self._checkpoint_sha256" in text
 
 
 def test_checkpoint_fixture_helper_has_real_sha_semantics(tmp_path: Path) -> None:
@@ -119,8 +120,6 @@ def test_checkpoint_fixture_helper_has_real_sha_semantics(tmp_path: Path) -> Non
 
 
 def test_generated_candidate_contract_stays_full_resolution() -> None:
-    # Static input contract shared with FaceRestorerAdapter. A runtime model smoke test
-    # will exercise the real upstream checkpoint separately on the target environment.
     image = np.zeros((64, 72, 3), dtype=np.uint8)
     assert image.ndim == 3
     assert image.dtype == np.uint8
