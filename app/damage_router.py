@@ -162,6 +162,7 @@ class DamageRoutePlan:
     reason: str
     metrics_pre: Mapping[str, float | int | str]
     metrics_post: None = None
+    selected_model_attestation_sha256: str | None = None
 
     def report(self) -> dict[str, object]:
         return {
@@ -176,6 +177,7 @@ class DamageRoutePlan:
             "model_role": self.model_role,
             "candidate_model_keys": list(self.candidate_model_keys),
             "selected_model_key": self.selected_model_key,
+            "selected_model_attestation_sha256": self.selected_model_attestation_sha256,
             "strategy": self.strategy,
             "provenance_policy": self.provenance_policy,
             "qualified_for_execution": self.qualified_for_execution,
@@ -240,7 +242,8 @@ def plan_damage_route(
 
     The planner never loads a model. A DEVELOPMENT/VALIDATION record is not enough
     to select a production backend. A non-healthy plan remains ABSTAIN until a later
-    runtime produces and validates output pixels.
+    runtime produces and validates output pixels. A selected model is cryptographically
+    bound to the deterministic production-attestation digest that authorized the route.
     """
     height, width = (int(image_shape[0]), int(image_shape[1]))
     if height <= 0 or width <= 0:
@@ -352,19 +355,21 @@ def plan_damage_route(
     definition = ROUTES[kind]
     qualifications = model_qualifications or {}
     selected: str | None = None
+    selected_attestation: str | None = None
     for model_key in definition.candidate_model_keys:
         qualification = qualifications.get(model_key)
         if qualification is None or qualification.model_key != model_key:
             continue
-        if qualification.production_qualified:
+        if qualification.production_qualified and qualification.attestation_sha256:
             selected = model_key
+            selected_attestation = str(qualification.attestation_sha256)
             break
 
     components = tuple(item.component for item in damage.affected_components)
     if kind == "HEALTHY":
         decision = "PASS"
         reason = "healthy_preserve_main"
-    elif selected is not None:
+    elif selected is not None and selected_attestation is not None:
         decision = "ABSTAIN"
         reason = "qualified_route_planned_but_execution_not_performed"
     elif definition.candidate_model_keys:
@@ -387,7 +392,7 @@ def plan_damage_route(
         selected_model_key=selected,
         strategy=definition.strategy,
         provenance_policy=definition.provenance_policy,
-        qualified_for_execution=selected is not None,
+        qualified_for_execution=selected is not None and selected_attestation is not None,
         decision=decision,
         reason=reason,
         metrics_pre={
@@ -395,4 +400,5 @@ def plan_damage_route(
             "dominant_confidence": confidence,
             "source_damage_class": source_class,
         },
+        selected_model_attestation_sha256=selected_attestation,
     )
