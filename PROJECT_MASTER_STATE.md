@@ -14,7 +14,7 @@ Last technical HEAD: `bc732272a91ec8ad288e415e8600bf421b1485e9`
 Last technical tree: `bec3bca903d5b236b5201c941bffe208996276de`  
 Certified base: `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`  
 Current active engineering track: final integration, upstream-first Paper Quality + immutable Conservative safety  
-Current exact blocker: exact generated-candidate artifact identity binding is implemented at `bc732272...` but same-HEAD CI is not yet reconciled. No generated model becomes production-qualified until this tree is green and model-specific validation/Windows/EliteBook gates pass.  
+Current exact blocker: generated-route and exact candidate artifact identity authority are now TEST_PASS. The next blocker is **real model qualification**: FBCNN is the first specialist to advance because its official upstream code/checkpoint already have reproducible DEV evidence, but it still lacks broad identity-disjoint validation, final installed-offline Windows evidence on the integration candidate, and physical EliteBook <=80% resource evidence.  
 Overall project status: `PARTIAL`
 
 FORENSIC_MODE_READY: **TRUE**  
@@ -30,11 +30,11 @@ Mandatory sequence: `technical work -> tests/evidence -> push -> exact remote SH
 
 ## 1. Executive project summary
 
-CFS is a local Windows face-restoration system for damaged smartphone/social-media portraits. Conservative Mode is evidence-faithful; Paper Quality generation is always `GENERATED_MODEL_INFERRED` and is subordinate to observed MAIN/same-person evidence.
+CFS is a local Windows face-restoration system for damaged smartphone/social-media portraits. Conservative Mode is evidence-faithful; Paper Quality generation is always `GENERATED_MODEL_INFERRED` and subordinate to observed MAIN/same-person evidence.
 
-Active development is `integration/final-paper-quality-local`, created from immutable certified `main`. Direction is **UPSTREAM-FIRST**: reuse official executable paper/model repositories at pinned revisions; CFS adds only thin integration adapters, exact repo/revision/checkpoint verification, identity/provenance safety, <=80% resource control, routing/fusion, Windows/offline packaging and qualification.
+Active development is `integration/final-paper-quality-local`, based on immutable certified `main`. Direction is **UPSTREAM-FIRST**: use official executable paper/model repositories at pinned revisions; CFS adds thin adapters, exact source/checkpoint verification, identity/provenance safety, <=80% resource control, routing/fusion, Windows/offline packaging and qualification.
 
-The current milestone is end-to-end artifact identity continuity. A generated candidate now has explicit upstream repository, revision and checkpoint SHA fields; FBCNN populates them from its pinned official checkout and verified checkpoint; the Paper Quality runtime compares them against the exact production qualification before allowing selector/fusion. This implementation is pending same-HEAD verification.
+The model-authority boundary is now materially stronger: a generated route needs a complete production `ModelQualification`; the route carries its deterministic attestation; the actual `RestorationCandidate` carries exact upstream repository/revision/checkpoint SHA; and the runtime rejects any missing or mismatched artifact identity before candidate selection/fusion. This architecture test does not qualify a model. The next milestone is broad real FBCNN qualification evidence.
 
 ---
 
@@ -43,7 +43,7 @@ The current milestone is end-to-end artifact identity continuity. A generated ca
 | Branch | Purpose | Current HEAD | Status | CI / merge | Next gate |
 |---|---|---|---|---|---|
 | `main` | certified PRODUCT_V1 | `2767513f95dde2d417e7c6f1faf2357149a1a32f` | FROZEN/RELEASED | certified history | preserve |
-| `integration/final-paper-quality-local` | final integration | `bc732272a91ec8ad288e415e8600bf421b1485e9` | ACTIVE / VALIDATING | same-HEAD result pending; prior `8bcc801e...` run `33207031788` SUCCESS | verify targeted/full suite |
+| `integration/final-paper-quality-local` | final integration | `bc732272a91ec8ad288e415e8600bf421b1485e9` | ACTIVE / TEST_GREEN | run `33208101745` SUCCESS; targeted 50/50; full 608/608 | FBCNN multi-identity + Windows qualification |
 | `hotfix/real-world-restoration-v1.1` | Track A evidence | `77687b3b171f4e9989fcf486834f2d8b7a52f591` | V4 CONSUMED_FAIL/FROZEN | PR #2 draft/no-go | never rerun V4 |
 | `protocol/v5-certification-hardening` | protocol DEV | `268188c5a2540455ff804383cb583b16546b62f1` | ARCHIVED DEV | synthetic PASS | no V5 before prerequisites |
 | `research/paper-quality-local-v2` | research evidence | `6d57725aae087bb4a3144d521d91346999f9a4fd` | SUPERSEDED AS ACTIVE ARCHITECTURE | preserve evidence | port only measured winners |
@@ -90,7 +90,7 @@ OBJ-008 RefFace — **BLOCKED**.
 OBJ-009 Paper Quality Windows pack — **IN_PROGRESS foundation**.  
 OBJ-010 physical EliteBook — **NOT_RUN**.  
 OBJ-011 upstream registry — **PASS foundation**.  
-OBJ-012 exact generated-model authority — **VALIDATING** at `bc732272...`.  
+OBJ-012 exact generated-model authority — **PASS for current integration contract** at `bc732272...`; model-specific production evidence still separate.  
 OBJ-013 V5 protocol — **DEV VALIDATING only**.
 
 ---
@@ -100,11 +100,11 @@ OBJ-013 V5 protocol — **DEV VALIDATING only**.
 Certified V1: YuNet, SFace, NAFNet, Face Parsing ResNet18 ONNX, Head Pose MobileNetV2, constrained LaMa.
 
 Research/upstream-first:
-- FBCNN `jiaxi-jiang/FBCNN@54d1831927506b3247e2d4d245abb4f4dab1a1cd`, checkpoint SHA-256 `8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8`: DEV_PASS/BENCHMARKING only.
-- GPEN `yangxy/GPEN@2c736702983368847fb544d234a22ac7cff25802`: BENCHMARKING/license unresolved.
-- GFPGAN v1.4 `TencentARC/GFPGAN@7552a7791caad982045a7bbe5634bbf1cd5c8679`: BENCHMARKING.
-- CodeFormer `sczhou/CodeFormer@b33cc7d639d6545bfcccc7e0bc6ae51f24e79c2b`: BENCHMARKING/BLOCKED_LICENSE.
-- DamageMaskNet U-Net: REJECTED/STOPPED.
+- **FBCNN** `jiaxi-jiang/FBCNN@54d1831927506b3247e2d4d245abb4f4dab1a1cd`; checkpoint SHA-256 `8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8`: DEV_PASS/BENCHMARKING only; next qualification target.
+- **GPEN** `yangxy/GPEN@2c736702983368847fb544d234a22ac7cff25802`: BENCHMARKING/license unresolved.
+- **GFPGAN v1.4** `TencentARC/GFPGAN@7552a7791caad982045a7bbe5634bbf1cd5c8679`: BENCHMARKING.
+- **CodeFormer** `sczhou/CodeFormer@b33cc7d639d6545bfcccc7e0bc6ae51f24e79c2b`: BENCHMARKING/BLOCKED_LICENSE.
+- DamageMaskNet small U-Net: REJECTED/STOPPED.
 - LR-ASPP: DEVELOPMENT validation only, NOT_QUALIFIED.
 - RefFaceInpainting: FEASIBILITY_ONLY/BLOCKED.
 - InstantRestore: FEASIBILITY_ONLY/BLOCKED_HARDWARE until proven.
@@ -117,7 +117,7 @@ Research/upstream-first:
 GPEN DEV SFace `0.95397`, `~2.697s`, `~1.828GB`, PSNR `28.07`, SSIM `0.7474`.  
 GFPGAN1.4 DEV SFace `0.91665`, `~2.787s`, `~1.666GB`, PSNR `30.65`, SSIM `0.8604`.  
 FBCNN QF20 DEV PSNR `34.62->36.78`, SSIM `0.9486->0.9634`, SFace `0.9571->0.9691`, `~1.305GB`.  
-FBCNN run `32674085939`: 6/6 DEV profiles PASS, one identity.  
+FBCNN run `32674085939`: 6/6 DEV profiles PASS, one identity, artifact `9502200502`, archive SHA `365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842`.  
 DamageMaskNet U-Net macro-F1 `0.173198`, macro-IoU `0.113028`, STOPPED.  
 LR-ASPP external DEV F1 `0.716639`, IoU `0.579849`, domain gaps.
 
@@ -127,7 +127,7 @@ Paper figures are not CFS/Windows/EliteBook results unless reproduced.
 
 ## 8. 13-block architecture
 
-1 IMPORT deterministic. 2 DEBLUR NAFNet / qualified BFR only. 3 ENHANCE FBCNN candidate for detected JPEG. 4 LANDMARKS YuNet/pose. 5 ALIGN deterministic. 6 OCCLUSION_MASK no production-qualified multi-class model yet. 7 REGION_SELECT 13-component bank. 8 INPAINT observed first, qualified generated specialist second. 9 FUSION MAIN > observed ref > generated; route + qualification + artifact identity required. 10 FRONTALIZE geometry-only Conservative. 11 IDENTITY_CHECK SFace `0.363`. 12 UPSCALE Lanczos unless measured SR qualifies. 13 EXPORT exact provenance/model/resource/artifact identity.
+1 IMPORT deterministic. 2 DEBLUR NAFNet / qualified BFR only. 3 ENHANCE FBCNN candidate for detected JPEG. 4 LANDMARKS YuNet/pose. 5 ALIGN deterministic. 6 OCCLUSION_MASK no production-qualified multi-class model yet. 7 REGION_SELECT 13-component bank. 8 INPAINT observed first, qualified generated specialist second. 9 FUSION MAIN > observed ref > generated; route + qualification + exact artifact identity required. 10 FRONTALIZE geometry-only Conservative. 11 IDENTITY_CHECK SFace `0.363`. 12 UPSCALE Lanczos unless measured SR qualifies. 13 EXPORT deterministic provenance/model/resource/artifact identity.
 
 ---
 
@@ -151,23 +151,23 @@ LEFT_EYE, RIGHT_EYE, LEFT_EYEBROW, RIGHT_EYEBROW, NOSE, PHILTRUM, MOUTH_LIPS, LE
 
 ## 12. Damage routing
 
-Routes cover HEALTHY, GAUSSIAN_BLUR, MOTION_BLUR, DEFOCUS, JPEG_ARTIFACT, NOISE, PIXELATION, OCCLUSION, SCRIBBLE, TEXT_WATERMARK, MIXED, SMALL_FACE, PARTIAL_CROP. Missing/unverified evidence abstains; malformed/inconsistent evidence rolls back. At current head, generated routes require production qualification + matching attestation + exact candidate repo/revision/checkpoint identity.
+Routes cover HEALTHY, GAUSSIAN_BLUR, MOTION_BLUR, DEFOCUS, JPEG_ARTIFACT, NOISE, PIXELATION, OCCLUSION, SCRIBBLE, TEXT_WATERMARK, MIXED, SMALL_FACE, PARTIAL_CROP. Missing/unverified evidence abstains; malformed/inconsistent evidence rolls back. Generated candidates require complete production qualification, route attestation and exact candidate repo/revision/checkpoint match before fusion.
 
 ---
 
 ## 13. Decision log
 
-**DEC-20260828-014 route/production attestation — ACCEPTED/TEST_PASS** at `8bcc801e...`.
+**DEC-20260828-014 route/production attestation — ACCEPTED/IMPLEMENTED/TEST_PASS.**
 
-**DEC-20260828-015 candidate artifact identity continuity — ACCEPTED/IMPLEMENTED/PENDING_CI.** `RestorationCandidate` now carries `upstream_repository`, `upstream_revision`, `checkpoint_sha256`; FBCNN fills them from its verified upstream source/checkpoint; runtime compares them against production qualification before fusion.
+**DEC-20260828-015 candidate artifact identity continuity — ACCEPTED/IMPLEMENTED/TEST_PASS.** Exact repo/revision/checkpoint identity is extracted from typed production evidence and compared against each generated candidate before selector/fusion. FBCNN emits its verified upstream identity explicitly.
 
 ---
 
 ## 14. Experiment log
 
-**EXP-20260828-034 route/qualification binding attempt 1/3 — PASS.** Run `33207031788`, targeted 46/46, full 602/602, artifact `9700075188`, SHA `8362ebb4...`.
+**EXP-20260828-034 route/qualification binding attempt 1/3 — PASS.** Run `33207031788`, targeted 46/46, full 602/602.
 
-**EXP-20260828-035 candidate artifact identity attempt 1/3 — VALIDATING.** `e617550e...` parser, `65d97133...` parser tests, atomic completion `bc732272...` tree `bec3bca9...`. Same-HEAD CI pending; no model promotion/holdout use.
+**EXP-20260828-035 candidate artifact identity attempt 1/3 — PASS.** Technical sequence `e617550e... -> 65d97133... -> bc732272...`; exact-head run `33208101745` SUCCESS. Targeted runner tests `50/50 PASS`; complete pytest `608/608 PASS`; success/pre-marker-failure/post-marker-failure protocol ordering PASS. Artifact `one-shot-protocol-hardening-33208101745`, ID `9700486979`, archive SHA-256 `c20dbcfb852c6c72f2099618b9e18eda905d2fb63c348d8a0f5769e4759ba8bc`. This proves the contract, not model quality/qualification.
 
 ---
 
@@ -203,13 +203,13 @@ Preserved evidence only. V4 `CONSUMED_FAIL`, 0/40, no rerun. PR #2 is not certif
 
 ## 20. Track B / final integration
 
-Active integration uses official paper code directly where executable. FBCNN is a thin pinned-upstream adapter; no architecture copy. No research model is production-qualified yet.
+Active integration uses official paper code directly where executable. FBCNN is a thin pinned-upstream adapter; no architecture copy. The integration contract now binds generated output to exact qualified source artifacts. No research model is production-qualified yet.
 
 ---
 
 ## 21. Current Paper Quality blocker
 
-Exact candidate artifact binding is implemented but pending same-HEAD CI. After it is green, the blocker returns to real model qualification: broad identity-disjoint validation, license evidence, installed-offline Windows, physical EliteBook <=80% resource evidence, then only measured winners may become production candidates. V5 remains NOT_CREATED.
+Artifact-identity architecture is green. Next: advance **FBCNN real qualification** using official upstream bytes. Required evidence remains broad identity-disjoint JPEG/double-JPEG/social/smartphone recompression validation, licenses/redistribution confirmation, same-candidate installed-offline Windows run, and physical HP EliteBook <=80% resource measurement. Do not fabricate the physical-PC gate. V5 remains NOT_CREATED.
 
 ---
 
@@ -221,7 +221,7 @@ INPUT -> detect/align -> damage -> refs/identity -> qualified specialist -> cand
 
 ## 23. Model selection policy
 
-Multi-identity DEV/VALIDATION by damage family; identity hard gate first, then perceptual/geometry/artifacts/healthy preservation/PSNR/SSIM/LPIPS/RAM/runtime. Never tune on final holdout. Official implementation preferred but not assumed target-compatible.
+Multi-identity DEV/VALIDATION by damage family; identity hard gate first, then perceptual/geometry/artifacts/healthy preservation/PSNR/SSIM/LPIPS/RAM/runtime. Never tune on final holdout. Official implementation preferred but not presumed target-compatible.
 
 ---
 
@@ -237,18 +237,19 @@ Full history through 2026-08-24: `project-state-history/PROJECT_MASTER_STATE-thr
 `f33880d5... -> 75b31aab... -> 8bcc801e...`; route requires actual production qualification/attestation. Run `33207031788` SUCCESS, targeted 46/46, full 602/602.
 
 ### PUSH-20260828-002
-`8bcc801e... -> e617550e...`; add generic model artifact identity parser. NOT_VERIFIED at push time.
+`8bcc801e... -> e617550e...`; add generic model artifact identity parser. Initial state NOT_VERIFIED.
 
 ### PUSH-20260828-003
-`e617550e... -> 65d97133...`; add exact/ambiguous artifact identity tests. NOT_VERIFIED at push time.
+`e617550e... -> 65d97133...`; add exact/ambiguous artifact identity tests. Initial state NOT_VERIFIED.
 
 ### PUSH-20260828-004
 - Previous: `65d97133311fff1a062be3bc821e9c3de03ec365`.
 - New: `bc732272a91ec8ad288e415e8600bf421b1485e9`, tree `bec3bca903d5b236b5201c941bffe208996276de`.
 - Atomic files: `app/face_restorer_adapter.py`, `app/fbcnn_upstream_backend.py`, `app/paper_quality_runtime.py`, `tests/test_paper_quality_runtime.py`, `tests/test_fbcnn_upstream_backend.py`.
-- Effect: explicit candidate artifact identity; FBCNN binds official repo/revision/verified checkpoint; fusion rejects missing/mismatched repo/revision/checkpoint before candidate selection.
-- Test state: **NOT_VERIFIED pending same-HEAD workflow**.
-- No model/threshold/dataset/holdout/V5 change.
+- Result: generated candidate explicit upstream identity + exact qualification match before fusion.
+- Exact-head workflow: run `33208101745` SUCCESS; targeted `50/50`; full `608/608`; protocol ordering PASS.
+- Artifact: ID `9700486979`; SHA-256 `c20dbcfb852c6c72f2099618b9e18eda905d2fb63c348d8a0f5769e4759ba8bc`.
+- No model promoted; no threshold/dataset/holdout/V5 change.
 
 ### PUSH-20260828-META-001
 Prior ledger preserved byte-for-byte before reconciliation; meta-only.
