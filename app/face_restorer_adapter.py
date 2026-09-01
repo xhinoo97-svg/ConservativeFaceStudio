@@ -3,7 +3,7 @@ from __future__ import annotations
 import gc
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
@@ -15,8 +15,15 @@ from app.resource_budget import (
     resource_snapshot,
 )
 
+if TYPE_CHECKING:
+    from app.damage_router import DamageRoutePlan
+
 
 GENERATED_MODEL_INFERRED = 'GENERATED_MODEL_INFERRED'
+
+
+class RouteExecutionBlocked(RuntimeError):
+    """Raised before model load when a damage route cannot authorize execution."""
 
 
 @dataclass(frozen=True)
@@ -87,6 +94,38 @@ class FaceRestorerAdapter:
     @property
     def active_model(self) -> str | None:
         return self._active_model
+
+    def restore_for_route(
+        self,
+        plan: DamageRoutePlan,
+        backend: FaceRestorerBackend,
+        face_bgr: np.ndarray,
+        context: RestorationContext,
+    ) -> RestorationCandidate:
+        """Execute a backend only when the audited damage route authorizes that exact model.
+
+        The route planner remains responsible for selecting a model from production
+        qualification evidence. This boundary prevents a caller from bypassing that
+        decision and loading FBCNN (or another heavy specialist) for an unqualified,
+        healthy, unrelated, or differently-selected damage route.
+        """
+        selected = plan.selected_model_key
+        attestation = plan.selected_model_attestation_sha256
+        if not plan.qualified_for_execution or selected is None or not attestation:
+            raise RouteExecutionBlocked(
+                f'route_not_qualified:{plan.damage_kind}:{plan.reason}'
+            )
+        if str(selected) != str(backend.key):
+            raise RouteExecutionBlocked(
+                f'route_model_mismatch:selected={selected}:backend={backend.key}'
+            )
+        if int(plan.mask_pixels) <= 0:
+            raise RouteExecutionBlocked('route_has_no_admitted_damage_pixels')
+        if str(context.damage_class).upper() != str(plan.damage_kind).upper():
+            raise RouteExecutionBlocked(
+                f'route_context_mismatch:route={plan.damage_kind}:context={context.damage_class}'
+            )
+        return self.restore(backend, face_bgr, context)
 
     def restore(
         self,
