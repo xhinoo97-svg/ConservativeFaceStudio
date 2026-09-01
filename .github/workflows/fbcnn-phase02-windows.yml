@@ -20,6 +20,7 @@ on:
       - tests/test_fbcnn_upstream_backend.py
       - tests/test_fbcnn_degradation_matrix.py
       - tests/test_damage_router.py
+      - tests/test_resource_budget.py
       - .github/workflows/fbcnn-phase02-windows.yml
   workflow_dispatch:
 
@@ -91,7 +92,7 @@ jobs:
           assert not torch.cuda.is_available()
           PY
 
-      - name: Run FBCNN contract and routing regressions
+      - name: Run FBCNN contract, routing and resource regressions
         shell: bash
         run: |
           set -euo pipefail
@@ -100,7 +101,8 @@ jobs:
             tests/test_upstream_implementation_registry.py \
             tests/test_fbcnn_upstream_backend.py \
             tests/test_fbcnn_degradation_matrix.py \
-            tests/test_damage_router.py
+            tests/test_damage_router.py \
+            tests/test_resource_budget.py
 
       - name: Bootstrap exact official FBCNN source
         shell: bash
@@ -166,6 +168,8 @@ jobs:
           assert p['wrong_person_final_pixels'] == 0
           assert p['provenance_violations'] == 0
           assert p['resource_limit_fraction'] == 0.80
+          assert p['max_system_ram_fraction_snapshot'] <= 0.80
+          assert p['peak_process_cpu_fraction_of_total_logical_cpu'] <= 0.80
           assert p['production_qualified'] is False
           print(json.dumps({
               'identity_count': p['identity_count'],

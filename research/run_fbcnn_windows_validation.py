@@ -23,6 +23,7 @@ from research.fbcnn_degradation_matrix import FBCNN_DEVELOPMENT_PROFILES
 
 MIN_IDENTITIES = 8
 IDENTITY_THRESHOLD = 0.363
+MAX_RESOURCE_FRACTION = 0.80
 
 
 def _lpips(metric, torch, a_path: Path, b_path: Path) -> float:
@@ -260,8 +261,8 @@ def main() -> int:
         and not errors
         and real_sface
         and provenance_ok
-        and max_system_fraction <= 0.80
-        and peak_cpu_fraction <= 0.85
+        and max_system_fraction <= MAX_RESOURCE_FRACTION
+        and peak_cpu_fraction <= MAX_RESOURCE_FRACTION
         and all(item.get("pass") is True for item in profile_summary.values())
     )
 
@@ -299,7 +300,7 @@ def main() -> int:
         "max_process_rss_mb": max_rss_mb,
         "max_system_ram_fraction_snapshot": max_system_fraction,
         "peak_process_cpu_fraction_of_total_logical_cpu": peak_cpu_fraction,
-        "resource_limit_fraction": 0.80,
+        "resource_limit_fraction": MAX_RESOURCE_FRACTION,
         "wrong_person_final_pixels": 0 if provenance_ok else None,
         "provenance_violations": 0 if provenance_ok else None,
         "validation_gate_pass": validation_pass,

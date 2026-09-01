@@ -147,18 +147,53 @@ def detect_resource_budget(max_fraction: float = DEFAULT_MAX_RESOURCE_FRACTION) 
     )
 
 
+def _select_windows_affinity_mask(current_mask: int, allowed_processors: int) -> int:
+    """Select at most ``allowed_processors`` bits from the process' existing mask.
+
+    Hosted Windows runners and enterprise job objects can expose a non-contiguous
+    subset of system processors. Building a mask from low bits (0..N-1) can therefore
+    request CPUs the process is not allowed to use and makes SetProcessAffinityMask
+    fail. Restricting the already-authorized mask preserves the <=80% contract without
+    attempting to broaden processor authority.
+    """
+    current = int(current_mask)
+    if current <= 0:
+        raise ValueError("current Windows process affinity mask must be non-zero")
+    count = max(1, int(allowed_processors))
+    available_bits = [1 << bit for bit in range(current.bit_length()) if current & (1 << bit)]
+    selected = 0
+    for bit in available_bits[: min(count, len(available_bits))]:
+        selected |= bit
+    if selected <= 0:
+        raise ValueError("no processors available in current Windows affinity mask")
+    return selected
+
+
 def _apply_cpu_affinity(allowed_processors: int) -> None:
     count = max(1, int(allowed_processors))
     if sys.platform.startswith("win"):
-        # EliteBook-class target is safely below a 64-processor Windows group.
-        bits = min(count, 63)
-        mask = (1 << bits) - 1
+        # EliteBook-class target is safely below one 64-processor Windows group.
+        # Always narrow the process' CURRENT mask; never assume CPUs start at bit 0.
         try:
             handle = ctypes.windll.kernel32.GetCurrentProcess()
+            process_mask = ctypes.c_size_t()
+            system_mask = ctypes.c_size_t()
+            if not ctypes.windll.kernel32.GetProcessAffinityMask(
+                handle,
+                ctypes.byref(process_mask),
+                ctypes.byref(system_mask),
+            ):
+                raise OSError("GetProcessAffinityMask failed")
+            current = int(process_mask.value)
+            mask = _select_windows_affinity_mask(current, count)
+            # A pre-existing host/job restriction can already be stricter than CFS.
+            # In that case there is nothing to widen or rewrite.
+            if current.bit_count() <= count:
+                return
             if not ctypes.windll.kernel32.SetProcessAffinityMask(handle, ctypes.c_size_t(mask)):
                 raise OSError("SetProcessAffinityMask failed")
             return
-        except (AttributeError, OSError) as exc:
+        except (AttributeError, OSError, ValueError) as exc:
             raise ResourceBudgetExceeded(f"CPU affinity cap could not be applied: {exc}") from exc
 
     if hasattr(os, "sched_setaffinity"):

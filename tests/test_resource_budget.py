@@ -19,6 +19,7 @@ DEFAULT_MAX_RESOURCE_FRACTION = module.DEFAULT_MAX_RESOURCE_FRACTION
 ResourceBudgetExceeded = module.ResourceBudgetExceeded
 assert_memory_within_budget = module.assert_memory_within_budget
 detect_resource_budget = module.detect_resource_budget
+select_windows_affinity_mask = module._select_windows_affinity_mask
 
 
 def test_default_budget_never_exceeds_eighty_percent() -> None:
@@ -40,6 +41,26 @@ def test_budget_rejects_fraction_above_eighty_percent() -> None:
 def test_budget_rejects_too_small_fraction() -> None:
     with pytest.raises(ValueError):
         detect_resource_budget(0.09)
+
+
+def test_windows_affinity_narrows_existing_non_contiguous_mask_without_inventing_cpus() -> None:
+    # Hosted runners/job objects may grant CPUs 2, 4 and 7 rather than 0, 1 and 2.
+    current = (1 << 2) | (1 << 4) | (1 << 7)
+    selected = select_windows_affinity_mask(current, 2)
+    assert selected == ((1 << 2) | (1 << 4))
+    assert selected & ~current == 0
+    assert selected.bit_count() == 2
+
+
+def test_windows_affinity_keeps_stricter_host_mask() -> None:
+    current = (1 << 5) | (1 << 9)
+    selected = select_windows_affinity_mask(current, 8)
+    assert selected == current
+
+
+def test_windows_affinity_rejects_empty_mask() -> None:
+    with pytest.raises(ValueError, match='non-zero'):
+        select_windows_affinity_mask(0, 2)
 
 
 def test_process_memory_reservation_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
