@@ -1,0 +1,193 @@
+name: FBCNN Phase02 Windows qualification
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - research/run_fbcnn_windows_validation.py
+      - research/run_fbcnn_vertical_slice.py
+      - research/fbcnn_degradation_matrix.py
+      - research/run_gfpgan14_vertical_slice.py
+      - research/run_gfpgan14_vertical_slice_exact.py
+      - app/fbcnn_upstream_backend.py
+      - app/resource_budget.py
+      - app/core_models.py
+      - app/opencv_zoo_face.py
+      - config/upstream-implementations.json
+      - scripts/bootstrap_pinned_upstream.py
+      - scripts/run_female_domain_benchmark_resilient.py
+      - tests/test_fbcnn_upstream_backend.py
+      - tests/test_fbcnn_degradation_matrix.py
+      - tests/test_damage_router.py
+      - .github/workflows/fbcnn-phase02-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fbcnn-phase02-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-multi-identity-validation:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      CANDIDATE_SHA: ${{ github.sha }}
+      FBCNN_SOURCE_SHA: 54d1831927506b3247e2d4d245abb4f4dab1a1cd
+      FBCNN_WEIGHT_URL: https://github.com/jiaxi-jiang/FBCNN/releases/download/v1.0/fbcnn_color.pth
+      FBCNN_WEIGHT_SHA256: 8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8
+
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify exact candidate checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$CANDIDATE_SHA"
+          echo "Exact candidate SHA: $actual"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install isolated Windows CPU qualification runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'torch==2.1.2+cpu' 'torchvision==0.16.2+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install \
+            'numpy>=1.26,<2' \
+            'opencv-python>=4.10,<5' \
+            'onnxruntime>=1.20,<2' \
+            'Pillow>=10,<12' \
+            'psutil>=5.9,<8' \
+            'lpips==0.1.4' \
+            pytest
+          python - <<'PY'
+          import cv2, lpips, numpy, onnxruntime, psutil, torch, torchvision
+          print({
+              'torch': torch.__version__,
+              'torchvision': torchvision.__version__,
+              'opencv': cv2.__version__,
+              'numpy': numpy.__version__,
+              'onnxruntime': onnxruntime.__version__,
+              'psutil': psutil.__version__,
+              'lpips': getattr(lpips, '__version__', '0.1.4'),
+              'cuda': torch.cuda.is_available(),
+          })
+          assert not torch.cuda.is_available()
+          PY
+
+      - name: Run FBCNN contract and routing regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_upstream_implementation_registry.py
+          python -m pytest -q \
+            tests/test_upstream_implementation_registry.py \
+            tests/test_fbcnn_upstream_backend.py \
+            tests/test_fbcnn_degradation_matrix.py \
+            tests/test_damage_router.py
+
+      - name: Bootstrap exact official FBCNN source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .research-upstreams/fbcnn
+          python scripts/bootstrap_pinned_upstream.py fbcnn \
+            --destination .research-upstreams \
+            --accept-research-only
+          test "$(git -C .research-upstreams/fbcnn rev-parse HEAD)" = "$FBCNN_SOURCE_SHA"
+
+      - name: Download and verify official FBCNN checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .research/weights
+          curl --fail --location --retry 4 --retry-delay 5 \
+            --connect-timeout 30 --max-time 900 \
+            "$FBCNN_WEIGHT_URL" -o .research/weights/fbcnn_color.pth
+          python - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          p = Path('.research/weights/fbcnn_color.pth')
+          assert p.stat().st_size == 287755111, p.stat().st_size
+          h = hashlib.sha256()
+          with p.open('rb') as handle:
+              for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+                  h.update(chunk)
+          digest = h.hexdigest()
+          assert digest == os.environ['FBCNN_WEIGHT_SHA256'], digest
+          print({'bytes': p.stat().st_size, 'sha256': digest})
+          PY
+
+      - name: Execute real Windows multi-identity JPEG validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/run_fbcnn_windows_validation.py \
+            --fbcnn-root .research-upstreams/fbcnn \
+            --checkpoint .research/weights/fbcnn_color.pth \
+            --output fbcnn-phase02-windows \
+            --cache .benchmark-cache/fbcnn-phase02 \
+            --identities 8 \
+            --source-limit 14
+
+      - name: Verify Phase02 evidence contract
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s fbcnn-phase02-windows/fbcnn-phase02-windows-validation.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          p = json.loads(Path('fbcnn-phase02-windows/fbcnn-phase02-windows-validation.json').read_text())
+          assert p['candidate_sha'] == os.environ['CANDIDATE_SHA']
+          assert p['identity_count'] >= 8
+          assert p['case_count'] >= 48
+          assert p['official_revision'] == os.environ['FBCNN_SOURCE_SHA']
+          assert p['checkpoint_sha256'] == os.environ['FBCNN_WEIGHT_SHA256']
+          assert p['wrong_person_final_pixels'] == 0
+          assert p['provenance_violations'] == 0
+          assert p['resource_limit_fraction'] == 0.80
+          assert p['production_qualified'] is False
+          print(json.dumps({
+              'identity_count': p['identity_count'],
+              'case_count': p['case_count'],
+              'error_count': p['error_count'],
+              'profile_summary': p['profile_summary'],
+              'max_process_rss_mb': p['max_process_rss_mb'],
+              'max_system_ram_fraction_snapshot': p['max_system_ram_fraction_snapshot'],
+              'peak_process_cpu_fraction_of_total_logical_cpu': p['peak_process_cpu_fraction_of_total_logical_cpu'],
+              'validation_gate_pass': p['validation_gate_pass'],
+          }, indent=2, sort_keys=True))
+          if not p['validation_gate_pass']:
+              raise SystemExit('FBCNN Phase02 validation gate failed')
+          PY
+
+      - name: Upload FBCNN Phase02 evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: fbcnn-phase02-windows-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            fbcnn-phase02-windows/**
+            .research-upstreams/fbcnn/.cfs-upstream.json
