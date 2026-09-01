@@ -28,6 +28,75 @@ class ResourceBudget:
         return asdict(self)
 
 
+def _windows_process_apis():
+    """Return Win32 process APIs with pointer-width-safe ctypes signatures.
+
+    ctypes defaults unspecified function return/argument values to C ``int``.
+    That is not a safe ABI contract for Win32 HANDLE values on 64-bit Python and
+    also hides the native last-error code. Bind the exact signatures once per use
+    so hosted runners and the Windows target exercise the real API contract.
+    """
+    if not sys.platform.startswith("win"):
+        raise OSError("Windows process APIs requested on a non-Windows platform")
+
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.GetProcessAffinityMask.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(ctypes.c_size_t),
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
+    kernel32.GetProcessAffinityMask.restype = wintypes.BOOL
+    kernel32.SetProcessAffinityMask.argtypes = [wintypes.HANDLE, ctypes.c_size_t]
+    kernel32.SetProcessAffinityMask.restype = wintypes.BOOL
+
+    psapi.GetProcessMemoryInfo.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+    ]
+    psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+    return kernel32, psapi
+
+
+def _windows_call_error(function_name: str) -> OSError:
+    code = int(ctypes.get_last_error())
+    if code:
+        try:
+            detail = ctypes.FormatError(code).strip()
+        except OSError:
+            detail = "unknown Win32 error"
+        return OSError(code, f"{function_name} failed: {detail}")
+    return OSError(f"{function_name} failed with no Win32 last-error code")
+
+
+def _get_windows_process_affinity_masks() -> tuple[int, int]:
+    """Read current process/system affinity masks using the typed Win32 API."""
+    kernel32, _ = _windows_process_apis()
+    handle = kernel32.GetCurrentProcess()
+    process_mask = ctypes.c_size_t()
+    system_mask = ctypes.c_size_t()
+    ctypes.set_last_error(0)
+    if not kernel32.GetProcessAffinityMask(
+        handle,
+        ctypes.byref(process_mask),
+        ctypes.byref(system_mask),
+    ):
+        raise _windows_call_error("GetProcessAffinityMask")
+    current = int(process_mask.value)
+    system = int(system_mask.value)
+    if current <= 0:
+        raise OSError("GetProcessAffinityMask returned an empty process mask")
+    if system <= 0:
+        raise OSError("GetProcessAffinityMask returned an empty system mask")
+    return current, system
+
+
 def _physical_memory_status_bytes() -> tuple[int | None, int | None]:
     """Return (total physical RAM, currently available physical RAM)."""
     if sys.platform.startswith("win"):
@@ -105,8 +174,10 @@ def _process_rss_bytes() -> int | None:
         counters = PROCESS_MEMORY_COUNTERS_EX()
         counters.cb = ctypes.sizeof(counters)
         try:
-            handle = ctypes.windll.kernel32.GetCurrentProcess()
-            ok = ctypes.windll.psapi.GetProcessMemoryInfo(
+            kernel32, psapi = _windows_process_apis()
+            handle = kernel32.GetCurrentProcess()
+            ctypes.set_last_error(0)
+            ok = psapi.GetProcessMemoryInfo(
                 handle, ctypes.byref(counters), counters.cb
             )
             return int(counters.WorkingSetSize) if ok else None
@@ -175,23 +246,22 @@ def _apply_cpu_affinity(allowed_processors: int) -> None:
         # EliteBook-class target is safely below one 64-processor Windows group.
         # Always narrow the process' CURRENT mask; never assume CPUs start at bit 0.
         try:
-            handle = ctypes.windll.kernel32.GetCurrentProcess()
-            process_mask = ctypes.c_size_t()
-            system_mask = ctypes.c_size_t()
-            if not ctypes.windll.kernel32.GetProcessAffinityMask(
-                handle,
-                ctypes.byref(process_mask),
-                ctypes.byref(system_mask),
-            ):
-                raise OSError("GetProcessAffinityMask failed")
-            current = int(process_mask.value)
+            current, _ = _get_windows_process_affinity_masks()
             mask = _select_windows_affinity_mask(current, count)
             # A pre-existing host/job restriction can already be stricter than CFS.
             # In that case there is nothing to widen or rewrite.
             if current.bit_count() <= count:
                 return
-            if not ctypes.windll.kernel32.SetProcessAffinityMask(handle, ctypes.c_size_t(mask)):
-                raise OSError("SetProcessAffinityMask failed")
+            kernel32, _ = _windows_process_apis()
+            handle = kernel32.GetCurrentProcess()
+            ctypes.set_last_error(0)
+            if not kernel32.SetProcessAffinityMask(handle, ctypes.c_size_t(mask)):
+                raise _windows_call_error("SetProcessAffinityMask")
+            applied, _ = _get_windows_process_affinity_masks()
+            if applied != mask:
+                raise OSError(
+                    f"SetProcessAffinityMask verification failed: requested={mask:#x} applied={applied:#x}"
+                )
             return
         except (AttributeError, OSError, ValueError) as exc:
             raise ResourceBudgetExceeded(f"CPU affinity cap could not be applied: {exc}") from exc
