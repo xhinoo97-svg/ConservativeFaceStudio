@@ -34,6 +34,7 @@ adapter_mod = _load('app.face_restorer_adapter', APP / 'face_restorer_adapter.py
 FaceRestorerAdapter = adapter_mod.FaceRestorerAdapter
 RestorationCandidate = adapter_mod.RestorationCandidate
 RestorationContext = adapter_mod.RestorationContext
+RouteExecutionBlocked = adapter_mod.RouteExecutionBlocked
 GENERATED_MODEL_INFERRED = adapter_mod.GENERATED_MODEL_INFERRED
 
 
@@ -48,11 +49,15 @@ class FakeBackend:
         self.unloaded = False
         self.fail = fail
         self.bad_provenance = bad_provenance
+        self.load_calls = 0
+        self.restore_calls = 0
 
     def load(self) -> None:
+        self.load_calls += 1
         self.loaded = True
 
     def restore(self, face_bgr: np.ndarray, context: RestorationContext) -> RestorationCandidate:
+        self.restore_calls += 1
         assert self.loaded
         if self.fail:
             raise RuntimeError('synthetic backend failure')
@@ -86,6 +91,29 @@ def _budget():
     )
 
 
+def _route(
+    *,
+    damage_kind: str = 'JPEG_ARTIFACT',
+    selected_model_key: str | None = 'fake',
+    qualified: bool = True,
+    mask_pixels: int = 100,
+):
+    # The adapter consumes only the immutable route authorization fields. The route
+    # planner itself is covered independently by tests/test_damage_router.py.
+    return types.SimpleNamespace(
+        damage_kind=damage_kind,
+        selected_model_key=selected_model_key,
+        selected_model_attestation_sha256=('a' * 64 if qualified else None),
+        qualified_for_execution=qualified,
+        mask_pixels=mask_pixels,
+        reason=(
+            'qualified_route_planned_but_execution_not_performed'
+            if qualified
+            else 'no_production_qualified_model_for_route'
+        ),
+    )
+
+
 def test_adapter_loads_runs_and_always_unloads_one_model() -> None:
     backend = FakeBackend()
     adapter = FaceRestorerAdapter(_budget())
@@ -96,6 +124,82 @@ def test_adapter_loads_runs_and_always_unloads_one_model() -> None:
     assert candidate.provenance_class == GENERATED_MODEL_INFERRED
     assert candidate.resource['budget']['max_fraction'] == 0.80
     assert candidate.resource['budget']['max_parallel_heavy_models'] == 1
+
+
+def test_route_authorization_executes_exact_selected_jpeg_backend_once() -> None:
+    backend = FakeBackend()
+    adapter = FaceRestorerAdapter(_budget())
+    face = np.zeros((64, 64, 3), dtype=np.uint8)
+    candidate = adapter.restore_for_route(
+        _route(),
+        backend,
+        face,
+        RestorationContext('JPEG_ARTIFACT', 'MEDIUM'),
+    )
+    assert candidate.model_key == 'fake'
+    assert backend.load_calls == 1
+    assert backend.restore_calls == 1
+    assert backend.unloaded is True
+
+
+def test_unqualified_route_never_loads_or_runs_backend() -> None:
+    backend = FakeBackend()
+    adapter = FaceRestorerAdapter(_budget())
+    face = np.zeros((64, 64, 3), dtype=np.uint8)
+    with pytest.raises(RouteExecutionBlocked, match='route_not_qualified'):
+        adapter.restore_for_route(
+            _route(qualified=False, selected_model_key=None),
+            backend,
+            face,
+            RestorationContext('JPEG_ARTIFACT', 'MEDIUM'),
+        )
+    assert backend.load_calls == 0
+    assert backend.restore_calls == 0
+
+
+def test_route_selected_model_mismatch_never_loads_backend() -> None:
+    backend = FakeBackend()
+    adapter = FaceRestorerAdapter(_budget())
+    face = np.zeros((64, 64, 3), dtype=np.uint8)
+    with pytest.raises(RouteExecutionBlocked, match='route_model_mismatch'):
+        adapter.restore_for_route(
+            _route(selected_model_key='fbcnn'),
+            backend,
+            face,
+            RestorationContext('JPEG_ARTIFACT', 'MEDIUM'),
+        )
+    assert backend.load_calls == 0
+    assert backend.restore_calls == 0
+
+
+def test_route_context_mismatch_never_loads_backend() -> None:
+    backend = FakeBackend()
+    adapter = FaceRestorerAdapter(_budget())
+    face = np.zeros((64, 64, 3), dtype=np.uint8)
+    with pytest.raises(RouteExecutionBlocked, match='route_context_mismatch'):
+        adapter.restore_for_route(
+            _route(damage_kind='JPEG_ARTIFACT'),
+            backend,
+            face,
+            RestorationContext('GAUSSIAN_BLUR', 'MEDIUM'),
+        )
+    assert backend.load_calls == 0
+    assert backend.restore_calls == 0
+
+
+def test_route_without_admitted_pixels_never_loads_backend() -> None:
+    backend = FakeBackend()
+    adapter = FaceRestorerAdapter(_budget())
+    face = np.zeros((64, 64, 3), dtype=np.uint8)
+    with pytest.raises(RouteExecutionBlocked, match='route_has_no_admitted_damage_pixels'):
+        adapter.restore_for_route(
+            _route(mask_pixels=0),
+            backend,
+            face,
+            RestorationContext('JPEG_ARTIFACT', 'MEDIUM'),
+        )
+    assert backend.load_calls == 0
+    assert backend.restore_calls == 0
 
 
 def test_adapter_unloads_backend_after_inference_exception() -> None:
