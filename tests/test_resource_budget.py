@@ -20,6 +20,8 @@ ResourceBudgetExceeded = module.ResourceBudgetExceeded
 assert_memory_within_budget = module.assert_memory_within_budget
 detect_resource_budget = module.detect_resource_budget
 select_windows_affinity_mask = module._select_windows_affinity_mask
+get_windows_process_affinity_masks = module._get_windows_process_affinity_masks
+process_rss_bytes = module._process_rss_bytes
 
 
 def test_default_budget_never_exceeds_eighty_percent() -> None:
@@ -61,6 +63,21 @@ def test_windows_affinity_keeps_stricter_host_mask() -> None:
 def test_windows_affinity_rejects_empty_mask() -> None:
     with pytest.raises(ValueError, match='non-zero'):
         select_windows_affinity_mask(0, 2)
+
+
+@pytest.mark.skipif(not sys.platform.startswith('win'), reason='real Win32 API regression')
+def test_windows_process_api_reads_real_nonzero_affinity_masks() -> None:
+    process_mask, system_mask = get_windows_process_affinity_masks()
+    assert process_mask > 0
+    assert system_mask > 0
+    assert process_mask & ~system_mask == 0
+
+
+@pytest.mark.skipif(not sys.platform.startswith('win'), reason='real Win32 API regression')
+def test_windows_process_api_reads_real_process_rss() -> None:
+    rss = process_rss_bytes()
+    assert rss is not None
+    assert rss > 0
 
 
 def test_process_memory_reservation_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
