@@ -91,25 +91,39 @@ def _run_case(
     ]
     import psutil
 
-    process = subprocess.Popen(
-        cmd,
-        cwd=ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    monitored = psutil.Process(process.pid)
-    cpu_samples: list[float] = []
-    monitored.cpu_percent(interval=None)
-    while process.poll() is None:
-        try:
-            cpu_samples.append(float(monitored.cpu_percent(interval=0.10)))
-        except (psutil.Error, ProcessLookupError):
-            time.sleep(0.10)
-    stdout, stderr = process.communicate()
-    if process.returncode != 0:
+    # Do not use stdout/stderr=PIPE while polling process completion. On Windows
+    # the anonymous pipe can fill before the vertical-slice process exits; the
+    # child then blocks on write while this parent waits for process.poll(),
+    # producing a permanent deadlock. File-backed logs keep diagnostics without
+    # imposing a bounded producer/consumer buffer.
+    output.mkdir(parents=True, exist_ok=True)
+    stdout_path = output / "vertical-slice.stdout.log"
+    stderr_path = output / "vertical-slice.stderr.log"
+    with stdout_path.open("w", encoding="utf-8", errors="replace") as stdout_handle, stderr_path.open(
+        "w", encoding="utf-8", errors="replace"
+    ) as stderr_handle:
+        process = subprocess.Popen(
+            cmd,
+            cwd=ROOT,
+            text=True,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+        )
+        monitored = psutil.Process(process.pid)
+        cpu_samples: list[float] = []
+        monitored.cpu_percent(interval=None)
+        while process.poll() is None:
+            try:
+                cpu_samples.append(float(monitored.cpu_percent(interval=0.10)))
+            except (psutil.Error, ProcessLookupError):
+                time.sleep(0.10)
+        returncode = int(process.wait())
+
+    stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
+    stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+    if returncode != 0:
         raise RuntimeError(
-            f"vertical_slice_exit={process.returncode}\n"
+            f"vertical_slice_exit={returncode}\n"
             f"stdout={stdout[-4000:]}\n"
             f"stderr={stderr[-4000:]}"
         )
