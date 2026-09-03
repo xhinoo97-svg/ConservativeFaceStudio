@@ -21,6 +21,7 @@ PINNED_REVISION = "54d1831927506b3247e2d4d245abb4f4dab1a1cd"
 APPROVED_CHECKPOINT_FILENAME = "fbcnn_color.pth"
 APPROVED_CHECKPOINT_SIZE_BYTES = 287755111
 APPROVED_CHECKPOINT_SHA256 = "8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8"
+CONSERVATIVE_RESTORATION_FRACTION = 0.25
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ALLOWED_DAMAGE_MARKERS = ("jpeg", "compression", "recompression")
 
@@ -68,6 +69,27 @@ def _damage_route_allowed(context: RestorationContext) -> bool:
     if any(marker in damage for marker in _ALLOWED_DAMAGE_MARKERS):
         return True
     return bool(context.metadata.get("jpeg_detected") is True)
+
+
+def _conservative_blend(original_bgr: np.ndarray, restored_bgr: np.ndarray) -> np.ndarray:
+    """Limit FBCNN pixel authority while preserving its measured JPEG benefit.
+
+    Phase02 Windows validation showed that the full-strength official output can
+    improve PSNR/SSIM while moving SFace identity materially away from the same
+    clean identity on a small subset of adult identities. CFS therefore applies a
+    fixed conservative authority fraction to every FBCNN result. This is not a
+    threshold change and does not use clean ground truth at runtime.
+    """
+    if original_bgr.shape != restored_bgr.shape:
+        raise ValueError("FBCNN conservative blend requires equal image shapes")
+    if original_bgr.dtype != np.uint8 or restored_bgr.dtype != np.uint8:
+        raise ValueError("FBCNN conservative blend requires uint8 images")
+    alpha = float(CONSERVATIVE_RESTORATION_FRACTION)
+    mixed = (
+        original_bgr.astype(np.float32) * (1.0 - alpha)
+        + restored_bgr.astype(np.float32) * alpha
+    )
+    return np.uint8(np.rint(np.clip(mixed, 0.0, 255.0)))
 
 
 class FBCNNUpstreamBackend:
@@ -201,7 +223,8 @@ class FBCNNUpstreamBackend:
             .numpy()
         )
         output_rgb = np.uint8(np.rint(output_rgb * 255.0))
-        output_bgr = np.ascontiguousarray(output_rgb[:, :, ::-1])
+        raw_output_bgr = np.ascontiguousarray(output_rgb[:, :, ::-1])
+        output_bgr = _conservative_blend(face_bgr, raw_output_bgr)
         changed = np.any(output_bgr != face_bgr, axis=2)
         generated_mask = np.zeros(face_bgr.shape[:2], dtype=np.uint8)
         generated_mask[changed] = 255
@@ -220,6 +243,7 @@ class FBCNNUpstreamBackend:
             quality_metrics={
                 "predicted_jpeg_quality_factor": predicted_qf,
                 "controlled_quality_factor": float(qf_override) if qf_override is not None else None,
+                "conservative_restoration_fraction": float(CONSERVATIVE_RESTORATION_FRACTION),
                 "official_repository": OFFICIAL_REPOSITORY,
                 "official_revision": PINNED_REVISION,
                 "checkpoint_sha256": self._checkpoint_sha256,
