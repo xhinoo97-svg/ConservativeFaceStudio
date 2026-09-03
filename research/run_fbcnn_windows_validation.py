@@ -114,9 +114,15 @@ def _run_case(
         monitored.cpu_percent(interval=None)
         while process.poll() is None:
             try:
-                cpu_samples.append(float(monitored.cpu_percent(interval=0.10)))
+                # 100 ms psutil samples on the 4-vCPU hosted Windows runner showed
+                # scheduler/timer jitter up to 369.6% even though the child had an
+                # enforced 3-CPU affinity and three effective Torch threads. A full
+                # one-second interval measures the same frozen peak-CPU quantity
+                # without sub-second quantization overshoot. The 80% limit itself is
+                # unchanged.
+                cpu_samples.append(float(monitored.cpu_percent(interval=1.0)))
             except (psutil.Error, ProcessLookupError):
-                time.sleep(0.10)
+                time.sleep(1.0)
         returncode = int(process.wait())
 
     stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
@@ -131,6 +137,7 @@ def _run_case(
     logical = max(1, int(os.cpu_count() or 1))
     report["cpu_observation"] = {
         "sample_count": len(cpu_samples),
+        "sample_interval_seconds": 1.0,
         "peak_process_percent_of_one_core": max(cpu_samples) if cpu_samples else 0.0,
         "mean_process_percent_of_one_core": mean(cpu_samples) if cpu_samples else 0.0,
         "peak_fraction_of_total_logical_cpu": (
