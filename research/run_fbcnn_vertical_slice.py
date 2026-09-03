@@ -136,22 +136,31 @@ def main() -> int:
         severity='heavy',
         metadata={'jpeg_detected': True, 'degradation_profile': profile.profile_id},
     )
-    _warm = backend.restore(degraded_aligned, context)
+
+    # FBCNN must see the JPEG-damaged pixels before any affine warp/resampling.
+    # Alignment interpolates pixels and disrupts the block/ringing structure that
+    # the compression specialist was trained to remove. The aligned crop is used
+    # only after restoration so all quality/identity metrics remain comparable.
+    _warm = backend.restore(degraded, context)
     assert_memory_within_budget(budget, stage='fbcnn_post_warmup')
     infer_start = time.perf_counter()
     with common.PeakRSSSampler() as infer_sampler:
-        candidate = backend.restore(degraded_aligned, context)
+        candidate = backend.restore(degraded, context)
     infer_seconds = time.perf_counter() - infer_start
     assert_memory_within_budget(budget, stage='fbcnn_post_inference')
     resource_after_inference = resource_snapshot(budget)
 
-    restored = candidate.image
-    if restored.shape != degraded_aligned.shape or restored.dtype != np.uint8:
-        raise RuntimeError(f'Invalid FBCNN output: {restored.shape} {restored.dtype}')
+    restored_source = candidate.image
+    if restored_source.shape != degraded.shape or restored_source.dtype != np.uint8:
+        raise RuntimeError(f'Invalid FBCNN output: {restored_source.shape} {restored_source.dtype}')
     if candidate.provenance_class != GENERATED_MODEL_INFERRED:
         raise RuntimeError(f'Invalid FBCNN provenance: {candidate.provenance_class}')
     if candidate.model_version != PINNED_REVISION:
         raise RuntimeError(f'FBCNN candidate revision drift: {candidate.model_version}')
+
+    restored = exact_phase3_alignment(restored_source, main_obs.landmarks5)
+    if restored.shape != degraded_aligned.shape:
+        raise RuntimeError(f'Aligned FBCNN output mismatch: {restored.shape} != {degraded_aligned.shape}')
 
     restored_path = args.output / 'restored_fbcnn_color.png'
     cv2.imwrite(str(restored_path), restored)
@@ -226,6 +235,7 @@ def main() -> int:
             'predicted_input_quality_factor': predicted_quality,
             'provenance_class': candidate.provenance_class,
             'generated_pixels': int(np.count_nonzero(candidate.generated_mask)),
+            'execution_order': 'JPEG_DEGRADATION -> FBCNN -> METRIC_ALIGNMENT',
         },
         'resource_budget': {
             'max_total_pc_fraction': 0.80,
@@ -238,12 +248,12 @@ def main() -> int:
             'detector': 'OpenCV Zoo YuNet',
             'identity': 'OpenCV Zoo SFace',
             'identity_threshold': float(FACE_MODEL_DEFAULTS.sface_same_identity_cosine),
-            'alignment': 'exact Phase-3 GPEN official 5-point 512 convention',
+            'alignment': 'exact Phase-3 GPEN official 5-point 512 convention applied after FBCNN for metrics',
             'main_yunet_score': float(main_obs.score),
         },
         'timing_seconds': {
             'model_load': float(load_seconds),
-            'inference_512_measured_after_warmup': float(infer_seconds),
+            'inference_source_resolution_measured_after_warmup': float(infer_seconds),
         },
         'rss_mb': {
             'baseline': baseline,
