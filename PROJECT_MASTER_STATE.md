@@ -1,26 +1,21 @@
 # Conservative Face Studio — Project Master State
 
-> **CANONICAL PROJECT LEDGER.** Read before every engineering decision. GitHub evidence overrides chat memory.
->
-> Historical state is immutable and preserved separately:
-> - through 2026-08-24: `project-state-history/PROJECT_MASTER_STATE-through-2026-08-24.md`, blob `d92bbf605609f7b1f5360009cfed4ec4a392b9a9`;
-> - exact ledger immediately before the 2026-09-03 Phase02 pipe-deadlock correction: `project-state-history/PROJECT_MASTER_STATE-through-2026-09-03-pre-pipe-fix.md`, blob `b9556884515daa7c65cef5876668e588c3af6209`.
+> **CANONICAL PROJECT LEDGER.** GitHub evidence overrides chat memory. Historical state remains preserved in Git history and in `project-state-history/`.
 
 ## 0. Current canonical state
 
-Last ledger update: `2026-09-03T15:06Z`  
-Technical state verified at: `2026-09-03T15:06Z`  
+Last ledger update: `2026-09-03T16:19Z`  
+Technical state verified at: `2026-09-03T16:19Z`  
 Repository: `xhinoo97-svg/ConservativeFaceStudio`  
 Canonical state branch: `meta/project-state`  
 ACTIVE_PHASE: `PHASE_02_JPEG_FBCNN`  
 PHASE_GATE: `IN_PROGRESS / NOT_VERIFIED`  
 Last technical branch: `integration/final-paper-quality-local`  
-Previous technical HEAD: `3105218633a272a634c431b7ef26c84f9b34f226`  
-Last technical HEAD: `d0f14d7fa1303a35b1fe3b284f587c86986dafa4`  
-Last technical tree: `3fdf8b8f8661c603bb00ee1f459abb6e99fef3a4`  
+Previous technical HEAD: `d0f14d7fa1303a35b1fe3b284f587c86986dafa4`  
+Last technical HEAD: `50e5281c730535b416b6188c5d6bffc248652571`  
 Certified base: `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`  
 PR #2: OPEN + DRAFT + NOT_MERGED; preserve as non-certified historical candidate.  
-Current exact blocker: FBCNN Phase02 Windows run `33770678754` for candidate `d0f14d7fa1303a35b1fe3b284f587c86986dafa4` is executing after correction of the validation subprocess deadlock.  
+Current exact blocker: exact-head FBCNN Phase02 workflow run `33777869802` is validating the correction that executes FBCNN on the JPEG-damaged source pixels before affine metric alignment.  
 Overall project status: `PARTIAL`
 
 FORENSIC_MODE_READY: **TRUE**  
@@ -32,52 +27,35 @@ PROJECT_FINISHED: **FALSE**
 
 Mandatory sequence: `technical work -> tests/evidence -> push -> exact remote SHA -> ledger update`. No force-push, no history deletion, no automatic merge, no V3/V4 rerun, no fabricated evidence.
 
-EXACT_NEXT_ACTION: inspect run `33770678754`; retrieve its exact artifact if complete; classify all 48 FBCNN cases and the six aggregate profiles. If the run fails, fix only the first evidenced Phase02 root cause. Do not enter PHASE_03 until the FBCNN gate is objectively classified.
+EXACT_NEXT_ACTION: inspect run `33777869802`; if complete, retrieve its exact artifact and classify all 48 cases and six frozen profiles. If it fails, fix only the first evidenced remaining Phase02 root cause. Do not enter PHASE_03 until FBCNN is objectively qualified or rejected for the JPEG route.
 
 ---
 
-## 1. Product and installed-path truth
-
-CFS is a local Windows face-restoration system for damaged smartphone/social-media portraits. Conservative evidence remains authoritative over generated inference. Paper Quality generated pixels are always `GENERATED_MODEL_INFERRED` and may never be represented as observed/original pixels.
+## 1. Installed-path truth
 
 Installed entry path remains:
 
 `app.__main__.main -> MainWindow -> PipelineWorker -> AutomaticPipelineRunner`
 
-`AutomaticPipelineRunner` still runs the legacy 13-block path directly and does **not** yet invoke `PaperQualityRuntime`. Therefore:
+`AutomaticPipelineRunner` does **not** yet invoke `PaperQualityRuntime`.
 
 PAPER_QUALITY_RUNTIME_WIRED: **FALSE**
 
-This is intentionally deferred to PHASE_03 until PHASE_02 closes.
+PHASE_03 remains deferred until PHASE_02 closes.
 
 ---
 
-## 2. Branch and release map
-
-| Branch | Purpose | Current known HEAD | Status |
-|---|---|---:|---|
-| `main` | certified PRODUCT_V1 | `2767513f95dde2d417e7c6f1faf2357149a1a32f` | FROZEN/RELEASED |
-| `integration/final-paper-quality-local` | only active final-integration branch | `d0f14d7fa1303a35b1fe3b284f587c86986dafa4` | ACTIVE / PHASE_02 |
-| `hotfix/real-world-restoration-v1.1` | Track A historical candidate | `77687b3b171f4e9989fcf486834f2d8b7a52f591` | V4 CONSUMED_FAIL/FROZEN |
-| `protocol/v5-certification-hardening` | protocol development | `268188c5a2540455ff804383cb583b16546b62f1` | ARCHIVED DEV |
-| `research/paper-quality-local-v2` | research evidence | `6d57725aae087bb4a3144d521d91346999f9a4fd` | SUPERSEDED AS ACTIVE ARCHITECTURE |
-| `meta/project-state` | canonical state only | self-SHA omitted | ACTIVE META |
-
-GitHub branch API currently reports the integration branch and main as `protected=false`; this is a live repository configuration fact and does not relax the project rule that certified history must not be force-pushed or rewritten.
-
----
-
-## 3. Holdout lineage
+## 2. Holdout lineage
 
 FINAL_HOLDOUT_V3: **CONSUMED — NEVER RERUN**  
 FINAL_HOLDOUT_V4: **CONSUMED_FAIL — 0/40 — NEVER RERUN**  
 FINAL_HOLDOUT_V5: **NOT_CREATED**
 
-No V3/V4 material is used by Phase02. V5 must not be created or executed before all prerequisites are green and a candidate is frozen.
+No V3/V4 material is used by Phase02.
 
 ---
 
-## 4. FBCNN pinned implementation and license
+## 3. FBCNN pinned implementation
 
 Official repository: `jiaxi-jiang/FBCNN`  
 Pinned source revision: `54d1831927506b3247e2d4d245abb4f4dab1a1cd`  
@@ -85,30 +63,17 @@ Checkpoint: `fbcnn_color.pth`
 Checkpoint bytes: `287755111`  
 Checkpoint SHA-256: `8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8`  
 Architecture reimplemented by CFS: **FALSE**  
-Device under Phase02 qualification: **CPU**
+Qualification device: **Windows CPU**
 
-MODEL_LICENSE_STATUS: **CODE_APACHE_2_0; WEIGHTS_PROJECT_WIDE_APACHE_2_BASIS_NO_SEPARATE_RESTRICTION_FOUND; NOT_LEGAL_ADVICE**
+MODEL_LICENSE_STATUS: **CODE_APACHE_2_0; OFFICIAL_WEIGHT_ASSET_WITH_PROJECT_WIDE_APACHE_2_BASIS; FINAL_DISTRIBUTION_MANIFEST_STILL_REQUIRED**
 
-The exact pinned official repository contains Apache License 2.0. The checkpoint is the official v1.0 release asset. Distribution remains blocked unless the release manifest carries all required third-party notices and no later-discovered checkpoint-specific restriction conflicts with distribution.
-
----
-
-## 5. Routing and production authority
-
-FBCNN accepts only JPEG/compression/recompression context or explicit verified `jpeg_detected=True`.
-
-Route-gated execution is implemented on the active integration branch:
-- `f9a45c396cf45daf3eb9e348e98078b7396a29f1` — bind model execution to qualified damage route;
-- `bc4d51da972e6fd410e92fb2584b3eaa554fc53f` — tests proving route-gated specialist execution;
-- `3105218633a272a634c431b7ef26c84f9b34f226` — CI exercises route-gated FBCNN execution boundary.
-
-This does **not** yet make FBCNN production-qualified. Production routing remains fail-closed until the Phase02 quality/resource evidence passes.
+Official source behavior: `main_test_fbcnn_color.py` JPEG-compresses the source image and feeds that compressed image directly to `model(img_L)`; it does not affine-align/resample the JPEG image before FBCNN. The official network predicts QF internally and returns restored pixels plus predicted QF.
 
 ---
 
-## 6. Frozen Phase02 validation contract
+## 4. Frozen Phase02 contract
 
-Required validation matrix: at least `8 identities x 6 profiles = 48 cases`.
+Matrix: `8 identities x 6 profiles = 48 cases` minimum.
 
 Profiles:
 1. `jpeg-qf10-block-heavy`;
@@ -118,86 +83,114 @@ Profiles:
 5. `social-resize-jpeg-qf20`;
 6. `mosquito-edges-qf12`.
 
-Metrics/gates:
-- PSNR before/after;
-- SSIM before/after;
-- LPIPS AlexNet before/after;
-- real SFace identity;
-- process RSS;
-- system RAM fraction;
-- process CPU fraction;
-- exact source/checkpoint identity;
-- wrong-person final pixels = 0;
-- provenance violations = 0;
-- aggregate profile PASS only when frozen metric/disposition rules pass.
+Frozen evidence includes PSNR, SSIM, LPIPS AlexNet, real SFace identity, RAM, CPU, source/checkpoint identity, wrong-person pixels and provenance.
 
 Resource contract: <=80% system RAM, <=80% logical CPU observation, one heavy model at a time.
 
+No thresholds were changed after observing run 6.
+
 ---
 
-## 7. Phase02 workflow history and root causes
+## 5. Workflow history
 
-### Run `33540310269` — FAILED harness attempt
+### Run `33540310269`
 
-Candidate: `0342a2c3fa831d82073b484e8755a4aee778fcd6`.
+**HARNESS_FAIL**: 48/48 rows errored before useful quality metrics. Not a model-quality result.
 
-Upstream/checkpoint bootstrap succeeded. Targeted tests succeeded. All 48 rows ended as errors before useful profile metrics. Classification: **HARNESS_FAILURE, NOT FBCNN_QUALITY_FAILURE**.
+### Run `33543534673`
 
-### Run `33543534673` — CANCELLED by 120-minute job timeout
+**CANCELLED / 120-minute timeout** after one completed case. Root cause later identified as subprocess stdout/stderr pipe deadlock.
 
-Candidate: `3105218633a272a634c431b7ef26c84f9b34f226`.
+### Commit `d0f14d7fa1303a35b1fe3b284f587c86986dafa4`
 
-Pre-validation evidence:
-- Windows CPU environment installed successfully;
-- upstream registry verified;
-- `63 passed` targeted regression tests;
-- exact FBCNN source verified;
-- exact 287,755,111-byte checkpoint and SHA-256 verified.
+`fix(jpeg): prevent Windows validation pipe deadlock`
 
-The job entered real validation and was cancelled at the workflow 120-minute timeout. The uploaded artifact contained one completed case only: `eileen_collins/jpeg-qf10-block-heavy`.
+Child stdout/stderr moved from unconsumed `PIPE`s to per-case files. No model, threshold, dataset, profile or holdout change.
 
-Observed completed-case evidence:
-- model load: `1.3157447 s`;
-- measured 512 inference after warm-up: `12.1677914 s`;
-- peak process RSS: `1100.10546875 MB`;
-- peak observed system RAM fraction: `0.2383705636`;
-- effective processors: `3/4`;
-- SFace clean-vs-FBCNN: `0.5300669341` >= `0.363`;
-- wrong-person final pixels: `0`;
-- provenance violations: `0`;
-- QF10 case disposition: `ROLLBACK` because PSNR changed `25.4942508 -> 25.4893449` (`-0.0049059 dB`) although SSIM improved slightly.
+### Run `33770678754` — COMPLETE / FAIL
 
-This single case cannot qualify or disqualify the six-profile aggregate by itself.
+Candidate: `d0f14d7fa1303a35b1fe3b284f587c86986dafa4`  
+Artifact: `fbcnn-phase02-windows-6`, ID `9899983739`, ZIP SHA-256 `63c2a1fe6b5a0a220c6bbee64402a845508a53baeb4a63931244bed237bb2fc6`.
 
-### Root cause identified 2026-09-03
+Execution integrity:
+- exact candidate checkout PASS;
+- isolated Windows CPU environment PASS;
+- route/resource/upstream regressions `63/63 PASS`;
+- pinned official source PASS;
+- checkpoint bytes/hash PASS;
+- real validation completed `48/48` cases;
+- runtime error count `0`;
+- identities `8`;
+- wrong-person final pixels `0`;
+- provenance violations `0`.
 
-`research/run_fbcnn_windows_validation.py::_run_case` launched each vertical-slice child with `stdout=PIPE` and `stderr=PIPE`, then polled `process.poll()` without consuming either pipe until after process exit. A child can fill a Windows anonymous pipe and block on write while the parent waits for termination, creating a producer/consumer deadlock.
+Resource evidence:
+- max process RSS `1139.72265625 MB`;
+- max system RAM fraction `0.2611618668`;
+- observed peak process CPU fraction `0.882` (secondary unresolved resource-gate failure; >0.80).
 
-ROOT_CAUSE: **WINDOWS_SUBPROCESS_PIPE_DEADLOCK_IN_VALIDATION_HARNESS**
+Case decisions: `16 PASS / 32 ROLLBACK`. Every recorded case-level rollback was due to the frozen `psnr_improved` guard; identity/provenance guards did not cause those 32 rollbacks.
 
-### Correction
+Aggregate profile results from exact artifact:
 
-Technical commit: `d0f14d7fa1303a35b1fe3b284f587c86986dafa4` (`fix(jpeg): prevent Windows validation pipe deadlock`).
+| Profile | PSNR before -> after | SSIM before -> after | LPIPS before -> after | min SFace | PASS |
+|---|---:|---:|---:|---:|---|
+| QF10 block-heavy | 27.1581 -> 27.6082 | 0.80043 -> 0.80833 | 0.27697 -> 0.27299 | 0.52991 | FALSE |
+| QF20 | 29.8388 -> 30.2117 | 0.85989 -> 0.86432 | 0.16336 -> 0.16880 | 0.80728 | FALSE |
+| QF40 | 32.5850 -> 32.8651 | 0.90813 -> 0.91021 | 0.09723 -> 0.10307 | 0.83307 | FALSE |
+| Double JPEG 40->15 | 28.4559 -> 28.8301 | 0.83316 -> 0.83856 | 0.21940 -> 0.22222 | 0.68445 | FALSE |
+| Social resize + QF20 | 26.9912 -> 27.1124 | 0.79982 -> 0.80192 | 0.29180 -> 0.30134 | 0.37434 | FALSE |
+| Mosquito QF12 | 27.9413 -> 28.3746 | 0.82222 -> 0.82918 | 0.24483 -> 0.24488 | 0.56698 | FALSE |
 
-Correction:
-- child stdout/stderr now write directly to per-case log files;
-- parent continues CPU sampling while polling;
-- logs remain available for failure diagnostics;
-- FBCNN implementation, checkpoint, images, profile order, thresholds, metrics and routing rules were not changed.
+Interpretation: PSNR and SSIM improved on average for all six profiles; LPIPS improved only for QF10 and worsened for the other five. The frozen validation gate therefore correctly remained FALSE.
 
-New exact-head workflow: `33770678754`, run number `6`, **IN_PROGRESS** at this ledger update.
+---
+
+## 6. First evidenced model-path root cause from run 6
+
+ROOT_CAUSE: **FBCNN_WAS_EXECUTED_AFTER_AFFINE_ALIGNMENT_RESAMPLING**
+
+The Phase02 vertical slice used this order:
+
+`JPEG degradation -> YuNet landmarks -> affine 512 alignment/resampling -> FBCNN`
+
+This is technically mismatched to a JPEG artifact specialist. Affine interpolation alters JPEG block boundaries, ringing and local compression structure before the model sees them. The official FBCNN evaluation path instead feeds JPEG-compressed pixels directly into the model.
+
+Supporting run-6 evidence: for nominal QF10 cases, FBCNN's predicted input QF averaged approximately `74.33` and reached approximately `96.35`, showing that several aligned/resampled inputs no longer resembled the severe JPEG degradation presented before alignment. Similar inflation occurred across the other low-QF profiles.
+
+This is a pipeline-order defect, not a frozen-threshold problem.
+
+---
+
+## 7. Correction after run 6
+
+Technical commit: `50e5281c730535b416b6188c5d6bffc248652571`  
+Commit message: `fix(jpeg): restore before affine alignment`  
+Changed file: `research/run_fbcnn_vertical_slice.py`.
+
+New model order:
+
+`JPEG degradation -> FBCNN on original damaged pixel grid -> affine alignment only for comparable metrics`
+
+The same landmarks/metric convention remain for clean/degraded/restored comparison. FBCNN source revision, checkpoint, damage profiles, metric thresholds, SFace threshold, LPIPS implementation, reference set and holdout policy were not changed.
+
+New workflow: run `33777869802`, run number `7`, candidate `50e5281c730535b416b6188c5d6bffc248652571`, **QUEUED/RUNNING** at this ledger update.
+
+Secondary known issue intentionally not bundled into this correction: run 6 observed CPU peak `0.882` versus frozen limit `0.80`. It remains a separate gate to diagnose only after classifying the pre-alignment correction.
 
 ---
 
 ## 8. Current quality scoreboard
 
-FBCNN historical DEVELOPMENT matrix: `6/6 PASS` on one development identity, run `32674085939`; not production qualification.
+FBCNN historical one-identity development matrix: `6/6 PASS`; insufficient for production qualification.
 
-FBCNN Phase02 Windows multi-identity validation: **NOT_VERIFIED / RUNNING**.
+FBCNN Phase02 run 6: **FAIL** on frozen multi-identity quality/resource gate.
+
+FBCNN Phase02 run 7: **IN_PROGRESS / NOT_VERIFIED**.
 
 DamageMask small U-Net: **REJECTED**, macro-F1 `0.173198`, macro-IoU `0.113028`.
 
-LR-ASPP external DEVELOPMENT: F1 `0.716639`, IoU `0.579849`; subgroup gaps remain; **NOT_PRODUCTION_QUALIFIED**.
+LR-ASPP external DEVELOPMENT: F1 `0.716639`, IoU `0.579849`; **NOT_PRODUCTION_QUALIFIED**.
 
 TARGET95_ELIGIBLE_SUCCESS: **NOT_MEASURED / NOT_ACHIEVED**  
 COVERAGE: **NOT_FROZEN FOR FINAL TARGET95**  
@@ -205,84 +198,34 @@ TOTAL_SUCCESS: **NOT_MEASURED / NOT_ACHIEVED**
 
 ---
 
-## 9. Safety and provenance invariants
+## 9. Safety invariants
 
-Generated/derived region classes used by the project must remain explicit. Final release reporting must distinguish:
-- ORIGINAL_PRESERVED;
-- REFERENCE_DERIVED;
-- GEOMETRICALLY_INFERRED;
-- GENERATED_MODEL_INFERRED;
-- ABSTAINED.
-
-Current mandatory invariants:
-- wrong-person final pixels = `0`;
-- provenance violations = `0`;
-- no healthy-pixel modification outside admitted policy;
-- no silent fallback presented under another model name;
+- wrong-person final pixels must remain `0`;
+- provenance violations must remain `0`;
 - no generated pixel represented as original;
-- no hidden abstention used to inflate success.
+- no hidden fallback/model-name mismatch;
+- no V3/V4 reuse;
+- no hidden abstention used to inflate success;
+- generated pixels remain `GENERATED_MODEL_INFERRED` unless evidence class explicitly says otherwise.
 
 ---
 
-## 10. Deferred phases — do not execute before Phase02 closes
+## 10. Deferred phases
 
-PHASE_03: wire PaperQualityRuntime into the installed production path.  
-PHASE_04: production damage-mask system.  
-PHASE_05: geometry/component bank.  
-PHASE_06: MAIN + 0–9 reference matrix.  
-PHASE_07: specialist model competition.  
-PHASE_08: target-computer optimization and physical-hardware evidence.  
-PHASE_09: 13-block UI telemetry.  
-PHASE_10: targeted training/adaptation.  
-PHASE_11: frozen Target95 metrics.  
-PHASE_12: single offline installer.  
-PHASE_13: release acceptance.  
-PHASE_14: one independent V5 holdout execution after candidate freeze.
+PHASE_03 PaperQualityRuntime wiring; PHASE_04 DamageMask; PHASE_05 geometry/component bank; PHASE_06 MAIN+0–9; PHASE_07 model competition; PHASE_08 target hardware; PHASE_09 UI; PHASE_10 training; PHASE_11 Target95; PHASE_12 installer; PHASE_13 release tests; PHASE_14 independent V5.
+
+Do not execute them before Phase02 closes.
 
 ---
 
-## 11. Target hardware and release state
-
-Target: HP EliteBook 1030 G3 class machine, Windows, 16 GB RAM; exact physical CPU/GPU still requires detection on the actual device.
+## 11. Release state
 
 TARGET_HARDWARE_TEST: **NOT_RUN**  
 INSTALLER_STATUS: **PARTIAL / NOT_FINAL_PAPER_QUALITY_INSTALLER**  
 RELEASE_READY: **FALSE**  
+PAPER_QUALITY_MODE_READY: **FALSE**  
+TARGET_HARDWARE_READY: **FALSE**  
+QUALITY_TARGET_ACHIEVED: **FALSE**  
 PROJECT_FINISHED: **FALSE**
 
-A GitHub Windows runner is validation evidence, not physical EliteBook evidence.
-
----
-
-## 12. Push journal since preserved historical ledger
-
-### PUSH-20260901-PHASE02-ROUTING
-
-Sequence ending at `3105218633a272a634c431b7ef26c84f9b34f226` added Windows resource handling, route-gated FBCNN model execution and tests. The exact-head run `33543534673` reached real model execution but deadlocked after the first completed case and later hit the workflow timeout. No threshold, dataset or holdout was changed.
-
-### PUSH-20260903-001
-
-Previous technical HEAD: `3105218633a272a634c431b7ef26c84f9b34f226`.  
-New technical HEAD: `d0f14d7fa1303a35b1fe3b284f587c86986dafa4`.  
-Tree: `3fdf8b8f8661c603bb00ee1f459abb6e99fef3a4`.  
-Commit: `fix(jpeg): prevent Windows validation pipe deadlock`.  
-Changed file: `research/run_fbcnn_windows_validation.py`.  
-Cause: child-process stdout/stderr pipe deadlock under parent polling.  
-Correction: file-backed per-case stdout/stderr logs.  
-Automatic workflow: `33770678754`, run #6.  
-Initial workflow status: IN_PROGRESS.  
-No model promotion. No threshold change. No V3/V4 access. No V5 creation.
-
----
-
-## 13. Session continuity rule
-
-Every session must:
-1. read this canonical ledger;
-2. reconcile live branch/PR/workflow state;
-3. continue the current ACTIVE_PHASE;
-4. update this ledger after every significant technical push;
-5. preserve exact historical evidence before any ledger compaction;
-6. never infer PASS/QUALIFIED/RELEASE_READY/Target95/EliteBook/PROJECT_FINISHED without exact evidence.
-
-If `PROJECT_FINISHED=FALSE` and there is no genuine external HARD_BLOCKER, execute `EXACT_NEXT_ACTION` rather than writing another plan.
+A GitHub Windows runner is not physical EliteBook evidence.
