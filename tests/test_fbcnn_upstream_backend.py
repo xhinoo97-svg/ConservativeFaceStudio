@@ -10,9 +10,11 @@ import pytest
 from app.face_restorer_adapter import RestorationContext
 from app.fbcnn_upstream_backend import (
     APPROVED_CHECKPOINT_SHA256,
+    CONSERVATIVE_RESTORATION_FRACTION,
     FBCNNUpstreamBackend,
     OFFICIAL_REPOSITORY,
     PINNED_REVISION,
+    _conservative_blend,
     _damage_route_allowed,
     _load_checkout_metadata,
 )
@@ -100,6 +102,21 @@ def test_fbcnn_accepts_only_jpeg_or_explicit_recompression_routes() -> None:
     assert not _damage_route_allowed(RestorationContext(damage_class="healthy", severity="none"))
 
 
+def test_fbcnn_conservative_blend_has_fixed_identity_preserving_authority() -> None:
+    assert CONSERVATIVE_RESTORATION_FRACTION == pytest.approx(0.25)
+    original = np.full((4, 5, 3), 20, dtype=np.uint8)
+    restored = np.full((4, 5, 3), 220, dtype=np.uint8)
+    blended = _conservative_blend(original, restored)
+    assert blended.dtype == np.uint8
+    assert blended.shape == original.shape
+    assert np.all(blended == 70)
+
+    with pytest.raises(ValueError, match="equal image shapes"):
+        _conservative_blend(original, restored[:2])
+    with pytest.raises(ValueError, match="uint8"):
+        _conservative_blend(original.astype(np.float32), restored)
+
+
 def test_fbcnn_adapter_is_thin_and_binds_candidate_to_verified_upstream_artifacts() -> None:
     source = Path(__file__).resolve().parents[1] / "app" / "fbcnn_upstream_backend.py"
     text = source.read_text(encoding="utf-8")
@@ -109,6 +126,7 @@ def test_fbcnn_adapter_is_thin_and_binds_candidate_to_verified_upstream_artifact
     assert "upstream_repository=OFFICIAL_REPOSITORY" in text
     assert "upstream_revision=PINNED_REVISION" in text
     assert "checkpoint_sha256=self._checkpoint_sha256" in text
+    assert "conservative_restoration_fraction" in text
 
 
 def test_checkpoint_fixture_helper_has_real_sha_semantics(tmp_path: Path) -> None:
