@@ -23,6 +23,7 @@ from app.pretrained_semantic_handlers import install_pretrained_semantic_handler
 from app.pretrained_values import RESTORATION_SAFETY_DEFAULTS
 from app.primary_anchor_policy import restore_imported_primary_for_same_canvas
 from app.same_canvas_repair_runtime import install_same_canvas_repair_runtime
+from app.installed_paper_quality_runtime import InstalledPaperQualityRuntime
 from app.strict_execution import StrictBlockExecutor
 from app.validation import GuardrailDecision, evaluate_identity_guardrail
 
@@ -74,9 +75,20 @@ class AutomaticPipelineRunner:
         "component_alignment_diagnostics",
         "restoration_case",
         "restoration_case_assessment",
+        "paper_quality_runtime_wired",
+        "paper_quality_trace",
+        "paper_quality_damage_route",
+        "paper_quality_person_identity_profile",
+        "paper_quality_component_selections",
+        "paper_quality_runtime_report",
     )
 
-    def __init__(self, workspace: Workspace) -> None:
+    def __init__(
+        self,
+        workspace: Workspace,
+        *,
+        paper_quality_runtime: InstalledPaperQualityRuntime | None = None,
+    ) -> None:
         core_paths = workspace.metadata.get("core_model_paths")
         model_paths = core_paths if isinstance(core_paths, dict) else {}
         observed_sources = [workspace.primary.copy(), *[item.copy() for item in workspace.references]]
@@ -94,10 +106,35 @@ class AutomaticPipelineRunner:
         install_conservative_observed_runtime(self.executor)
         install_same_canvas_repair_runtime(self.executor)
         install_observed_target_repair_runtime(self.executor)
+        self._paper_quality_enabled = workspace.metadata.get("paper_quality_enabled") is True
+        self._paper_quality_runtime = (
+            paper_quality_runtime
+            if paper_quality_runtime is not None
+            else InstalledPaperQualityRuntime.from_model_paths(model_paths)
+        )
+        if self._paper_quality_enabled:
+            # Install last: Paper Quality is the authoritative Block-8 route when the
+            # explicit feature flag is enabled. The legacy handler is not used as a
+            # silent fallback if advanced evidence is unavailable.
+            self.executor._handlers[BlockKind.INPAINT] = self._paper_quality_inpaint
+            workspace.metadata["paper_quality_runtime_wired"] = True
+        else:
+            workspace.metadata["paper_quality_runtime_wired"] = False
         self.on_progress: Callable[[int, str], None] | None = None
         self.on_block_completed: Callable[[int, str, str, np.ndarray, dict[str, Any]], None] | None = None
         self.should_cancel: Callable[[], bool] | None = None
         self._original_anchor = observed_sources[0].copy()
+
+    def _paper_quality_inpaint(self, block, parameters: dict[str, Any]) -> ExecutionResult:
+        del parameters
+        installed = self._paper_quality_runtime.run(
+            self.executor.workspace,
+            immutable_main=self._original_anchor,
+        )
+        self.executor.workspace.provenance_map = installed.provenance_map.copy()
+        details = dict(installed.details)
+        details["status"] = str(installed.runtime_result.decision)
+        return ExecutionResult(block.key, installed.image.copy(), details)
 
     def _run_preflight_after_import(self) -> None:
         """Run analysis/restoration only after Block 01 has recorded immutable MAIN."""

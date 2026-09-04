@@ -1,4 +1,5 @@
 {
   "app_update_manifest_url": "https://github.com/xhinoo97-svg/ConservativeFaceStudio/releases/latest/download/update-manifest.json",
-  "hardware_mode": "balanced"
+  "hardware_mode": "balanced",
+  "paper_quality_enabled": false
 }

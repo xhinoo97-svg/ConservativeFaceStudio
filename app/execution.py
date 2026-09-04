@@ -95,11 +95,14 @@ class BlockExecutor:
         if not np.array_equal(before, result.image):
             self.history.push(result.image, block.key)
         details = dict(result.details)
+        requested_status = str(details.get("status", "PASS")).upper()
+        if requested_status not in {"PASS", "ABSTAIN", "ROLLBACK", "SKIPPED", "UNRESOLVED"}:
+            requested_status = "PASS"
         details.update({
             "started_at": started_at,
             "completed_at": datetime.now(timezone.utc).isoformat(),
             "duration_ms": round((perf_counter() - started_clock) * 1000.0, 3),
-            "status": "PASS",
+            "status": requested_status,
         })
         operation = OperationRecord(block=block.key, parameters={**parameters, **details}, conservative=not block.generative)
         self.project.operations.append(operation)

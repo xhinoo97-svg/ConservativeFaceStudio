@@ -16,6 +16,7 @@ DEFAULT_UPDATE_MANIFEST_URL = (
 class RuntimeSettings:
     hardware_mode: str = "balanced"
     app_update_manifest_url: str = DEFAULT_UPDATE_MANIFEST_URL
+    paper_quality_enabled: bool = False
 
 
 def _read(path: Path) -> dict[str, object]:
@@ -40,4 +41,7 @@ def load_runtime_settings(
     url = str(payload.get("app_update_manifest_url", DEFAULT_UPDATE_MANIFEST_URL)).strip()
     if not url.startswith("https://"):
         url = DEFAULT_UPDATE_MANIFEST_URL
-    return RuntimeSettings(mode, url)
+    paper_quality = payload.get("paper_quality_enabled", False)
+    if not isinstance(paper_quality, bool):
+        paper_quality = False
+    return RuntimeSettings(mode, url, paper_quality)

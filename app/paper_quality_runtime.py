@@ -42,6 +42,8 @@ class PaperQualityRuntimeResult:
     provenance_violations: int | None
     outside_authority_changed_pixels: int
     candidate_selection: CandidateSelectionResult | None
+    candidate_selector_invoked: bool
+    component_fusion_invoked: bool
 
     def report(self) -> dict[str, object]:
         selection = self.candidate_selection
@@ -57,6 +59,8 @@ class PaperQualityRuntimeResult:
             "wrong_person_final_pixels": self.wrong_person_final_pixels,
             "provenance_violations": self.provenance_violations,
             "outside_authority_changed_pixels": self.outside_authority_changed_pixels,
+            "candidate_selector_invoked": self.candidate_selector_invoked,
+            "component_fusion_invoked": self.component_fusion_invoked,
             "candidate_selection": (
                 None
                 if selection is None
@@ -88,6 +92,8 @@ def _empty_result(
     wrong_person_final_pixels: int | None = None,
     provenance_violations: int | None = None,
     candidate_selection: CandidateSelectionResult | None = None,
+    candidate_selector_invoked: bool = False,
+    component_fusion_invoked: bool = False,
 ) -> PaperQualityRuntimeResult:
     shape = main.shape[:2]
     unresolved = requested.astype(np.uint8) * 255
@@ -110,6 +116,8 @@ def _empty_result(
         provenance_violations=provenance_violations,
         outside_authority_changed_pixels=0,
         candidate_selection=candidate_selection,
+        candidate_selector_invoked=bool(candidate_selector_invoked),
+        component_fusion_invoked=bool(component_fusion_invoked),
     )
 
 
@@ -309,6 +317,13 @@ def run_paper_quality_route(
         evidence = authorized_evidence
 
     selection: CandidateSelectionResult | None = None
+    selector_invoked = False
+    if not placements and selection_policy is not None:
+        # The installed route still invokes the calibrated selector for an empty
+        # candidate set. This produces explicit ``no_candidates`` telemetry instead of
+        # making the selector an unreachable library until a generator is activated.
+        selection = select_candidate((), (), selection_policy)
+        selector_invoked = True
     if placements:
         if selection_policy is None:
             for placement in placements:
@@ -330,6 +345,7 @@ def run_paper_quality_route(
                 evidence,
                 selection_policy,
             )
+            selector_invoked = True
 
     authority = requested.astype(np.uint8) * 255
     try:
@@ -352,6 +368,8 @@ def run_paper_quality_route(
             wrong_person_final_pixels=0,
             provenance_violations=1,
             candidate_selection=selection,
+            candidate_selector_invoked=selector_invoked,
+            component_fusion_invoked=True,
         )
 
     changed = np.any(fused.image != base, axis=2)
@@ -366,6 +384,8 @@ def run_paper_quality_route(
             wrong_person_final_pixels=0,
             provenance_violations=1,
             candidate_selection=selection,
+            candidate_selector_invoked=selector_invoked,
+            component_fusion_invoked=True,
         )
     repaired = (fused.provenance_class_map != 0) & requested
     unresolved = requested & ~repaired
@@ -379,7 +399,7 @@ def run_paper_quality_route(
         reason = route_rejections[0]
     elif placements and selection_policy is None:
         reason = "calibrated_selection_policy_missing"
-    elif selection is not None and selection.winner_index is None:
+    elif has_generated_proposal and selection is not None and selection.winner_index is None:
         reason = selection.reason
     else:
         reason = "no_qualified_repair_evidence"
@@ -402,4 +422,6 @@ def run_paper_quality_route(
         provenance_violations=0,
         outside_authority_changed_pixels=0,
         candidate_selection=selection,
+        candidate_selector_invoked=selector_invoked,
+        component_fusion_invoked=True,
     )

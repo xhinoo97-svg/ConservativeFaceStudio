@@ -11,6 +11,7 @@ from app.activity import RestorationActivityLock
 from app.execution import Workspace
 from app.hardware import apply_hardware_policy, detect_hardware_policy, detect_hardware_profile
 from app.model_registry import sha256_path
+from app.installed_paper_quality_runtime import InstalledPaperQualityRuntime
 from app.paths import user_data_root
 from app.production_models import resolve_local_production_models
 from app.progress_timeline import (
@@ -31,7 +32,14 @@ class PipelineWorker(QObject):
     cancelled = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, workspace: Workspace, output: Path, upscale: int = 1) -> None:
+    def __init__(
+        self,
+        workspace: Workspace,
+        output: Path,
+        upscale: int = 1,
+        *,
+        paper_quality_runtime: InstalledPaperQualityRuntime | None = None,
+    ) -> None:
         super().__init__()
         self.workspace = workspace
         self.output = Path(output)
@@ -44,6 +52,7 @@ class PipelineWorker(QObject):
         self._verified_models: dict[str, dict[str, str]] = {}
         self._active_block_index: int | None = None
         self._cancel_event = Event()
+        self._paper_quality_runtime = paper_quality_runtime
 
     def request_cancel(self) -> None:
         """Thread-safe request; the runner observes it at the next block boundary."""
@@ -206,6 +215,7 @@ class PipelineWorker(QObject):
         try:
             with RestorationActivityLock():
                 settings = load_runtime_settings()
+                self.workspace.metadata["paper_quality_enabled"] = settings.paper_quality_enabled
                 policy = detect_hardware_policy(settings.hardware_mode)
                 apply_hardware_policy(policy)
                 self.workspace.metadata["hardware_policy"] = policy.to_dict()
@@ -245,7 +255,10 @@ class PipelineWorker(QObject):
                 acceleration = "Accelerazione disponibile" if profile.acceleration_available else "Modalità CPU sicura"
                 self.progress.emit(0, f"{acceleration}: {profile.profile_class}")
 
-                runner = AutomaticPipelineRunner(self.workspace)
+                runner = AutomaticPipelineRunner(
+                    self.workspace,
+                    paper_quality_runtime=self._paper_quality_runtime,
+                )
                 runner.on_progress = self._runner_progress
                 runner.on_block_completed = self._runner_block_completed
                 runner.should_cancel = self._cancel_event.is_set

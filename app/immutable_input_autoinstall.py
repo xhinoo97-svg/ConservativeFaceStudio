@@ -20,14 +20,14 @@ def install_immutable_input_policy() -> None:
     strict_init = StrictBlockExecutor.__init__
 
     @wraps(automatic_init)
-    def automatic_with_immutable_sources(self, workspace) -> None:
+    def automatic_with_immutable_sources(self, workspace, **kwargs) -> None:
         store = ensure_immutable_input_store(workspace)
         workspace.metadata["immutable_input_policy"] = {
             "captured_before_preflight": True,
             "source_count": 1 + len(store.references),
             "reference_count": len(store.references),
         }
-        automatic_init(self, workspace)
+        automatic_init(self, workspace, **kwargs)
 
     @wraps(strict_init)
     def strict_with_immutable_sources(self, workspace, *, history_limit: int = 12) -> None:
