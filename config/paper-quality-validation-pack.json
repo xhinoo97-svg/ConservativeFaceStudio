@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "scope": "VALIDATION_ONLY_NOT_FOR_DISTRIBUTION",
+  "models": [
+    {
+      "key": "lraspp_damage_mask",
+      "production_qualified": false,
+      "evidence_tier": "EXTERNAL_DEVELOPMENT_VALIDATION",
+      "official_repository": "pytorch/vision",
+      "pinned_revision": "c6f39778e636ec40a69bdbc74386818c57a65af3",
+      "onnx_relative_path": "models/paper-quality/damage-mask/damage_mask_lraspp_dev.onnx",
+      "onnx_size_bytes": 12879910,
+      "onnx_sha256": "708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9",
+      "source_checkpoint_sha256": "d510e6991cca582c3696b6b9132bf3fdb7948e240f4bf136440d8b75046910f4",
+      "code_license": "BSD-3-Clause",
+      "weight_terms_state": "NOT_EXPLICIT_UPSTREAM_RESEARCH_ONLY",
+      "training_run": 32675225785,
+      "artifact_id": 9502642834,
+      "artifact_name": "damage-mask-lraspp-dev-1",
+      "artifact_archive_sha256": "0bef114cfeed95ebcceb81ce8f5dfc43c3fdb37bca82c69a346ed6219c137a11",
+      "production_blockers": [
+        "domain_robustness_not_qualified",
+        "checkpoint_redistribution_license_not_explicit",
+        "real_photo_300_400_identity_benchmark_not_run",
+        "windows_and_physical_elitebook_not_measured"
+      ]
+    },
+    {
+      "key": "fbcnn",
+      "production_qualified": false,
+      "official_repository": "jiaxi-jiang/FBCNN",
+      "pinned_revision": "54d1831927506b3247e2d4d245abb4f4dab1a1cd",
+      "checkpoint_relative_path": "models/paper-quality/fbcnn/fbcnn_color.pth",
+      "checkpoint_size_bytes": 287755111,
+      "checkpoint_sha256": "8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8",
+      "upstream_relative_path": "models/paper-quality/fbcnn/upstream",
+      "runtime_requirement": "requirements-paper-quality-cpu.txt",
+      "code_license": "Apache-2.0",
+      "weight_terms_state": "FINAL_DISTRIBUTION_MANIFEST_PENDING",
+      "phase02_run": 33800982565,
+      "phase02_artifact_sha256": "79b2b0269f982e4ca16d0eb37264f9d5300c767d090127e1500c9feda6926085",
+      "production_blockers": [
+        "installed_offline_inference_not_verified",
+        "clean_windows_not_verified",
+        "physical_elitebook_not_verified",
+        "final_distribution_manifest_not_approved"
+      ]
+    }
+  ]
+}

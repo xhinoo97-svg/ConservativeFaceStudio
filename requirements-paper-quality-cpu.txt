@@ -1,0 +1,4 @@
+# Optional Phase03 validation runtime. This file is not part of the production
+# installer until offline packaging, license and physical-EliteBook gates pass.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.1.2+cpu; platform_system == "Windows"
