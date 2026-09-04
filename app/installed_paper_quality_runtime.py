@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
 import cv2
 import numpy as np
@@ -12,7 +12,19 @@ from app.component_bank import ComponentCoverage, build_component_bank
 from app.damage_mask_runtime import DamageMaskResult, DamageMaskRuntime
 from app.damage_router import DamageRoutePlan, plan_damage_route
 from app.execution import Workspace
-from app.model_qualification import ModelQualification
+from app.face_restorer_adapter import (
+    FaceRestorerAdapter,
+    FaceRestorerBackend,
+    RestorationContext,
+)
+from app.fbcnn_upstream_backend import (
+    APPROVED_CHECKPOINT_SHA256,
+    FBCNNUpstreamBackend,
+)
+from app.model_qualification import (
+    ModelQualification,
+    nonproduction_model_qualification,
+)
 from app.paper_quality_runtime import PaperQualityRuntimeResult, run_paper_quality_route
 from app.personalized_component_selector import select_personalized_components
 from app.personalized_reference_bank import (
@@ -28,6 +40,13 @@ from app.reference_first_route import (
 
 
 GENERATED_PROVENANCE_CODE = np.uint16(65535)
+FBCNN_PHASE02_VALIDATION_REFS = (
+    "github-run:33800982565",
+    "candidate-sha:666cdbcfbdeee8f20901ccd063a4427d739bd107",
+    "checkpoint-sha256:8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8",
+    "artifact-sha256:79b2b0269f982e4ca16d0eb37264f9d5300c767d090127e1500c9feda6926085",
+)
+ValidationBackendFactory = Callable[[], FaceRestorerBackend]
 
 
 @dataclass(frozen=True)
@@ -63,6 +82,21 @@ def _validated_bbox(value: object) -> tuple[int, int, int, int] | None:
     if bbox[2] <= 0 or bbox[3] <= 0:
         return None
     return bbox
+
+
+def _clamped_crop(
+    bbox: tuple[int, int, int, int],
+    shape: tuple[int, int],
+) -> tuple[int, int, int, int] | None:
+    height, width = shape
+    x, y, box_width, box_height = bbox
+    left = max(0, min(width, x))
+    top = max(0, min(height, y))
+    right = max(left, min(width, x + box_width))
+    bottom = max(top, min(height, y + box_height))
+    if right <= left or bottom <= top:
+        return None
+    return left, top, right - left, bottom - top
 
 
 def _normalised_sharpness(image: np.ndarray, support: np.ndarray) -> float:
@@ -230,25 +264,187 @@ class InstalledPaperQualityRuntime:
         damage_runtime: DamageMaskRuntime | None = None,
         model_qualifications: Mapping[str, ModelQualification] | None = None,
         selection_policy: CandidateSelectionPolicy | None = None,
+        validation_backend_factories: Mapping[str, ValidationBackendFactory] | None = None,
+        restorer_adapter: FaceRestorerAdapter | None = None,
         initialization_error: str | None = None,
+        backend_configuration_errors: tuple[str, ...] = (),
     ) -> None:
         self.damage_runtime = damage_runtime
         self.model_qualifications = dict(model_qualifications or {})
         self.selection_policy = selection_policy
+        self.validation_backend_factories = dict(validation_backend_factories or {})
+        self.restorer_adapter = restorer_adapter or FaceRestorerAdapter()
         self.initialization_error = initialization_error
+        self.backend_configuration_errors = tuple(str(item) for item in backend_configuration_errors)
 
     @classmethod
     def from_model_paths(
         cls,
         model_paths: Mapping[str, str | Path],
     ) -> "InstalledPaperQualityRuntime":
-        raw = model_paths.get("lraspp_damage_mask") or model_paths.get("damage_mask_lraspp")
-        if raw is None:
-            return cls(initialization_error="damage_mask_checkpoint_not_in_installed_model_pack")
+        damage_path = model_paths.get("lraspp_damage_mask") or model_paths.get("damage_mask_lraspp")
+        damage_runtime: DamageMaskRuntime | None = None
+        damage_error: str | None = None
+        if damage_path is None:
+            damage_error = "damage_mask_checkpoint_not_in_installed_model_pack"
+        else:
+            try:
+                damage_runtime = DamageMaskRuntime(damage_path)
+            except Exception as exc:
+                damage_error = (
+                    "damage_mask_runtime_initialization_failed:"
+                    f"{type(exc).__name__}:{exc}"
+                )
+
+        factories: dict[str, ValidationBackendFactory] = {}
+        qualifications: dict[str, ModelQualification] = {}
+        backend_errors: list[str] = []
+        fbcnn_checkpoint = model_paths.get("fbcnn")
+        fbcnn_root = model_paths.get("fbcnn_upstream_root")
+        if fbcnn_checkpoint is not None and fbcnn_root is not None:
+            checkpoint = Path(fbcnn_checkpoint).resolve()
+            upstream = Path(fbcnn_root).resolve()
+
+            def build_fbcnn() -> FaceRestorerBackend:
+                return FBCNNUpstreamBackend(
+                    upstream,
+                    checkpoint,
+                    expected_checkpoint_sha256=APPROVED_CHECKPOINT_SHA256,
+                )
+
+            factories["fbcnn"] = build_fbcnn
+            qualifications["fbcnn"] = nonproduction_model_qualification(
+                "fbcnn",
+                "VALIDATION",
+                FBCNN_PHASE02_VALIDATION_REFS,
+            )
+        elif fbcnn_checkpoint is not None or fbcnn_root is not None:
+            backend_errors.append("fbcnn_candidate_pack_incomplete")
+
+        return cls(
+            damage_runtime=damage_runtime,
+            model_qualifications=qualifications,
+            validation_backend_factories=factories,
+            initialization_error=damage_error,
+            backend_configuration_errors=tuple(backend_errors),
+        )
+
+    def _run_validation_backend(
+        self,
+        route: DamageRoutePlan,
+        base: np.ndarray,
+        bbox: tuple[int, int, int, int],
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[str], dict[str, object]]:
+        matching_keys = [
+            key
+            for key in route.candidate_model_keys
+            if key in self.validation_backend_factories
+        ]
+        if not matching_keys:
+            status = "NOT_CONFIGURED" if route.damage_kind == "JPEG_ARTIFACT" else "NOT_APPLICABLE"
+            return [], [], list(self.backend_configuration_errors), {
+                "stage": "model_execution",
+                "status": status,
+                "damage_kind": route.damage_kind,
+                "reason": (
+                    "matching_validation_backend_unavailable"
+                    if status == "NOT_CONFIGURED"
+                    else "route_does_not_select_a_validation_backend"
+                ),
+            }
+
+        key = matching_keys[0]
+        qualification = self.model_qualifications.get(key)
+        if qualification is None:
+            return [], [], [f"{key}:validation_qualification_missing"], {
+                "stage": "model_execution",
+                "status": "BLOCKED",
+                "damage_kind": route.damage_kind,
+                "reason": "validation_qualification_missing",
+            }
+        crop = _clamped_crop(bbox, base.shape[:2])
+        if crop is None:
+            return [], [], [f"{key}:face_crop_unavailable"], {
+                "stage": "model_execution",
+                "status": "BLOCKED",
+                "damage_kind": route.damage_kind,
+                "reason": "face_crop_unavailable",
+            }
+        x, y, width, height = crop
+        route_mask = np.asarray(route.mask)[y : y + height, x : x + width]
+        crop_mask_pixels = int(np.count_nonzero(route_mask > 0))
+        if crop_mask_pixels <= 0:
+            return [], [], [f"{key}:damage_outside_face_crop"], {
+                "stage": "model_execution",
+                "status": "BLOCKED",
+                "damage_kind": route.damage_kind,
+                "reason": "damage_outside_face_crop",
+            }
+
+        crop_plan = replace(
+            route,
+            mask=route_mask.astype(np.uint8, copy=True),
+            mask_pixels=crop_mask_pixels,
+        )
+        face = np.ascontiguousarray(base[y : y + height, x : x + width])
+        context = RestorationContext(
+            damage_class=route.damage_kind,
+            severity=("heavy" if route.confidence >= 0.85 else "medium"),
+            component="whole_face",
+            metadata={
+                "validation_only": True,
+                "jpeg_detected": route.damage_kind == "JPEG_ARTIFACT",
+                "source_damage_class": route.source_damage_class,
+            },
+        )
         try:
-            return cls(damage_runtime=DamageMaskRuntime(raw))
+            backend = self.validation_backend_factories[key]()
+            candidate = self.restorer_adapter.restore_for_validation_route(
+                crop_plan,
+                qualification,
+                backend,
+                face,
+                context,
+            )
+            changed = np.any(candidate.image != face, axis=2)
+            outside_route = changed & ~(route_mask > 0)
+            candidate_report = candidate.to_report()
+            candidate_report.update(
+                {
+                    "qualification_tier": qualification.evidence_tier,
+                    "production_qualified": qualification.production_qualified,
+                    "execution_scope": "INSTALLED_PATH_VALIDATION_SHADOW",
+                    "fused_to_final": False,
+                    "crop_bbox_xywh": [x, y, width, height],
+                    "candidate_changed_pixels": int(np.count_nonzero(changed)),
+                    "candidate_changed_outside_route_pixels": int(np.count_nonzero(outside_route)),
+                }
+            )
+            executed = {
+                "model_key": str(candidate.model_key),
+                "backend": str(candidate.backend),
+                "checkpoint_sha256": str(candidate.checkpoint_sha256 or ""),
+                "execution_scope": "INSTALLED_PATH_VALIDATION_SHADOW",
+                "fused_to_final": False,
+                "timing_seconds": dict(candidate.timing_seconds),
+                "resource": dict(candidate.resource),
+            }
+            return [executed], [candidate_report], list(self.backend_configuration_errors), {
+                "stage": "model_execution",
+                "status": "VALIDATION_EXECUTED_NOT_FUSED",
+                "damage_kind": route.damage_kind,
+                "model_key": str(candidate.model_key),
+                "checkpoint_sha256": str(candidate.checkpoint_sha256 or ""),
+            }
         except Exception as exc:
-            return cls(initialization_error=f"damage_mask_runtime_initialization_failed:{type(exc).__name__}:{exc}")
+            reason = f"{key}:{type(exc).__name__}:{exc}"
+            return [], [], [*self.backend_configuration_errors, reason], {
+                "stage": "model_execution",
+                "status": "ERROR_NOT_FUSED",
+                "damage_kind": route.damage_kind,
+                "model_key": key,
+                "reason": reason,
+            }
 
     def run(
         self,
@@ -310,6 +506,22 @@ class InstalledPaperQualityRuntime:
                 int(item.production_qualified) for item in self.model_qualifications.values()
             ),
         })
+        executed_models, validation_candidates, model_errors, model_trace = (
+            self._run_validation_backend(route, base, bbox)
+            if geometry_ok
+            else (
+                [],
+                [],
+                list(self.backend_configuration_errors),
+                {
+                    "stage": "model_execution",
+                    "status": "BLOCKED",
+                    "damage_kind": route.damage_kind,
+                    "reason": "paper_quality_geometry_unavailable",
+                },
+            )
+        )
+        trace.append(model_trace)
 
         reference_result: ReferenceFirstRepairResult | None = None
         profile_report: dict[str, object] | None = None
@@ -440,7 +652,10 @@ class InstalledPaperQualityRuntime:
             "provenance_violations": runtime_result.provenance_violations,
             "outside_authority_changed_pixels": runtime_result.outside_authority_changed_pixels,
             "untouched_pixels_preserved": runtime_result.outside_authority_changed_pixels == 0,
-            "models_actually_executed": [],
+            "models_actually_executed": executed_models,
+            "validation_model_candidates": validation_candidates,
+            "model_execution_errors": model_errors,
+            "validation_candidates_fused_to_final": False,
             "candidate_selection": runtime_result.report()["candidate_selection"],
         }
         workspace.metadata.update(
@@ -451,6 +666,9 @@ class InstalledPaperQualityRuntime:
                 "paper_quality_person_identity_profile": profile_report,
                 "paper_quality_component_selections": selections_report,
                 "paper_quality_runtime_report": runtime_result.report(),
+                "paper_quality_models_actually_executed": executed_models,
+                "paper_quality_validation_candidates": validation_candidates,
+                "paper_quality_model_execution_errors": model_errors,
                 "inpaint_target_mask": (
                     np.zeros(shape, dtype=np.uint8)
                     if damage is None

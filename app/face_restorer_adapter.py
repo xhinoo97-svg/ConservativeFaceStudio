@@ -17,6 +17,7 @@ from app.resource_budget import (
 
 if TYPE_CHECKING:
     from app.damage_router import DamageRoutePlan
+    from app.model_qualification import ModelQualification
 
 
 GENERATED_MODEL_INFERRED = 'GENERATED_MODEL_INFERRED'
@@ -124,6 +125,44 @@ class FaceRestorerAdapter:
         if str(context.damage_class).upper() != str(plan.damage_kind).upper():
             raise RouteExecutionBlocked(
                 f'route_context_mismatch:route={plan.damage_kind}:context={context.damage_class}'
+            )
+        return self.restore(backend, face_bgr, context)
+
+    def restore_for_validation_route(
+        self,
+        plan: DamageRoutePlan,
+        qualification: ModelQualification,
+        backend: FaceRestorerBackend,
+        face_bgr: np.ndarray,
+        context: RestorationContext,
+    ) -> RestorationCandidate:
+        """Execute an explicitly non-production candidate without granting pixel authority.
+
+        The caller may measure and report the returned candidate, but must not feed it
+        into final fusion. Production-qualified routes use ``restore_for_route``. This
+        separate boundary lets the installed application exercise a real backend while
+        keeping missing installer/target-hardware gates fail-closed.
+        """
+        if context.metadata.get("validation_only") is not True:
+            raise RouteExecutionBlocked("validation_route_requires_explicit_scope")
+        if qualification.production_qualified or qualification.evidence_tier != "VALIDATION":
+            raise RouteExecutionBlocked("validation_route_requires_validation_qualification")
+        if str(qualification.model_key) != str(backend.key):
+            raise RouteExecutionBlocked(
+                f"validation_qualification_model_mismatch:qualification="
+                f"{qualification.model_key}:backend={backend.key}"
+            )
+        if str(backend.key) not in tuple(str(item) for item in plan.candidate_model_keys):
+            raise RouteExecutionBlocked(
+                f"validation_route_model_not_allowed:route={plan.damage_kind}:backend={backend.key}"
+            )
+        if plan.qualified_for_execution:
+            raise RouteExecutionBlocked("production_route_must_use_production_boundary")
+        if int(plan.mask_pixels) <= 0:
+            raise RouteExecutionBlocked("route_has_no_admitted_damage_pixels")
+        if str(context.damage_class).upper() != str(plan.damage_kind).upper():
+            raise RouteExecutionBlocked(
+                f"route_context_mismatch:route={plan.damage_kind}:context={context.damage_class}"
             )
         return self.restore(backend, face_bgr, context)
 

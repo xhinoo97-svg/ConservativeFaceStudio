@@ -150,6 +150,19 @@ def test_model_attribution_requires_actual_success_evidence() -> None:
         8,
         {"generated_pixels": 4, "engine": "verified-reference-inpaint"},
     ) == ("opencv_lama_inpaint",)
+    assert PipelineWorker._actual_model_keys(
+        8,
+        {
+            "generated_pixels": 0,
+            "models_actually_executed": [
+                {"model_key": "fbcnn", "execution_scope": "INSTALLED_PATH_VALIDATION_SHADOW"}
+            ],
+        },
+    ) == ("fbcnn",)
+    assert PipelineWorker._actual_model_keys(
+        8,
+        {"generated_pixels": 8, "models_actually_executed": []},
+    ) == ()
 
 
 def test_worker_and_ui_are_wired_to_structured_runtime_evidence() -> None:
@@ -196,3 +209,30 @@ def test_completed_event_summarizes_decision_masks_and_provenance() -> None:
     assert evidence["mask_summary"]["wrong_person_final_pixels"] == 0
     assert evidence["provenance_summary"]["source_pixel_counts"] == [0, 0]
     assert evidence["model_keys"] == []
+
+
+def test_completed_event_reports_explicitly_executed_shadow_model_truthfully() -> None:
+    from app.worker import PipelineWorker
+
+    worker = PipelineWorker.__new__(PipelineWorker)
+    worker._verified_models = {}
+    evidence = worker._runtime_evidence(
+        8,
+        "ABSTAIN",
+        {
+            "decision": "ABSTAIN",
+            "reason": "no_production_qualified_model_for_route",
+            "generated_pixels": 0,
+            "models_actually_executed": [
+                {
+                    "model_key": "fbcnn",
+                    "checkpoint_sha256": "8" * 64,
+                    "execution_scope": "INSTALLED_PATH_VALIDATION_SHADOW",
+                }
+            ],
+        },
+    )
+
+    assert evidence["model_keys"] == ["fbcnn"]
+    assert evidence["checkpoint_sha256"] == ["8" * 64]
+    assert evidence["decision"] == "ABSTAIN"

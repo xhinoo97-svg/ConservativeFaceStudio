@@ -6,6 +6,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 import app.automatic as automatic_module
 import app.__main__ as desktop_entrypoint
@@ -18,6 +19,8 @@ from app.candidate_selector_v2 import (
 from app.damage_mask_runtime import DamageMaskRuntime
 from app.damage_taxonomy import CLASS_TO_INDEX, DAMAGE_CLASSES
 from app.execution import ExecutionResult, Workspace
+from app.face_restorer_adapter import RestorationCandidate
+from app.fbcnn_upstream_backend import APPROVED_CHECKPOINT_SHA256
 from app.installed_paper_quality_runtime import InstalledPaperQualityRuntime
 from app.model_qualification import nonproduction_model_qualification
 from app.pipeline import BlockKind
@@ -39,6 +42,55 @@ class _OpaqueBlockSession:
         logits[:, CLASS_TO_INDEX["HEALTHY"], :, :] = 8.0
         logits[:, CLASS_TO_INDEX["OPAQUE_BLOCK"], 22:31, 20:29] = 12.0
         return [logits]
+
+
+class _DamageSession:
+    def __init__(self, damage_class: str) -> None:
+        self.damage_class = damage_class
+
+    def get_inputs(self):
+        return [_Input()]
+
+    def run(self, output_names, input_feed):
+        del output_names, input_feed
+        logits = np.full((1, len(DAMAGE_CLASSES), 64, 64), -8.0, dtype=np.float32)
+        logits[:, CLASS_TO_INDEX["HEALTHY"], :, :] = 8.0
+        if self.damage_class != "HEALTHY":
+            logits[:, CLASS_TO_INDEX[self.damage_class], 18:45, 17:47] = 12.0
+        return [logits]
+
+
+class _ValidationFBCNN:
+    key = "fbcnn"
+    version = "synthetic-validation-backend"
+    backend_name = "synthetic-fbcnn-contract-backend"
+    estimated_load_bytes = 0
+
+    def __init__(self) -> None:
+        self.load_calls = 0
+        self.restore_calls = 0
+        self.unload_calls = 0
+
+    def load(self) -> None:
+        self.load_calls += 1
+
+    def restore(self, face_bgr, context):
+        self.restore_calls += 1
+        assert context.damage_class == "JPEG_ARTIFACT"
+        output = np.clip(face_bgr.astype(np.int16) + 4, 0, 255).astype(np.uint8)
+        return RestorationCandidate(
+            image=output,
+            model_key=self.key,
+            model_version=self.version,
+            backend=self.backend_name,
+            generated_mask=np.full(face_bgr.shape[:2], 255, dtype=np.uint8),
+            upstream_repository="jiaxi-jiang/FBCNN",
+            upstream_revision="54d1831927506b3247e2d4d245abb4f4dab1a1cd",
+            checkpoint_sha256=APPROVED_CHECKPOINT_SHA256,
+        )
+
+    def unload(self) -> None:
+        self.unload_calls += 1
 
 
 @dataclass
@@ -231,10 +283,11 @@ def test_real_worker_path_invokes_paper_quality_modules_and_preserves_authority(
 
     trace = {item["stage"]: item["status"] for item in block.details["paper_quality_trace"]}
     assert trace == {
-        "DamageMaskRuntime": "EXECUTED",
-        "damage_router": "EXECUTED",
-        "model_qualification": "EXECUTED",
-        "PersonalizedReferenceBank": "EXECUTED",
+            "DamageMaskRuntime": "EXECUTED",
+            "damage_router": "EXECUTED",
+            "model_qualification": "EXECUTED",
+            "model_execution": "NOT_APPLICABLE",
+            "PersonalizedReferenceBank": "EXECUTED",
         "component_selector": "EXECUTED",
         "reference_first_repair": "EXECUTED",
         "candidate_selector": "EXECUTED",
@@ -300,3 +353,88 @@ def test_malformed_geometry_abstains_without_invoking_damage_inference() -> None
     assert trace["component_aware_fusion"] == "NOT_EXECUTED"
     assert np.array_equal(result.image, main)
     assert np.count_nonzero(result.provenance_map) == 0
+
+
+def test_jpeg_route_executes_validation_fbcnn_but_never_fuses_nonproduction_pixels() -> None:
+    main, _, _ = _images()
+    backend = _ValidationFBCNN()
+    qualifications = {
+        "fbcnn": nonproduction_model_qualification(
+            "fbcnn",
+            "VALIDATION",
+            ("synthetic-installed-route-contract",),
+        )
+    }
+    runtime = InstalledPaperQualityRuntime(
+        damage_runtime=DamageMaskRuntime(
+            session=_DamageSession("JPEG_ARTIFACT"),
+            input_size=64,
+        ),
+        model_qualifications=qualifications,
+        validation_backend_factories={"fbcnn": lambda: backend},
+    )
+    landmarks = np.asarray(
+        [[36.0, 39.0], [60.0, 39.0], [48.0, 51.0], [40.0, 63.0], [56.0, 63.0]],
+        dtype=np.float32,
+    )
+    workspace = Workspace(
+        primary=main.copy(),
+        metadata={"primary_landmarks5": landmarks, "primary_bbox": (18, 14, 60, 68)},
+    )
+
+    result = runtime.run(workspace, immutable_main=main)
+
+    assert backend.load_calls == 1
+    assert backend.restore_calls == 1
+    assert backend.unload_calls == 1
+    assert result.details["damage_route"]["damage_kind"] == "JPEG_ARTIFACT"
+    assert result.details["validation_candidates_fused_to_final"] is False
+    assert result.details["generated_pixels"] == 0
+    assert np.array_equal(result.image, main)
+    executed = result.details["models_actually_executed"]
+    assert [item["model_key"] for item in executed] == ["fbcnn"]
+    assert executed[0]["checkpoint_sha256"] == APPROVED_CHECKPOINT_SHA256
+    model_trace = next(
+        item for item in result.details["paper_quality_trace"] if item["stage"] == "model_execution"
+    )
+    assert model_trace["status"] == "VALIDATION_EXECUTED_NOT_FUSED"
+
+
+@pytest.mark.parametrize("damage_class", ["BLUR", "STICKER", "HEALTHY"])
+def test_non_jpeg_routes_never_construct_or_execute_fbcnn(damage_class: str) -> None:
+    main, _, _ = _images()
+    constructed: list[_ValidationFBCNN] = []
+
+    def factory():
+        backend = _ValidationFBCNN()
+        constructed.append(backend)
+        return backend
+
+    runtime = InstalledPaperQualityRuntime(
+        damage_runtime=DamageMaskRuntime(
+            session=_DamageSession(damage_class),
+            input_size=64,
+        ),
+        model_qualifications={
+            "fbcnn": nonproduction_model_qualification(
+                "fbcnn",
+                "VALIDATION",
+                ("synthetic-installed-route-contract",),
+            )
+        },
+        validation_backend_factories={"fbcnn": factory},
+    )
+    landmarks = np.asarray(
+        [[36.0, 39.0], [60.0, 39.0], [48.0, 51.0], [40.0, 63.0], [56.0, 63.0]],
+        dtype=np.float32,
+    )
+    workspace = Workspace(
+        primary=main.copy(),
+        metadata={"primary_landmarks5": landmarks, "primary_bbox": (18, 14, 60, 68)},
+    )
+
+    result = runtime.run(workspace, immutable_main=main)
+
+    assert constructed == []
+    assert result.details["models_actually_executed"] == []
+    assert np.array_equal(result.image, main)

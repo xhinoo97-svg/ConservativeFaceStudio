@@ -24,6 +24,7 @@ APPROVED_CHECKPOINT_SHA256 = "8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d7
 CONSERVATIVE_RESTORATION_FRACTION = 0.25
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ALLOWED_DAMAGE_MARKERS = ("jpeg", "compression", "recompression")
+_NETWORK_SPATIAL_MULTIPLE = 8
 
 
 def _sha256(path: Path) -> str:
@@ -90,6 +91,38 @@ def _conservative_blend(original_bgr: np.ndarray, restored_bgr: np.ndarray) -> n
         + restored_bgr.astype(np.float32) * alpha
     )
     return np.uint8(np.rint(np.clip(mixed, 0.0, 255.0)))
+
+
+def _pad_for_network(
+    image_bgr: np.ndarray,
+    *,
+    multiple: int = _NETWORK_SPATIAL_MULTIPLE,
+) -> tuple[np.ndarray, tuple[int, int, int, int]]:
+    """Pad arbitrary detector crops for the official three-level FBCNN network.
+
+    Installed face detectors return pixel-exact boxes whose dimensions are not
+    necessarily divisible by eight. Padding is adapter preprocessing only: the
+    official network is unchanged and its output is cropped back to the exact input
+    canvas before any candidate can leave this boundary.
+    """
+    if image_bgr.ndim != 3 or image_bgr.shape[2] != 3:
+        raise ValueError("FBCNN network padding requires an HxWx3 image")
+    divisor = int(multiple)
+    if divisor <= 0:
+        raise ValueError("FBCNN network padding multiple must be positive")
+    height, width = image_bgr.shape[:2]
+    pad_bottom = (-height) % divisor
+    pad_right = (-width) % divisor
+    padding = (0, 0, int(pad_right), int(pad_bottom))
+    if pad_right == 0 and pad_bottom == 0:
+        return np.ascontiguousarray(image_bgr), padding
+    mode = "reflect" if height > 1 and width > 1 else "edge"
+    padded = np.pad(
+        image_bgr,
+        ((0, pad_bottom), (0, pad_right), (0, 0)),
+        mode=mode,
+    )
+    return np.ascontiguousarray(padded), padding
 
 
 class FBCNNUpstreamBackend:
@@ -192,7 +225,8 @@ class FBCNNUpstreamBackend:
             raise RuntimeError("FBCNN checkpoint identity was not verified during load")
 
         torch = self._torch
-        rgb = np.ascontiguousarray(face_bgr[:, :, ::-1])
+        network_input, padding = _pad_for_network(face_bgr)
+        rgb = np.ascontiguousarray(network_input[:, :, ::-1])
         tensor = (
             torch.from_numpy(rgb)
             .permute(2, 0, 1)
@@ -224,6 +258,13 @@ class FBCNNUpstreamBackend:
         )
         output_rgb = np.uint8(np.rint(output_rgb * 255.0))
         raw_output_bgr = np.ascontiguousarray(output_rgb[:, :, ::-1])
+        raw_output_bgr = np.ascontiguousarray(
+            raw_output_bgr[: face_bgr.shape[0], : face_bgr.shape[1]]
+        )
+        if raw_output_bgr.shape != face_bgr.shape:
+            raise RuntimeError(
+                f"FBCNN crop-back shape mismatch: {raw_output_bgr.shape} != {face_bgr.shape}"
+            )
         output_bgr = _conservative_blend(face_bgr, raw_output_bgr)
         changed = np.any(output_bgr != face_bgr, axis=2)
         generated_mask = np.zeros(face_bgr.shape[:2], dtype=np.uint8)
@@ -249,6 +290,11 @@ class FBCNNUpstreamBackend:
                 "checkpoint_sha256": self._checkpoint_sha256,
                 "architecture_reimplemented_by_cfs": False,
                 "cpu_only": True,
+                "network_spatial_multiple": _NETWORK_SPATIAL_MULTIPLE,
+                "input_padding_left": padding[0],
+                "input_padding_top": padding[1],
+                "input_padding_right": padding[2],
+                "input_padding_bottom": padding[3],
             },
         )
 

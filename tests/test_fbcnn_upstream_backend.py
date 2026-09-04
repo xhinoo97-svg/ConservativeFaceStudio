@@ -17,6 +17,7 @@ from app.fbcnn_upstream_backend import (
     _conservative_blend,
     _damage_route_allowed,
     _load_checkout_metadata,
+    _pad_for_network,
 )
 
 
@@ -115,6 +116,21 @@ def test_fbcnn_conservative_blend_has_fixed_identity_preserving_authority() -> N
         _conservative_blend(original, restored[:2])
     with pytest.raises(ValueError, match="uint8"):
         _conservative_blend(original.astype(np.float32), restored)
+
+
+def test_fbcnn_padding_preserves_detector_crop_and_records_exact_crop_back() -> None:
+    source = np.arange(65 * 70 * 3, dtype=np.uint8).reshape(65, 70, 3)
+    padded, padding = _pad_for_network(source)
+
+    assert padded.shape == (72, 72, 3)
+    assert padding == (0, 0, 2, 7)
+    assert np.array_equal(padded[:65, :70], source)
+    assert padded.flags.c_contiguous
+
+    exact = np.zeros((64, 80, 3), dtype=np.uint8)
+    unchanged, exact_padding = _pad_for_network(exact)
+    assert unchanged.shape == exact.shape
+    assert exact_padding == (0, 0, 0, 0)
 
 
 def test_fbcnn_adapter_is_thin_and_binds_candidate_to_verified_upstream_artifacts() -> None:

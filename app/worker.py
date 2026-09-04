@@ -12,6 +12,7 @@ from app.execution import Workspace
 from app.hardware import apply_hardware_policy, detect_hardware_policy, detect_hardware_profile
 from app.model_registry import sha256_path
 from app.installed_paper_quality_runtime import InstalledPaperQualityRuntime
+from app.paper_quality_model_pack import resolve_local_paper_quality_validation_models
 from app.paths import user_data_root
 from app.production_models import resolve_local_production_models
 from app.progress_timeline import (
@@ -80,6 +81,14 @@ class PipelineWorker(QObject):
     @staticmethod
     def _actual_model_keys(block_index: int, details: dict[str, object]) -> tuple[str, ...]:
         index = int(block_index)
+        explicit = details.get("models_actually_executed")
+        if isinstance(explicit, list):
+            keys = [
+                str(item["model_key"])
+                for item in explicit
+                if isinstance(item, dict) and str(item.get("model_key", "")).strip()
+            ]
+            return tuple(dict.fromkeys(keys))
         keys: list[str] = []
         if index == 2 and details.get("pretrained") is True:
             keys.append("opencv_nafnet_deblur")
@@ -106,6 +115,25 @@ class PipelineWorker(QObject):
     ) -> dict[str, object]:
         keys = self._actual_model_keys(block_index, details)
         models = [self._verified_models[key] for key in keys if key in self._verified_models]
+        explicit = details.get("models_actually_executed")
+        if isinstance(explicit, list):
+            explicit_by_key = {
+                str(item["model_key"]): item
+                for item in explicit
+                if isinstance(item, dict) and str(item.get("model_key", "")).strip()
+            }
+            present = {str(item["model_key"]) for item in models}
+            for key in keys:
+                item = explicit_by_key.get(key)
+                if item is None or key in present:
+                    continue
+                models.append(
+                    {
+                        "model_key": key,
+                        "checkpoint_path": str(item.get("checkpoint_path") or ""),
+                        "checkpoint_sha256": str(item.get("checkpoint_sha256") or ""),
+                    }
+                )
         engine = details.get("engine") or details.get("backend")
         if engine is None and details.get("face_parsing_pretrained") is True:
             engine = "resnet18-celebamaskhq-onnx"
@@ -231,10 +259,20 @@ class PipelineWorker(QObject):
                     raise RuntimeError(
                         f"Model pack offline incompleto o corrotto: {missing}. Usa Aggiornamenti per ripararlo."
                     )
+                runtime_paths = dict(bootstrap.paths)
+                if settings.paper_quality_enabled:
+                    validation_pack = resolve_local_paper_quality_validation_models()
+                    runtime_paths.update(validation_pack.paths)
+                    self.workspace.metadata["paper_quality_validation_pack"] = dict(
+                        validation_pack.report
+                    )
+                    self.workspace.metadata["paper_quality_validation_pack_errors"] = dict(
+                        validation_pack.errors
+                    )
                 self.workspace.metadata["core_model_paths"] = {
-                    key: str(path) for key, path in bootstrap.paths.items()
+                    key: str(path) for key, path in runtime_paths.items()
                 }
-                self._register_verified_models(dict(bootstrap.paths))
+                self._register_verified_models(runtime_paths)
                 self.workspace.metadata["core_model_errors"] = dict(bootstrap.errors)
                 self.workspace.metadata["core_models_ready"] = bootstrap.face_ready
                 self.workspace.metadata["pretrained_deblur_ready"] = bootstrap.deblur_ready
