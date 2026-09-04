@@ -16,6 +16,7 @@ def test_runtime_settings_merge_persistent_user_override(tmp_path: Path) -> None
 
     assert settings.hardware_mode == "performance"
     assert settings.app_update_manifest_url == DEFAULT_UPDATE_MANIFEST_URL
+    assert settings.paper_quality_enabled is False
 
 
 def test_runtime_settings_fail_closed_for_invalid_values(tmp_path: Path) -> None:
@@ -29,3 +30,14 @@ def test_runtime_settings_fail_closed_for_invalid_values(tmp_path: Path) -> None
 
     assert settings.hardware_mode == "balanced"
     assert settings.app_update_manifest_url.startswith("https://")
+    assert settings.paper_quality_enabled is False
+
+
+def test_paper_quality_feature_flag_requires_a_real_boolean(tmp_path: Path) -> None:
+    enabled = tmp_path / "enabled.json"
+    enabled.write_text(json.dumps({"paper_quality_enabled": True}), encoding="utf-8")
+    assert load_runtime_settings(enabled, tmp_path / "missing.json").paper_quality_enabled is True
+
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text(json.dumps({"paper_quality_enabled": "true"}), encoding="utf-8")
+    assert load_runtime_settings(invalid, tmp_path / "missing.json").paper_quality_enabled is False
