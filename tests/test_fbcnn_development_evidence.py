@@ -83,3 +83,12 @@ def test_development_evidence_cannot_promote_fbcNN_or_readiness() -> None:
         "artifact-sha256:365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842"
         in gate["evidence_refs"]
     )
+    assert "commit:666cdbcfbdeee8f20901ccd063a4427d739bd107" in gate["evidence_refs"]
+    assert "github-run:33800982565" in gate["evidence_refs"]
+    assert "artifact:9916130291" in gate["evidence_refs"]
+    assert (
+        "artifact-sha256:79b2b0269f982e4ca16d0eb37264f9d5300c767d090127e1500c9feda6926085"
+        in gate["evidence_refs"]
+    )
+    assert "48/48 cases" in gate["detail"]
+    assert "eight identities" in gate["detail"]

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_at_utc": "2026-08-24",
+  "captured_at_utc": "2026-09-04",
   "repository": "xhinoo97-svg/ConservativeFaceStudio",
   "branch": "integration/final-paper-quality-local",
   "frozen_policy": {
@@ -15,7 +15,7 @@
     "v5": "NOT_CREATED_NOT_AUTHORIZED"
   },
   "model_evidence_summary": {
-    "fbcnn": "DEVELOPMENT_6_OF_6_ONE_IDENTITY_NOT_PRODUCTION_QUALIFIED",
+    "fbcnn": "PHASE02_WINDOWS_48_OF_48_EIGHT_IDENTITIES_PASS_NOT_PRODUCTION_QUALIFIED",
     "damage_mask_small_unet": "STOPPED_MODEL_DATA_QUALITY_FAIL",
     "lraspp": "DEVELOPMENT_OVERALL_PASS_DOMAIN_AND_LICENSE_NOT_QUALIFIED",
     "gpen_gfpgan_codeformer_instantrestore": "NOT_PRODUCTION_QUALIFIED",
@@ -68,9 +68,13 @@
         "github-run:32674085939",
         "artifact:9502200502",
         "artifact-sha256:365251ee8b17dc31099569d328e52439fd6440e869f0ddbe16c4cb4116112842",
-        "config:fbcnn-development-evidence.json"
+        "config:fbcnn-development-evidence.json",
+        "commit:666cdbcfbdeee8f20901ccd063a4427d739bd107",
+        "github-run:33800982565",
+        "artifact:9916130291",
+        "artifact-sha256:79b2b0269f982e4ca16d0eb37264f9d5300c767d090127e1500c9feda6926085"
       ],
-      "detail": "FBCNN passed a one-identity DEVELOPMENT matrix; face restorers and reference inpainting are not production qualified."
+      "detail": "FBCNN passed Phase02 Windows CPU validation on 48/48 cases across eight identities and six JPEG profiles. It remains a candidate until the installed offline path and physical target hardware pass; face restorers and reference inpainting are not production qualified."
     },
     {
       "id": "checkpoint_licenses_compatible",

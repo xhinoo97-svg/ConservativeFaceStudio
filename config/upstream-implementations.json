@@ -88,9 +88,9 @@
         "sha256": "8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8",
         "terms_state": "NOT_SEPARATELY_VERIFIED"
       },
-      "current_cfs_evidence": "6/6 one-identity DEVELOPMENT compression profiles PASS; not production qualified",
+      "current_cfs_evidence": "Phase02 Windows CPU validation: 48/48 cases PASS across 8 identities and 6 JPEG profiles at candidate 666cdbcfbdeee8f20901ccd063a4427d739bd107; run 33800982565; not production qualified",
       "qualification_state": "CANDIDATE",
-      "blockers": ["checkpoint_terms_reverification", "multi_identity_validation", "Windows_target_hardware_validation", "offline_packaging"]
+      "blockers": ["checkpoint_terms_reverification", "installed_path_validation", "Windows_target_hardware_validation", "offline_packaging"]
     },
     {
       "key": "instantrestore",

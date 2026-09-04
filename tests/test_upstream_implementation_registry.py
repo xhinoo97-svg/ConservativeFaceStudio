@@ -31,6 +31,10 @@ def test_registry_enforces_official_upstream_reuse_policy() -> None:
         "sha256": "8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8",
         "terms_state": "NOT_SEPARATELY_VERIFIED",
     }
+    assert "48/48 cases PASS across 8 identities" in fbcnn["current_cfs_evidence"]
+    assert fbcnn["qualification_state"] == "CANDIDATE"
+    assert "multi_identity_validation" not in fbcnn["blockers"]
+    assert "installed_path_validation" in fbcnn["blockers"]
 
 
 def test_pinned_bootstrap_dry_run_uses_exact_official_revision(tmp_path: Path) -> None:
