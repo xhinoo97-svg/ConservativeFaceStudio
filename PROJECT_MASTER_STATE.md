@@ -4,14 +4,14 @@
 
 ## 0. Current canonical state
 
-Last ledger update: `2026-09-03T22:55Z`  
-Technical state verified at: `2026-09-03T22:55Z`  
+Last ledger update: `2026-09-04T16:05Z` \
+Technical state verified at: `2026-09-04T16:05Z` \
 Repository: `xhinoo97-svg/ConservativeFaceStudio`  
 Canonical state branch: `meta/project-state`  
 ACTIVE_PHASE: `PHASE_03_PAPER_QUALITY_RUNTIME_WIRING`  
 PHASE_02_JPEG_FBCNN_GATE: **PASS / CLOSED**  
 Last technical branch: `integration/final-paper-quality-local`  
-Last technical HEAD: `666cdbcfbdeee8f20901ccd063a4427d739bd107`  
+Last technical HEAD: `96b6aa4e858a7747bbf2ce52f51d81a9c10200e5` \
 Certified base: `main@2767513f95dde2d417e7c6f1faf2357149a1a32f`  
 PR #2: OPEN + DRAFT + NOT_MERGED; preserve as non-certified historical candidate.  
 Overall project status: `PARTIAL`
@@ -25,7 +25,7 @@ PROJECT_FINISHED: **FALSE**
 
 No force-push, no history deletion, no automatic merge, no V3/V4 rerun, no fabricated evidence.
 
-EXACT_NEXT_ACTION: on `integration/final-paper-quality-local`, wire `PaperQualityRuntime`, `DamageMaskRuntime`, reference-bank selection/fusion, identity rollback, provenance and telemetry into the real installed path `app.__main__.main -> MainWindow -> PipelineWorker -> AutomaticPipelineRunner` behind the existing feature flag, then add an end-to-end test that fails if those components exist but are not actually called. Do not promote PAPER_QUALITY_MODE_READY until the real installed path executes them with evidence.
+EXACT_NEXT_ACTION: on `integration/final-paper-quality-local`, connect the pinned FBCNN backend to the installed Paper Quality JPEG route only, verify the checkpoint SHA-256 before load, keep the fixed `0.25` correction authority, expose truthful executed-model telemetry and release model/session memory after Block 8; add negative tests proving that blur, sticker and healthy routes never load FBCNN. Do not promote FBCNN to production or enable Paper Quality by default.
 
 ---
 
@@ -35,9 +35,50 @@ Installed entry path remains:
 
 `app.__main__.main -> MainWindow -> PipelineWorker -> AutomaticPipelineRunner`
 
-At this ledger update, `AutomaticPipelineRunner` does **not** yet invoke `PaperQualityRuntime`.
+The feature-flagged path now reaches a fail-closed installed bridge:
 
-PAPER_QUALITY_RUNTIME_WIRED: **FALSE**
+`app.__main__.main -> MainWindow -> PipelineWorker -> AutomaticPipelineRunner -> InstalledPaperQualityRuntime`
+
+With `paper_quality_enabled=true`, Block 8 invokes `DamageMaskRuntime`, the damage router, model-qualification gate, `PersonalizedReferenceBank`, component selector, reference-first repair, calibrated candidate selector when configured, component-aware fusion, per-pixel provenance and the existing post-block identity rollback. The legacy Block-8 handler is not used as a silent fallback. The shipped default remains `paper_quality_enabled=false`.
+
+Local installed-worker E2E evidence on the exact published tree:
+
+- structural desktop-entrypoint link checked from `app.__main__.main` through `MainWindow.start_pipeline`;
+- dynamic execution starts at the real `PipelineWorker.run`, not at the Paper Quality helper;
+- all Phase03 modules listed above are observed in the execution trace;
+- identity guardrail executes and accepts only the verified observed-reference transfer;
+- healthy pixels changed outside damage authority: `0`;
+- wrong-person final pixels: `0`;
+- provenance violations: `0`;
+- generated pixels: `0`;
+- external pretrained models actually executed by this synthetic DEV E2E: `NONE`.
+
+The dynamic fixture uses a deterministic synthetic damage session and therefore proves wiring and authority semantics, not real DamageMask/FBCNN installed inference or product quality.
+
+PAPER_QUALITY_RUNTIME_WIRED: **TRUE / LOCAL_DEV_E2E**
+PAPER_QUALITY_MODE_READY: **FALSE**
+FBCNN_INSTALLED_PATH_STATUS: **NOT_WIRED / NOT_EXECUTED**
+
+Published technical commits:
+
+- `a73fa387b6d960d58ea41ca380e47c0716ce441f` — synchronize Phase02 FBCNN evidence without production promotion;
+- `6f80e917ee3e9baad374d9488177cf34b2f0c48b` — install the feature-flagged Paper Quality bridge;
+- `96b6aa4e858a7747bbf2ce52f51d81a9c10200e5` — prove the installed worker path and fail-closed behavior.
+
+Verification on the same final tree:
+
+- targeted Phase03 and dependent regressions: `118/118 PASS`;
+- complete suite: `626 PASS / 2 SKIPPED`;
+- Python static compilation and `git diff --check`: PASS;
+- new GitHub workflow runs at verification time: none observed;
+- Clean Windows, final installer and physical EliteBook: NOT_RUN.
+
+Phase03 root causes corrected:
+
+1. `AutomaticPipelineRunner` had no bridge to the already-developed Paper Quality modules.
+2. The immutable-input constructor wrapper accepted only the old positional signature and dropped the new runtime keyword argument; it now forwards keyword arguments and has a regression test.
+3. Block execution overwrote explicit `ABSTAIN`/`ROLLBACK` decisions with `PASS`; validated handler status is now preserved.
+4. Malformed bbox/support-mask metadata could escape as dimensionality/type errors; installed validation now fails closed.
 
 ---
 
@@ -175,7 +216,7 @@ TOTAL_SUCCESS: **NOT_MEASURED / NOT_ACHIEVED**
 ## 9. Phase sequence
 
 PHASE_02 FBCNN JPEG: **CLOSED / PASS**.  
-PHASE_03 PaperQualityRuntime wiring: **ACTIVE / NOT_VERIFIED**.  
+PHASE_03 PaperQualityRuntime wiring: **ACTIVE / LOCAL_DEV_E2E_PASS; REAL MODEL PATH PENDING**. \
 PHASE_04 DamageMask: DEFERRED.  
 PHASE_05 geometry/component bank: DEFERRED.  
 PHASE_06 MAIN+0–9: DEFERRED.  
@@ -201,3 +242,39 @@ QUALITY_TARGET_ACHIEVED: **FALSE**
 PROJECT_FINISHED: **FALSE**
 
 A GitHub Windows runner is not physical EliteBook evidence.
+
+---
+
+## 11. Phase03 cycle report — `2026-09-04T16:05Z`
+
+- CURRENT_BRANCH: `integration/final-paper-quality-local`
+- CURRENT_HEAD: `96b6aa4e858a7747bbf2ce52f51d81a9c10200e5`
+- LAST_PUSH: fast-forward `666cdbcfbdeee8f20901ccd063a4427d739bd107 -> 96b6aa4e858a7747bbf2ce52f51d81a9c10200e5`
+- ACTIVE_PHASE: `PHASE_03_PAPER_QUALITY_RUNTIME_WIRING`
+- FILES_CHANGED: `app/automatic.py`, `app/execution.py`, `app/immutable_input_autoinstall.py`, `app/installed_paper_quality_runtime.py`, `app/paper_quality_runtime.py`, `app/settings.py`, `app/worker.py`, `config/default-settings.json`, `config/paper-quality-readiness.json`, `config/upstream-implementations.json`, `tests/test_fbcnn_development_evidence.py`, `tests/test_installed_paper_quality_path.py`, `tests/test_settings.py`, `tests/test_upstream_implementation_registry.py`
+- WORKFLOW_RUNS: no new run observed for `96b6aa4e...` at verification time; Phase02 run `33800982565` remains the latest applicable remote model evidence
+- TARGETED_TESTS: `118/118 PASS`
+- FULL_SUITE_TESTS: `626 PASS / 2 SKIPPED`
+- INSTALLED_PATH_TEST: `LOCAL_DEV_E2E_PASS` from real `PipelineWorker.run`; synthetic damage session, no external model claim
+- ACTIVE_MODELS: `FBCNN=CANDIDATE_PHASE02_PASS`; `LR-ASPP=DEVELOPMENT_NOT_PRODUCTION`; `small U-Net=REJECTED`
+- MODELS_ACTUALLY_EXECUTED: Phase03 installed-path E2E `NONE_EXTERNAL`; prior Phase02 Windows evidence executed official FBCNN
+- MODEL_LICENSE_STATUS: `FBCNN_CODE_APACHE_2_0; WEIGHT_DISTRIBUTION_MANIFEST_PENDING; PRODUCT_LICENSE_PENDING`
+- PAPER_QUALITY_RUNTIME_WIRED: `TRUE / LOCAL_DEV_E2E`
+- FBCNN_INSTALLED_PATH_STATUS: `NOT_WIRED / NOT_EXECUTED`
+- DAMAGE_MASK_STATUS: `small U-Net REJECTED`; `LR-ASPP DEVELOPMENT_NOT_PRODUCTION`; installed model-pack inference `NOT_VERIFIED`
+- REFERENCE_COUNTS_TESTED: Phase03 dynamic path `MAIN+1`; full installed `MAIN+0..9` matrix `NOT_RUN`
+- IDENTITY_RESULTS: post-Block-8 identity guardrail invoked and accepted verified observed-reference pixels in synthetic DEV E2E; product metric `NOT_MEASURED`
+- WRONG_PERSON_FINAL_PIXELS: `0` in Phase03 synthetic E2E; product-wide final benchmark `NOT_MEASURED`
+- PROVENANCE_VIOLATIONS: `0` in Phase03 synthetic E2E; product-wide final benchmark `NOT_MEASURED`
+- HEALTHY_PIXELS_CHANGED: `0` outside damage authority in Phase03 synthetic E2E
+- RAM_PEAK: Phase03 E2E `NOT_RECORDED AS PRODUCT EVIDENCE`; prior FBCNN Phase02 `2456.40625 MB`
+- CPU_PEAK: Phase03 E2E `NOT_RECORDED AS PRODUCT EVIDENCE`; prior FBCNN Phase02 logical fraction `0.75`
+- TARGET_HARDWARE_TEST: `NOT_RUN`
+- TARGET95_ELIGIBLE_SUCCESS: `NOT_MEASURED`
+- COVERAGE: `NOT_FROZEN FOR FINAL TARGET95`
+- TOTAL_SUCCESS: `NOT_MEASURED`
+- INSTALLER_STATUS: `PARTIAL / NO PAPER QUALITY MODEL PACK`
+- RELEASE_READY: `FALSE`
+- PROJECT_FINISHED: `FALSE`
+- ROOT_CAUSE: developed Paper Quality modules were not reachable from the installed runner; the constructor wrapper also rejected the new injected-runtime keyword and execution status erased abstention/rollback semantics
+- EXACT_NEXT_ACTION: implement the installed FBCNN JPEG-only backend at Block 8 with exact checkpoint hash verification, fixed `0.25` authority, truthful telemetry, one-model lifecycle/unload, and negative route tests for blur, sticker and healthy input.
