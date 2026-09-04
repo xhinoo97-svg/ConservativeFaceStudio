@@ -1,29 +1,9 @@
 name: FBCNN Phase02 Windows qualification
 
+# Phase02 is PASS/CLOSED at run 33800982565. It remains manually inspectable but is
+# no longer a push target; Phase03 has its own installed-path workflow and must not
+# duplicate the frozen eight-identity qualification.
 on:
-  push:
-    branches:
-      - integration/final-paper-quality-local
-    paths:
-      - research/run_fbcnn_windows_validation.py
-      - research/run_fbcnn_vertical_slice.py
-      - research/fbcnn_degradation_matrix.py
-      - research/run_gfpgan14_vertical_slice.py
-      - research/run_gfpgan14_vertical_slice_exact.py
-      - app/fbcnn_upstream_backend.py
-      - app/face_restorer_adapter.py
-      - app/resource_budget.py
-      - app/core_models.py
-      - app/opencv_zoo_face.py
-      - config/upstream-implementations.json
-      - scripts/bootstrap_pinned_upstream.py
-      - scripts/run_female_domain_benchmark_resilient.py
-      - tests/test_face_restorer_adapter.py
-      - tests/test_fbcnn_upstream_backend.py
-      - tests/test_fbcnn_degradation_matrix.py
-      - tests/test_damage_router.py
-      - tests/test_resource_budget.py
-      - .github/workflows/fbcnn-phase02-windows.yml
   workflow_dispatch:
 
 permissions:

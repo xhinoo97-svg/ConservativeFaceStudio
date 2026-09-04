@@ -1,0 +1,236 @@
+name: Paper Quality installed FBCNN Windows validation
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - app/automatic.py
+      - app/worker.py
+      - app/installed_paper_quality_runtime.py
+      - app/paper_quality_model_pack.py
+      - app/damage_mask_runtime.py
+      - app/damage_router.py
+      - app/face_restorer_adapter.py
+      - app/fbcnn_upstream_backend.py
+      - config/paper-quality-validation-pack.json
+      - requirements-paper-quality-cpu.txt
+      - scripts/run_installed_fbcnn_path_validation.py
+      - tests/test_installed_paper_quality_path.py
+      - tests/test_installed_fbcnn_validation_driver.py
+      - tests/test_paper_quality_model_pack.py
+      - .github/workflows/paper-quality-installed-fbcnn-windows.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: paper-quality-installed-fbcnn-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-installed-worker-route:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      QT_QPA_PLATFORM: offscreen
+      CANDIDATE_SHA: ${{ github.sha }}
+      FBCNN_SOURCE_SHA: 54d1831927506b3247e2d4d245abb4f4dab1a1cd
+      FBCNN_WEIGHT_URL: https://github.com/jiaxi-jiang/FBCNN/releases/download/v1.0/fbcnn_color.pth
+      FBCNN_WEIGHT_SHA256: 8b0e4ef23d59cf7ac934a342cb31a17619e4fa4a0b3374a9d78c5174312387e8
+      LRASPP_RUN_ID: 32675225785
+      LRASPP_ARTIFACT_NAME: damage-mask-lraspp-dev-1
+      LRASPP_ONNX_SHA256: 708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9
+
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify exact candidate checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install Windows CPU application and validation runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+          python -m pip install -r requirements-paper-quality-cpu.txt
+          python - <<'PY'
+          import onnxruntime, torch
+          print({'torch': torch.__version__, 'onnxruntime': onnxruntime.__version__, 'cuda': torch.cuda.is_available()})
+          assert not torch.cuda.is_available()
+          PY
+
+      - name: Run Phase03 contract regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest -q \
+            tests/test_installed_paper_quality_path.py \
+            tests/test_installed_fbcnn_validation_driver.py \
+            tests/test_paper_quality_model_pack.py \
+            tests/test_face_restorer_adapter.py \
+            tests/test_fbcnn_upstream_backend.py \
+            tests/test_damage_router.py \
+            tests/test_progress_timeline.py
+
+      - name: Download frozen LR-ASPP DEVELOPMENT artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: damage-mask-lraspp-dev-1
+          path: .phase03/lraspp-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: xhinoo97-svg/ConservativeFaceStudio
+          run-id: 32675225785
+
+      - name: Stage and verify LR-ASPP ONNX
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=.phase03/lraspp-artifact/research-results/damage-mask-lraspp-v1/damage_mask_lraspp_dev.onnx
+          test -f "$source"
+          test "$(sha256sum "$source" | cut -d' ' -f1)" = "$LRASPP_ONNX_SHA256"
+          test "$(wc -c < "$source" | tr -d ' ')" = "12879910"
+          mkdir -p models/paper-quality/damage-mask
+          cp "$source" models/paper-quality/damage-mask/damage_mask_lraspp_dev.onnx
+
+      - name: Bootstrap exact official FBCNN source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/bootstrap_pinned_upstream.py fbcnn \
+            --destination .phase03/upstreams \
+            --accept-research-only
+          test "$(git -C .phase03/upstreams/fbcnn rev-parse HEAD)" = "$FBCNN_SOURCE_SHA"
+          mkdir -p models/paper-quality/fbcnn
+          cp -R .phase03/upstreams/fbcnn models/paper-quality/fbcnn/upstream
+
+      - name: Download and verify official FBCNN checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-delay 5 \
+            --connect-timeout 30 --max-time 900 \
+            "$FBCNN_WEIGHT_URL" -o models/paper-quality/fbcnn/fbcnn_color.pth
+          test "$(sha256sum models/paper-quality/fbcnn/fbcnn_color.pth | cut -d' ' -f1)" = "$FBCNN_WEIGHT_SHA256"
+          test "$(wc -c < models/paper-quality/fbcnn/fbcnn_color.pth | tr -d ' ')" = "287755111"
+
+      - name: Verify all-or-nothing DEVELOPMENT pack without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from app.paper_quality_model_pack import inspect_paper_quality_validation_pack
+          result = inspect_paper_quality_validation_pack('.')
+          print(result.report)
+          assert result.installed_jpeg_route_ready, result.errors
+          assert result.report['network_accessed'] is False
+          assert result.report['production_qualified'] is False
+          PY
+
+      - name: Bootstrap verified production pack used by the normal worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from app.production_models import ensure_production_pretrained_models
+          result = ensure_production_pretrained_models('.', face_timeout_seconds=90, restoration_timeout_seconds=240)
+          print({key: str(path) for key, path in result.paths.items()})
+          print(result.errors)
+          assert result.face_ready and result.standard_ready and result.inpaint_ready, result.errors
+          PY
+
+      - name: Fetch one licensed public DEVELOPMENT portrait
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/prefetch_public_portraits.py --cache .phase03/public --limit 1
+          test -f .phase03/public/eileen_collins.jpg
+
+      - name: Enable Paper Quality feature flag for this isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from app.paths import user_data_root
+          target = user_data_root() / 'config' / 'settings.json'
+          target.parent.mkdir(parents=True, exist_ok=True)
+          target.write_text(json.dumps({'paper_quality_enabled': True}), encoding='utf-8')
+          print(target)
+          PY
+
+      - name: Execute real installed Worker route with LR-ASPP and FBCNN
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/run_installed_fbcnn_path_validation.py \
+            --input .phase03/public/eileen_collins.jpg \
+            --output .phase03/evidence \
+            --source-key eileen_collins \
+            --source-license 'Public domain (NASA / US Government work)' \
+            --source-page-url 'https://commons.wikimedia.org/wiki/File:Eileen_Collins,_early_NASA_portrait.jpg' \
+            --jpeg-quality 10 \
+            --candidate-sha "$CANDIDATE_SHA"
+
+      - name: Verify installed-path evidence contract
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .phase03/evidence/installed-fbcnn-validation.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path('.phase03/evidence/installed-fbcnn-validation.json').read_text())
+          assert report['candidate_sha'] == os.environ['CANDIDATE_SHA']
+          assert report['gate'] == 'PASS'
+          assert report['production_qualified'] is False
+          assert report['source']['v3_v4_v5_used'] is False
+          assert report['model_pack']['installed_jpeg_route_ready'] is True
+          path = report['installed_path']
+          assert path['damage_route'] == 'JPEG_ARTIFACT'
+          assert path['model']['model_key'] == 'fbcnn'
+          assert path['model']['checkpoint_sha256'] == os.environ['FBCNN_WEIGHT_SHA256']
+          assert path['model']['fused_to_final'] is False
+          assert path['wrong_person_final_pixels'] == 0
+          assert path['provenance_violations'] == 0
+          assert path['healthy_pixels_changed'] == 0
+          assert path['generated_final_pixels'] == 0
+          assert path['final_block_image_sha256'] == path['immutable_main_sha256']
+          print(json.dumps({
+              'gate': report['gate'],
+              'damage_route': path['damage_route'],
+              'model': path['model']['model_key'],
+              'checkpoint_sha256': path['model']['checkpoint_sha256'],
+              'wrong_person_final_pixels': path['wrong_person_final_pixels'],
+              'provenance_violations': path['provenance_violations'],
+              'healthy_pixels_changed': path['healthy_pixels_changed'],
+              'production_qualified': report['production_qualified'],
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload evidence only, never source or checkpoints
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: paper-quality-installed-fbcnn-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: .phase03/evidence/installed-fbcnn-validation.json
