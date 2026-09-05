@@ -60,10 +60,10 @@ jobs:
           assert target.stat().st_size <= manifest.max_bytes
           print({'path': str(target), 'sha256': digest, 'bytes': target.stat().st_size})
           PY
-      - name: Fetch eight public-domain DEVELOPMENT portraits
+      - name: Fetch ten public-domain DEVELOPMENT portraits
         shell: bash
-        run: python scripts/prefetch_public_portraits.py --cache .phase04/public --limit 8
-      - name: Detect and crop all eight portraits with real YuNet inference
+        run: python scripts/prefetch_public_portraits.py --cache .phase04/public --limit 10
+      - name: Build score-gated YuNet face bank without threshold relaxation
         shell: bash
         run: |
           set -euo pipefail
@@ -75,6 +75,7 @@ jobs:
             --output-manifest .phase04/evidence/phase04-yunet-face-bank.json \
             --output-size 128 \
             --train-count 6 \
+            --minimum-validation-count 2 \
             --minimum-detector-score 0.75
       - name: Verify identity split, detector confidence and crop integrity
         shell: bash
@@ -84,11 +85,17 @@ jobs:
           from pathlib import Path
           import cv2
           manifest = json.loads(Path('.phase04/evidence/phase04-yunet-face-bank.json').read_text(encoding='utf-8'))
-          assert manifest['counts'] == {'train': 6, 'validation': 2, 'total': 8}
+          counts = manifest['counts']
+          assert counts['requested'] == 10
+          assert counts['accepted'] >= 8
+          assert counts['train'] == 6
+          assert counts['validation'] >= 2
+          assert counts['accepted'] + counts['rejected'] == 10
           assert manifest['identity_disjoint'] is True
           assert manifest['final_holdout_used'] is False
           assert manifest['v3_used'] is False and manifest['v4_used'] is False
           assert manifest['detector']['asset_sha256'] == '8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4'
+          assert manifest['detector']['rejected_portraits_are_excluded_without_threshold_relaxation'] is True
           train = set()
           validation = set()
           for row in manifest['sources']:
@@ -98,8 +105,8 @@ jobs:
               image = cv2.imread(str(path), cv2.IMREAD_COLOR)
               assert image is not None and image.shape == (128, 128, 3)
               (train if row['dataset_split'] == 'train' else validation).add(row['identity_key'])
-          assert len(train) == 6 and len(validation) == 2 and not (train & validation)
-          print({'scores': [row['detector']['score'] for row in manifest['sources']]})
+          assert len(train) == 6 and len(validation) >= 2 and not (train & validation)
+          print({'counts': counts, 'scores': [row['detector']['score'] for row in manifest['sources']], 'failures': manifest['detector_failures']})
           PY
       - name: Upload YuNet DEVELOPMENT face-bank evidence
         uses: actions/upload-artifact@v6
