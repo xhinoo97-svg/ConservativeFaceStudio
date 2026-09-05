@@ -419,6 +419,57 @@ def test_jpeg_route_executes_validation_fbcnn_but_never_fuses_nonproduction_pixe
     assert model_trace["status"] == "VALIDATION_EXECUTED_NOT_FUSED"
 
 
+def test_validation_shadow_preserves_current_block_input_and_incoming_provenance() -> None:
+    immutable_main, reference, _ = _images()
+    current = immutable_main.copy()
+    current[4:9, 7:13] = np.clip(
+        current[4:9, 7:13].astype(np.int16) + 3,
+        0,
+        255,
+    ).astype(np.uint8)
+    incoming_provenance = np.zeros(current.shape[:2], dtype=np.uint16)
+    incoming_provenance[4:9, 7:13] = 1
+    backend = _ValidationFBCNN()
+    runtime = InstalledPaperQualityRuntime(
+        damage_runtime=DamageMaskRuntime(
+            session=_DamageSession("JPEG_ARTIFACT"),
+            input_size=64,
+        ),
+        model_qualifications={
+            "fbcnn": nonproduction_model_qualification(
+                "fbcnn",
+                "VALIDATION",
+                ("synthetic-installed-route-contract",),
+            )
+        },
+        validation_backend_factories={"fbcnn": lambda: backend},
+    )
+    landmarks = np.asarray(
+        [[36.0, 39.0], [60.0, 39.0], [48.0, 51.0], [40.0, 63.0], [56.0, 63.0]],
+        dtype=np.float32,
+    )
+    workspace = Workspace(
+        primary=current.copy(),
+        references=[reference],
+        provenance_map=incoming_provenance,
+        metadata={"primary_landmarks5": landmarks, "primary_bbox": (18, 14, 60, 68)},
+    )
+
+    result = runtime.run(
+        workspace,
+        immutable_main=immutable_main,
+        current_image=current,
+    )
+
+    assert backend.load_calls == backend.restore_calls == backend.unload_calls == 1
+    assert np.array_equal(result.image, current)
+    assert np.array_equal(result.provenance_map, incoming_provenance)
+    assert result.details["block_input_changed_pixels_from_immutable_main"] == 30
+    assert result.details["block_output_changed_pixels_from_input"] == 0
+    assert result.details["incoming_reference_provenance_pixels"] == 30
+    assert result.details["validation_candidates_fused_to_final"] is False
+
+
 def test_mixed_dominant_jpeg_executes_only_class_bounded_validation_subroute() -> None:
     main, _, _ = _images()
     backend = _ValidationFBCNN()

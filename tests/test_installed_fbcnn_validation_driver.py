@@ -54,6 +54,8 @@ def _details() -> dict[str, object]:
         "wrong_person_final_pixels": 0,
         "provenance_violations": 0,
         "outside_authority_changed_pixels": 0,
+        "block_input_changed_pixels_from_immutable_main": 0,
+        "block_output_changed_pixels_from_input": 0,
         "model_execution_errors": [],
         "decision": "ABSTAIN",
         "paper_quality_trace": [
@@ -79,9 +81,14 @@ def test_installed_validation_driver_uses_real_worker_not_research_vertical_slic
     assert "inspect_paper_quality_validation_pack" in source
 
 
-def test_installed_block_validator_requires_shadow_execution_and_immutable_final() -> None:
+def test_installed_block_validator_requires_shadow_execution_and_preserved_block_input() -> None:
     main = np.full((24, 24, 3), 70, dtype=np.uint8)
-    report = validate_installed_block(_details(), block_image=main.copy(), immutable_main=main)
+    report = validate_installed_block(
+        _details(),
+        block_image=main.copy(),
+        block_input=main.copy(),
+        immutable_main=main,
+    )
     assert report["damage_route"] == "JPEG_ARTIFACT"
     assert report["model_route"] == "JPEG_ARTIFACT"
     assert report["wrong_person_final_pixels"] == 0
@@ -91,7 +98,30 @@ def test_installed_block_validator_requires_shadow_execution_and_immutable_final
     fused = _details()
     fused["validation_candidates_fused_to_final"] = True
     with pytest.raises(RuntimeError, match="fused"):
-        validate_installed_block(fused, block_image=main.copy(), immutable_main=main)
+        validate_installed_block(
+            fused,
+            block_image=main.copy(),
+            block_input=main.copy(),
+            immutable_main=main,
+        )
+
+
+def test_installed_block_validator_separates_preexisting_context_from_block_delta() -> None:
+    immutable = np.full((24, 24, 3), 70, dtype=np.uint8)
+    block_input = immutable.copy()
+    block_input[4:9, 7:13] = 71
+    details = _details()
+    details["block_input_changed_pixels_from_immutable_main"] = 30
+
+    report = validate_installed_block(
+        details,
+        block_image=block_input.copy(),
+        block_input=block_input,
+        immutable_main=immutable,
+    )
+
+    assert report["block_input_changed_pixels_from_immutable_main"] == 30
+    assert report["healthy_pixels_changed"] == 0
 
 
 def test_installed_validation_uses_real_jpeg_bytes_and_bounded_canvas() -> None:

@@ -100,6 +100,7 @@ def validate_installed_block(
     details: Mapping[str, Any],
     *,
     block_image: np.ndarray,
+    block_input: np.ndarray,
     immutable_main: np.ndarray,
 ) -> dict[str, Any]:
     """Validate truthfulness and fail-closed final-pixel authority for Block 8."""
@@ -165,8 +166,20 @@ def validate_installed_block(
         raise RuntimeError("Provenance violations are not zero")
     if int(details.get("outside_authority_changed_pixels", -1)) != 0:
         raise RuntimeError("Paper Quality changed pixels outside final authority")
-    if not np.array_equal(block_image, immutable_main):
-        raise RuntimeError("Shadow validation changed the immutable MAIN at Block 8")
+    if block_image.shape != block_input.shape or block_input.shape != immutable_main.shape:
+        raise RuntimeError("Block 8 input/output and immutable MAIN geometry do not match")
+    input_changed_from_immutable = int(
+        np.count_nonzero(np.any(block_input != immutable_main, axis=2))
+    )
+    output_changed_from_input = int(
+        np.count_nonzero(np.any(block_image != block_input, axis=2))
+    )
+    if int(details.get("block_input_changed_pixels_from_immutable_main", -1)) != input_changed_from_immutable:
+        raise RuntimeError("Block 8 did not truthfully report its pre-existing pipeline context")
+    if int(details.get("block_output_changed_pixels_from_input", -1)) != output_changed_from_input:
+        raise RuntimeError("Block 8 output-delta telemetry does not match its actual input")
+    if output_changed_from_input != 0:
+        raise RuntimeError("Validation-shadow FBCNN changed the accepted Block 8 input")
     errors = details.get("model_execution_errors")
     if errors != []:
         raise RuntimeError(f"Installed FBCNN execution reported errors: {errors}")
@@ -200,7 +213,8 @@ def validate_installed_block(
         "trace": trace,
         "wrong_person_final_pixels": 0,
         "provenance_violations": 0,
-        "healthy_pixels_changed": 0,
+        "healthy_pixels_changed": output_changed_from_input,
+        "block_input_changed_pixels_from_immutable_main": input_changed_from_immutable,
         "generated_final_pixels": 0,
     }
 
@@ -257,13 +271,18 @@ def run_validation(
     if len(completed) != 1:
         raise RuntimeError(f"PipelineWorker completion count mismatch: {len(completed)}")
     result = completed[0]
-    blocks = [item for item in result.results if item.block == "inpaint"]
-    if len(blocks) != 1:
-        raise RuntimeError(f"Installed pipeline Block 8 count mismatch: {len(blocks)}")
-    block = blocks[0]
+    block_positions = [
+        index for index, item in enumerate(result.results) if item.block == "inpaint"
+    ]
+    if len(block_positions) != 1 or block_positions[0] == 0:
+        raise RuntimeError(f"Installed pipeline Block 8 position mismatch: {block_positions}")
+    block_position = block_positions[0]
+    block = result.results[block_position]
+    block_input = result.results[block_position - 1].image
     verified = validate_installed_block(
         block.details,
         block_image=block.image,
+        block_input=block_input,
         immutable_main=degraded,
     )
     block_events = [
@@ -275,7 +294,7 @@ def run_validation(
         raise RuntimeError("Timeline did not truthfully attribute FBCNN at Block 8")
 
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "experiment": "paper_quality_installed_fbcnn_windows_validation_v1",
         "scope": "PUBLIC_DEVELOPMENT_INSTALLED_PATH_NO_HOLDOUT",
         "production_qualified": False,
@@ -310,6 +329,7 @@ def run_validation(
             **verified,
             "timeline_model_attributed": True,
             "final_block_image_sha256": _sha256_image(block.image),
+            "block_input_sha256": _sha256_image(block_input),
             "immutable_main_sha256": _sha256_image(degraded),
         },
         "gate": "PASS" if verified["healthy_pixels_changed"] == 0 else "FAIL",

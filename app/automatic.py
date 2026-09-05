@@ -127,9 +127,11 @@ class AutomaticPipelineRunner:
 
     def _paper_quality_inpaint(self, block, parameters: dict[str, Any]) -> ExecutionResult:
         del parameters
+        block_input = self.executor.workspace.copy_primary()
         installed = self._paper_quality_runtime.run(
             self.executor.workspace,
             immutable_main=self._original_anchor,
+            current_image=block_input,
         )
         self.executor.workspace.provenance_map = installed.provenance_map.copy()
         details = dict(installed.details)

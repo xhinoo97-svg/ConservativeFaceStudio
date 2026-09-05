@@ -539,11 +539,25 @@ class InstalledPaperQualityRuntime:
         workspace: Workspace,
         *,
         immutable_main: np.ndarray,
+        current_image: np.ndarray | None = None,
     ) -> InstalledPaperQualityResult:
-        base = np.asarray(immutable_main)
-        if base.dtype != np.uint8 or base.ndim != 3 or base.shape[2] != 3:
+        immutable = np.asarray(immutable_main)
+        if immutable.dtype != np.uint8 or immutable.ndim != 3 or immutable.shape[2] != 3:
             raise ValueError("Immutable MAIN must be uint8 BGR HxWx3")
+        base = np.asarray(
+            workspace.copy_primary() if current_image is None else current_image
+        )
+        if base.dtype != np.uint8 or base.ndim != 3 or base.shape[2] != 3:
+            raise ValueError("Current Block 8 input must be uint8 BGR HxWx3")
+        if base.shape != immutable.shape:
+            raise ValueError("Current Block 8 input must match immutable MAIN geometry")
+        base = base.copy()
         shape = base.shape[:2]
+        incoming_provenance = np.asarray(workspace.provenance_map)
+        if incoming_provenance.shape != shape:
+            raise ValueError("Incoming Block 8 provenance must match current image geometry")
+        incoming_provenance = incoming_provenance.astype(np.uint16, copy=True)
+        input_changed_from_immutable = np.any(base != immutable, axis=2)
         trace: list[dict[str, object]] = []
 
         landmarks_raw = workspace.metadata.get("primary_landmarks5")
@@ -722,8 +736,16 @@ class InstalledPaperQualityRuntime:
         trace.append({"stage": "PaperQualityRuntime", "status": "EXECUTED", "decision": runtime_result.decision})
         trace.append({"stage": "provenance", "status": "VERIFIED", "violations": runtime_result.provenance_violations})
 
-        provenance = runtime_result.reference_source_map.astype(np.uint16, copy=True)
+        # Block 8 is transactional: the current accepted image is its operational
+        # base, while immutable MAIN remains a separate audit authority. Preserve
+        # provenance already established by earlier accepted blocks and overlay only
+        # newly authorised Paper Quality pixels.
+        provenance = incoming_provenance.copy()
+        new_reference = runtime_result.reference_source_map > 0
+        provenance[new_reference] = runtime_result.reference_source_map[new_reference]
         provenance[runtime_result.generated_mask > 0] = GENERATED_PROVENANCE_CODE
+        output_changed_from_input = np.any(runtime_result.image != base, axis=2)
+        output_changed_from_immutable = np.any(runtime_result.image != immutable, axis=2)
         details: dict[str, object] = {
             "engine": "installed-paper-quality-runtime-v1",
             "decision": runtime_result.decision,
@@ -752,6 +774,24 @@ class InstalledPaperQualityRuntime:
             "provenance_violations": runtime_result.provenance_violations,
             "outside_authority_changed_pixels": runtime_result.outside_authority_changed_pixels,
             "untouched_pixels_preserved": runtime_result.outside_authority_changed_pixels == 0,
+            "block_input_changed_pixels_from_immutable_main": int(
+                np.count_nonzero(input_changed_from_immutable)
+            ),
+            "block_output_changed_pixels_from_input": int(
+                np.count_nonzero(output_changed_from_input)
+            ),
+            "block_output_changed_pixels_from_immutable_main": int(
+                np.count_nonzero(output_changed_from_immutable)
+            ),
+            "incoming_reference_provenance_pixels": int(
+                np.count_nonzero(
+                    (incoming_provenance > 0)
+                    & (incoming_provenance < GENERATED_PROVENANCE_CODE)
+                )
+            ),
+            "incoming_generated_provenance_pixels": int(
+                np.count_nonzero(incoming_provenance == GENERATED_PROVENANCE_CODE)
+            ),
             "models_actually_executed": executed_models,
             "validation_model_candidates": validation_candidates,
             "model_execution_errors": model_errors,
@@ -775,7 +815,9 @@ class InstalledPaperQualityRuntime:
                     if damage is None
                     else np.asarray(damage.binary_damage_mask).astype(np.uint8, copy=True)
                 ),
-                "inpaint_observed_mask": (runtime_result.reference_source_map > 0).astype(np.uint8) * 255,
+                "inpaint_observed_mask": (
+                    (provenance > 0) & (provenance < GENERATED_PROVENANCE_CODE)
+                ).astype(np.uint8) * 255,
                 "inpaint_generated_mask": runtime_result.generated_mask.copy(),
                 "inpaint_unresolved_mask": runtime_result.unresolved_mask.copy(),
             }

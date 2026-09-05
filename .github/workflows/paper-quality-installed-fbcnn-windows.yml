@@ -225,7 +225,7 @@ jobs:
           assert path['provenance_violations'] == 0
           assert path['healthy_pixels_changed'] == 0
           assert path['generated_final_pixels'] == 0
-          assert path['final_block_image_sha256'] == path['immutable_main_sha256']
+          assert path['final_block_image_sha256'] == path['block_input_sha256']
           print(json.dumps({
               'gate': report['gate'],
               'damage_route': path['damage_route'],
