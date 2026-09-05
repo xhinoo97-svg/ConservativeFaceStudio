@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import time
 from collections import Counter
@@ -21,6 +22,8 @@ from phase04_training_dataset import (
     PHASE04_TRAINING_CLASSES,
     build_training_sample,
 )
+
+LOSS_VERSION = "region_balanced_ce_binary_focal_dice_v2"
 
 
 def _records_for_split(manifest: Path, split: str) -> list[SourceRecord]:
@@ -73,15 +76,85 @@ def _as_input(images: list[np.ndarray]) -> torch.Tensor:
     return torch.from_numpy(np.stack(arrays, axis=0)).float()
 
 
-def _weighted_segmentation_loss(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+def _region_mean(values: torch.Tensor, selected: torch.Tensor) -> torch.Tensor | None:
+    if values.shape != selected.shape:
+        raise ValueError("values and selected masks must have the same shape")
+    count = int(torch.count_nonzero(selected).detach().cpu())
+    if count == 0:
+        return None
+    return values[selected].mean()
+
+
+def _region_balanced_mean(values: torch.Tensor, damage: torch.Tensor) -> torch.Tensor:
+    damage_mean = _region_mean(values, damage)
+    healthy_mean = _region_mean(values, ~damage)
+    if damage_mean is not None and healthy_mean is not None:
+        return 0.5 * (damage_mean + healthy_mean)
+    if damage_mean is not None:
+        return damage_mean
+    if healthy_mean is not None:
+        return healthy_mean
+    raise RuntimeError("segmentation target contains no pixels")
+
+
+def _training_case_type_weights(cases) -> dict[str, float]:
+    counts = Counter(case.damage_type for case in cases if case.damage_type != "HEALTHY")
+    if not counts:
+        raise ValueError("Phase04 matrix has no damage cases")
+    ordered = sorted(int(value) for value in counts.values())
+    reference = float(ordered[len(ordered) // 2])
+    weights: dict[str, float] = {"HEALTHY": 1.0}
+    for damage_type, count in counts.items():
+        value = math.sqrt(reference / float(count))
+        weights[str(damage_type)] = float(min(3.0, max(0.5, value)))
+    return weights
+
+
+def _weighted_segmentation_loss(
+    logits: torch.Tensor,
+    target: torch.Tensor,
+    *,
+    sample_weights: torch.Tensor | None = None,
+) -> torch.Tensor:
     if logits.ndim != 4 or target.ndim != 3:
         raise ValueError("invalid segmentation tensor rank")
-    per_pixel = F.cross_entropy(logits, target, reduction="none")
-    damage = target != int(PHASE04_HEALTHY_INDEX)
-    # Healthy pixels dominate every local-damage image. Preserve them in the loss,
-    # while giving damaged pixels enough authority to learn thin scribbles/edges.
-    weights = torch.where(damage, torch.full_like(per_pixel, 6.0), torch.ones_like(per_pixel))
-    return (per_pixel * weights).sum() / weights.sum().clamp_min(1.0)
+    if logits.shape[0] != target.shape[0] or logits.shape[2:] != target.shape[1:]:
+        raise ValueError("logits and target spatial shapes do not match")
+    batch = int(target.shape[0])
+    if sample_weights is None:
+        sample_weights = torch.ones((batch,), dtype=logits.dtype, device=logits.device)
+    else:
+        sample_weights = sample_weights.to(device=logits.device, dtype=logits.dtype).reshape(-1)
+        if int(sample_weights.numel()) != batch:
+            raise ValueError("sample_weights length must match batch size")
+        if torch.any(sample_weights <= 0):
+            raise ValueError("sample_weights must be positive")
+
+    per_pixel_ce = F.cross_entropy(logits, target, reduction="none")
+    probabilities = torch.softmax(logits, dim=1)
+    damage_probability = (1.0 - probabilities[:, int(PHASE04_HEALTHY_INDEX)]).clamp(1e-6, 1.0 - 1e-6)
+    damage_target = target != int(PHASE04_HEALTHY_INDEX)
+
+    sample_losses: list[torch.Tensor] = []
+    for index in range(batch):
+        damage = damage_target[index]
+        region_ce = _region_balanced_mean(per_pixel_ce[index], damage)
+
+        binary_target = damage.to(dtype=logits.dtype)
+        binary_ce = F.binary_cross_entropy(damage_probability[index], binary_target, reduction="none")
+        pt = torch.where(damage, damage_probability[index], 1.0 - damage_probability[index])
+        focal = ((1.0 - pt).pow(2.0) * binary_ce)
+        region_focal = _region_balanced_mean(focal, damage)
+
+        intersection = torch.sum(damage_probability[index] * binary_target)
+        denominator = torch.sum(damage_probability[index]) + torch.sum(binary_target)
+        dice_loss = 1.0 - ((2.0 * intersection + 1.0) / (denominator + 1.0))
+
+        sample_loss = region_ce + 0.5 * region_focal + 0.5 * dice_loss
+        sample_losses.append(sample_loss)
+
+    stacked = torch.stack(sample_losses)
+    return torch.sum(stacked * sample_weights) / torch.sum(sample_weights).clamp_min(1e-6)
 
 
 def train(
@@ -117,6 +190,7 @@ def train(
         for record in records
     }
     cases = build_matrix()
+    case_type_weights = _training_case_type_weights(cases)
     sample_count = int(max_steps) * int(batch_size)
     training_pairs = balanced_training_pairs(
         [record.source_id for record in records],
@@ -138,6 +212,7 @@ def train(
             raise RuntimeError("balanced sampler returned an incomplete training batch")
         images: list[np.ndarray] = []
         targets: list[np.ndarray] = []
+        batch_weights: list[float] = []
         for local_index, pair in enumerate(batch_pairs):
             source_id = pair.source_id
             case_index = int(pair.case_index)
@@ -157,12 +232,14 @@ def train(
             )
             images.append(sample.image)
             targets.append(sample.target)
+            batch_weights.append(float(case_type_weights[case.damage_type]))
         image_tensor = _as_input(images)
         target_tensor = torch.from_numpy(np.stack(targets, axis=0)).long()
+        weight_tensor = torch.tensor(batch_weights, dtype=torch.float32)
 
         optimizer.zero_grad(set_to_none=True)
         logits = model(image_tensor)
-        loss = _weighted_segmentation_loss(logits, target_tensor)
+        loss = _weighted_segmentation_loss(logits, target_tensor, sample_weights=weight_tensor)
         if not torch.isfinite(loss):
             raise RuntimeError(f"non-finite loss at step {step}: {float(loss.detach())}")
         loss.backward()
@@ -193,6 +270,8 @@ def train(
             "source_count": len(records),
             "batchnorm_safe_batch": True,
             "balanced_full_matrix_sampler": True,
+            "loss_version": LOSS_VERSION,
+            "case_type_weights": dict(sorted(case_type_weights.items())),
             "training_sample_count": int(sample_count),
             "unique_matrix_cases_seen": int(unique_case_count),
             "complete_matrix_epochs": int(complete_matrix_epochs),
@@ -210,6 +289,8 @@ def train(
         "batch_size": int(batch_size),
         "batchnorm_safe_batch": True,
         "balanced_full_matrix_sampler": True,
+        "loss_version": LOSS_VERSION,
+        "case_type_weights": dict(sorted(case_type_weights.items())),
         "training_sample_count": int(sample_count),
         "unique_matrix_cases_seen": int(unique_case_count),
         "complete_matrix_epochs": int(complete_matrix_epochs),
