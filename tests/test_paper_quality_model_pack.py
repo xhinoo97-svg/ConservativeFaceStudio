@@ -103,6 +103,15 @@ def test_committed_validation_pack_is_exact_and_never_claims_distribution() -> N
     assert damage["weight_terms_state"] == "NOT_EXPLICIT_UPSTREAM_RESEARCH_ONLY"
 
 
+def test_windows_validation_runtime_preserves_phase02_torch_numpy_abi() -> None:
+    requirements = (
+        ROOT / "requirements-paper-quality-cpu.txt"
+    ).read_text(encoding="utf-8")
+    assert 'numpy>=1.26,<2; platform_system == "Windows"' in requirements
+    assert 'torch==2.1.2+cpu; platform_system == "Windows"' in requirements
+    assert requirements.index("numpy>=1.26,<2") < requirements.index("torch==2.1.2+cpu")
+
+
 def test_validation_pack_resolves_only_after_path_hash_source_and_runtime_checks(
     tmp_path: Path,
     monkeypatch,
