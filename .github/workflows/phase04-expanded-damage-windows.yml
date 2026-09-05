@@ -1,0 +1,125 @@
+name: Phase04 Expanded Damage Windows Measurement
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - research/phase04_damage_evaluation.py
+      - research/phase04_expanded_damage_generator.py
+      - research/evaluate_phase04_expanded_damage.py
+      - tests/test_phase04_expanded_damage_generator.py
+      - scripts/prefetch_public_portraits.py
+      - requirements.txt
+      - .github/workflows/phase04-expanded-damage-windows.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  expanded-development-measurement:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      LRASPP_RUN_ID: 32675225785
+      LRASPP_ARTIFACT_NAME: damage-mask-lraspp-dev-1
+      LRASPP_ONNX_SHA256: 708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9
+      DAMAGE_THRESHOLD: '0.55'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install measurement runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt 'pytest>=8,<9'
+          python -m pip check
+      - name: Verify expanded generator authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests/test_phase04_expanded_damage_generator.py tests/test_phase04_damage_evaluation.py
+      - name: Download frozen LRASPP development artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ env.LRASPP_ARTIFACT_NAME }}
+          path: .phase04/lraspp
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: xhinoo97-svg/ConservativeFaceStudio
+          run-id: ${{ env.LRASPP_RUN_ID }}
+      - name: Stage and verify exact LRASPP ONNX
+        shell: bash
+        run: |
+          set -euo pipefail
+          source=.phase04/lraspp/research-results/damage-mask-lraspp-v1/damage_mask_lraspp_dev.onnx
+          test -f "$source"
+          test "$(sha256sum "$source" | cut -d' ' -f1)" = "$LRASPP_ONNX_SHA256"
+          mkdir -p .phase04/model
+          cp "$source" .phase04/model/damage_mask_lraspp_dev.onnx
+      - name: Fetch eight licensed development portraits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/prefetch_public_portraits.py --cache .phase04/public --limit 8
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('.phase04/public/prefetch-manifest.json').read_text(encoding='utf-8'))
+          assert len(payload['resolved']) == 8, payload
+          assert not payload['failures'], payload
+          PY
+      - name: Execute 416-case frozen-threshold ONNX measurement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/evaluate_phase04_expanded_damage.py \
+            --model .phase04/model/damage_mask_lraspp_dev.onnx \
+            --portraits-dir .phase04/public \
+            --output .phase04/evidence/phase04-expanded-damage-report.json \
+            --threshold "$DAMAGE_THRESHOLD" \
+            --image-size 192 \
+            --seed 240905
+      - name: Verify measurement completeness without converting a failed quality gate into success
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path('.phase04/evidence/phase04-expanded-damage-report.json').read_text(encoding='utf-8'))
+          assert report['data']['identity_count'] == 8
+          assert report['data']['matrix_case_count_per_identity'] == 52
+          assert report['data']['completed_cases'] == 416
+          assert report['data']['expected_cases'] == 416
+          assert report['data']['error_cases'] == 0
+          assert report['data']['v3_used'] is False
+          assert report['data']['v4_used'] is False
+          assert report['data']['v5_used'] is False
+          assert report['data']['final_holdout_used'] is False
+          assert report['production_qualified'] is False
+          assert report['model']['runtime_damage_confidence_threshold'] == float(os.environ['DAMAGE_THRESHOLD'])
+          print(json.dumps({
+              'disposition': report['disposition'],
+              'binary': report['metrics']['binary'],
+              'groups': report['metrics']['groups'],
+              'gate': report['frozen_phase04_gate'],
+          }, indent=2, sort_keys=True))
+          PY
+      - name: Upload Phase04 measurement evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase04-expanded-damage-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: .phase04/evidence/phase04-expanded-damage-report.json
