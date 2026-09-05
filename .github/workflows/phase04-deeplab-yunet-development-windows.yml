@@ -1,0 +1,163 @@
+name: Phase04 DeepLab YuNet Development Windows
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - app/model_registry.py
+      - app/opencv_zoo_face.py
+      - research/phase04_face_crop.py
+      - research/prepare_phase04_yunet_portraits.py
+      - research/phase04_damage_evaluation.py
+      - research/phase04_expanded_damage_generator.py
+      - research/phase04_training_dataset.py
+      - research/phase04_balanced_sampler.py
+      - research/phase04_deeplab_challenger.py
+      - research/train_phase04_deeplab_challenger.py
+      - research/evaluate_phase04_deeplab_checkpoint.py
+      - scripts/prefetch_public_portraits.py
+      - requirements.txt
+      - requirements-paper-quality-cpu.txt
+      - .github/workflows/phase04-deeplab-yunet-development-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deeplab-yunet-development:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install coherent Windows CPU runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-paper-quality-cpu.txt
+          python -m pip check
+      - name: Acquire frozen MobileNetV3 backbone and YuNet through verified sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .phase04/backbone
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          import sys
+          from app.model_registry import download_model, registry_by_key, sha256_path
+          sys.path.insert(0, 'research')
+          from damage_mask_lraspp_contract import BACKBONE_URL, verify_backbone_checkpoint
+          backbone = Path('.phase04/backbone/mobilenet_v3_large-8738ca79.pth')
+          request = Request(BACKBONE_URL, headers={'User-Agent': 'ConservativeFaceStudio-Research/2.0'})
+          with urlopen(request, timeout=120) as response:
+              backbone.write_bytes(response.read())
+          print({'backbone_sha256': verify_backbone_checkpoint(backbone)})
+          yunet_manifest = registry_by_key()['opencv_yunet']
+          yunet = download_model(yunet_manifest, Path('.'), accept_license=True, timeout_seconds=120)
+          assert sha256_path(yunet) == yunet_manifest.expected_sha256
+          print({'yunet_sha256': sha256_path(yunet)})
+          PY
+      - name: Fetch ten public-domain DEVELOPMENT portraits
+        shell: bash
+        run: python scripts/prefetch_public_portraits.py --cache .phase04/public --limit 10
+      - name: Build score-gated face-centric train and validation bank
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/prepare_phase04_yunet_portraits.py \
+            --source-dir .phase04/public \
+            --prefetch-manifest .phase04/public/prefetch-manifest.json \
+            --yunet models/detection/face_detection_yunet_2023mar.onnx \
+            --output-dir .phase04/yunet_faces \
+            --output-manifest .phase04/evidence/phase04-yunet-development-manifest.json \
+            --output-size 128 \
+            --train-count 6 \
+            --minimum-validation-count 2 \
+            --minimum-detector-score 0.75
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('.phase04/evidence/phase04-yunet-development-manifest.json').read_text(encoding='utf-8'))
+          assert manifest['counts']['accepted'] == 10
+          assert manifest['counts']['train'] == 6
+          assert manifest['counts']['validation'] == 4
+          assert manifest['counts']['rejected'] == 0
+          assert min(row['detector']['score'] for row in manifest['sources']) >= 0.75
+          assert manifest['identity_disjoint'] is True
+          assert manifest['final_holdout_used'] is False
+          print({'counts': manifest['counts'], 'validation': [row['identity_key'] for row in manifest['sources'] if row['dataset_split'] == 'validation']})
+          PY
+      - name: Train two complete balanced matrix epochs with loss v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/train_phase04_deeplab_challenger.py \
+            --source-dir .phase04/yunet_faces \
+            --manifest .phase04/evidence/phase04-yunet-development-manifest.json \
+            --backbone .phase04/backbone/mobilenet_v3_large-8738ca79.pth \
+            --output .phase04/evidence/phase04-deeplab-yunet-v2-epoch2.pth \
+            --report .phase04/evidence/phase04-deeplab-yunet-v2-epoch2-training.json \
+            --image-size 128 \
+            --batch-size 2 \
+            --max-steps 1036 \
+            --learning-rate 0.0003 \
+            --seed 240905
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('.phase04/evidence/phase04-deeplab-yunet-v2-epoch2-training.json').read_text(encoding='utf-8'))
+          assert report['loss_version'] == 'region_balanced_ce_binary_focal_dice_v2'
+          assert report['training_sample_count'] == 2072
+          assert report['unique_matrix_cases_seen'] == 1036
+          assert report['complete_matrix_epochs'] == 2
+          assert report['source_count'] == 6
+          assert report['final_holdout_used'] is False
+          assert report['v3_used'] is False and report['v4_used'] is False
+          print(report)
+          PY
+      - name: Measure on four identity-disjoint YuNet face crops and all 1036 cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/evaluate_phase04_deeplab_checkpoint.py \
+            --checkpoint .phase04/evidence/phase04-deeplab-yunet-v2-epoch2.pth \
+            --source-dir .phase04/yunet_faces \
+            --manifest .phase04/evidence/phase04-yunet-development-manifest.json \
+            --output .phase04/evidence/phase04-deeplab-yunet-v2-epoch2-evaluation.json \
+            --threshold 0.55 \
+            --image-size 128 \
+            --seed 240905
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('.phase04/evidence/phase04-deeplab-yunet-v2-epoch2-evaluation.json').read_text(encoding='utf-8'))
+          assert report['data']['identity_disjoint'] is True
+          assert report['data']['validation_identity_count'] == 4
+          assert report['data']['matrix_case_count_per_identity'] == 1036
+          assert report['data']['completed_cases'] == 4144
+          assert report['data']['error_cases'] == 0
+          assert report['data']['final_holdout_used'] is False
+          assert report['production_qualified'] is False
+          print({'disposition': report['disposition'], 'binary': report['metrics']['binary'], 'groups': report['metrics']['groups'], 'gate': report['frozen_phase04_gate']})
+          PY
+      - name: Upload YuNet face-centric DEVELOPMENT evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase04-deeplab-yunet-development-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: .phase04/evidence/
