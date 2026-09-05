@@ -139,6 +139,8 @@ def inspect_paper_quality_validation_pack(root: str | Path) -> PaperQualityValid
             raise RuntimeError("FBCNN official network source missing from validation pack")
         if importlib.util.find_spec("torch") is None:
             raise RuntimeError("FBCNN validation PyTorch CPU runtime is not installed")
+        if importlib.util.find_spec("torchvision") is None:
+            raise RuntimeError("FBCNN validation torchvision runtime is not installed")
         if not damage_mask.is_file():
             raise FileNotFoundError("LR-ASPP ONNX missing from validation pack")
         if damage_mask.stat().st_size != LRASPP_ONNX_SIZE_BYTES:

@@ -72,15 +72,17 @@ jobs:
           python -m pip install -r requirements.txt -r requirements-dev.txt
           python -m pip install -r requirements-paper-quality-cpu.txt
           python - <<'PY'
-          import numpy, onnxruntime, torch
+          import numpy, onnxruntime, torch, torchvision
           versions = {
               'torch': torch.__version__,
+              'torchvision': torchvision.__version__,
               'numpy': numpy.__version__,
               'onnxruntime': onnxruntime.__version__,
               'cuda': torch.cuda.is_available(),
           }
           print(versions)
           assert int(numpy.__version__.split('.', 1)[0]) == 1
+          assert torchvision.__version__.startswith('0.16.2')
           assert not torch.cuda.is_available()
           PY
 

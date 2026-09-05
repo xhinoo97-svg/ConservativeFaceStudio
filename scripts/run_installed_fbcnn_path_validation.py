@@ -138,7 +138,10 @@ def validate_installed_block(
             )
     executed = details.get("models_actually_executed")
     if not isinstance(executed, list) or len(executed) != 1:
-        raise RuntimeError("Installed path did not report exactly one executed model")
+        raise RuntimeError(
+            "Installed path did not report exactly one executed model: "
+            f"{details.get('model_execution_errors')}"
+        )
     model = executed[0]
     if not isinstance(model, dict) or model.get("model_key") != "fbcnn":
         raise RuntimeError(f"Installed path executed the wrong model: {model}")

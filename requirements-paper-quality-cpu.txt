@@ -5,3 +5,4 @@
 # family already exercised by the frozen Phase02 Windows qualification.
 numpy>=1.26,<2; platform_system == "Windows"
 torch==2.1.2+cpu; platform_system == "Windows"
+torchvision==0.16.2+cpu; platform_system == "Windows"

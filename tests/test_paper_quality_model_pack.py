@@ -109,7 +109,49 @@ def test_windows_validation_runtime_preserves_phase02_torch_numpy_abi() -> None:
     ).read_text(encoding="utf-8")
     assert 'numpy>=1.26,<2; platform_system == "Windows"' in requirements
     assert 'torch==2.1.2+cpu; platform_system == "Windows"' in requirements
+    assert 'torchvision==0.16.2+cpu; platform_system == "Windows"' in requirements
     assert requirements.index("numpy>=1.26,<2") < requirements.index("torch==2.1.2+cpu")
+
+
+def test_validation_pack_fails_before_block_eight_without_torchvision(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    checkpoint_payload = b"fixture-checkpoint"
+    checkpoint_digest = hashlib.sha256(checkpoint_payload).hexdigest()
+    checkpoint = tmp_path / "models" / "paper-quality" / "fbcnn" / "fbcnn_color.pth"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(checkpoint_payload)
+    damage_payload = b"fixture-onnx"
+    damage_digest = hashlib.sha256(damage_payload).hexdigest()
+    damage_mask = tmp_path / "models" / "paper-quality" / "damage-mask" / "damage.onnx"
+    damage_mask.parent.mkdir(parents=True)
+    damage_mask.write_bytes(damage_payload)
+    _write_upstream(tmp_path)
+    _write_manifest(
+        tmp_path,
+        checkpoint_path="models/paper-quality/fbcnn/fbcnn_color.pth",
+        checkpoint_size=len(checkpoint_payload),
+        checkpoint_sha=checkpoint_digest,
+        damage_mask_path="models/paper-quality/damage-mask/damage.onnx",
+        damage_mask_size=len(damage_payload),
+        damage_mask_sha=damage_digest,
+    )
+    monkeypatch.setattr(pack, "APPROVED_CHECKPOINT_SIZE_BYTES", len(checkpoint_payload))
+    monkeypatch.setattr(pack, "APPROVED_CHECKPOINT_SHA256", checkpoint_digest)
+    monkeypatch.setattr(pack, "LRASPP_ONNX_SIZE_BYTES", len(damage_payload))
+    monkeypatch.setattr(pack, "LRASPP_ONNX_SHA256", damage_digest)
+    monkeypatch.setattr(
+        pack.importlib.util,
+        "find_spec",
+        lambda name: None if name == "torchvision" else object(),
+    )
+
+    result = pack.inspect_paper_quality_validation_pack(tmp_path)
+
+    assert result.installed_jpeg_route_ready is False
+    assert result.paths == {}
+    assert "torchvision runtime is not installed" in result.errors["validation_pack"]
 
 
 def test_validation_pack_resolves_only_after_path_hash_source_and_runtime_checks(
