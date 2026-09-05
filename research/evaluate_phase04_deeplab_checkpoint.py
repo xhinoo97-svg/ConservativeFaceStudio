@@ -96,6 +96,12 @@ def _as_input(image: np.ndarray) -> torch.Tensor:
     return torch.from_numpy(array).float()
 
 
+def _binary_truth_from_target(target: np.ndarray) -> np.ndarray:
+    if target.ndim != 2:
+        raise ValueError("Phase04 target must be a 2D class-index map")
+    return target != int(PHASE04_HEALTHY_INDEX)
+
+
 def _confusion(predicted: np.ndarray, truth: np.ndarray) -> tuple[int, int, int, int]:
     pred = predicted.astype(bool)
     target = truth.astype(bool)
@@ -212,7 +218,7 @@ def evaluate(
                     (class_map.cpu().numpy() != int(PHASE04_HEALTHY_INDEX))
                     & (confidence.cpu().numpy() >= float(threshold))
                 )
-                truth = sample.binary_mask > 0
+                truth = _binary_truth_from_target(sample.target)
                 counts = _confusion(predicted, truth)
                 _add_counts(overall_counts, counts)
                 _add_counts(type_counts[case.damage_type], counts)
