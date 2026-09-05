@@ -27,22 +27,25 @@ def prepare(
     output_manifest: Path,
     output_size: int,
     train_count: int,
+    minimum_validation_count: int,
     minimum_detector_score: float,
 ) -> dict[str, object]:
     payload = json.loads(prefetch_manifest.read_text(encoding="utf-8"))
     resolved = payload.get("resolved")
-    failures = payload.get("failures")
+    download_failures = payload.get("failures")
     if not isinstance(resolved, list) or not resolved:
         raise RuntimeError("public portrait prefetch manifest has no resolved images")
-    if failures:
-        raise RuntimeError(f"public portrait prefetch contains failures: {failures}")
-    if not 1 <= int(train_count) < len(resolved):
-        raise ValueError("train_count must leave at least one validation portrait")
+    if download_failures:
+        raise RuntimeError(f"public portrait prefetch contains failures: {download_failures}")
+    if int(train_count) < 1 or int(minimum_validation_count) < 1:
+        raise ValueError("train_count and minimum_validation_count must be positive")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     engine = build_yunet_cropper(yunet_path, score_threshold=float(minimum_detector_score))
-    rows: list[dict[str, object]] = []
-    for index, row in enumerate(resolved):
+    detected_rows: list[dict[str, object]] = []
+    detector_failures: list[dict[str, str]] = []
+
+    for original_index, row in enumerate(resolved):
         if not isinstance(row, dict):
             raise ValueError("invalid resolved portrait row")
         key = str(row.get("key", "")).strip()
@@ -56,27 +59,32 @@ def prepare(
         image = cv2.imread(str(candidate), cv2.IMREAD_COLOR)
         if image is None:
             raise RuntimeError(f"cannot decode portrait: {candidate}")
-        result = crop_main_face(
-            image,
-            engine,
-            output_size=int(output_size),
-            context_scale=1.35,
-            minimum_detector_score=float(minimum_detector_score),
-        )
-        filename = f"{index + 1:02d}_{key}_yunet_face.jpg"
+        try:
+            result = crop_main_face(
+                image,
+                engine,
+                output_size=int(output_size),
+                context_scale=1.35,
+                minimum_detector_score=float(minimum_detector_score),
+            )
+        except (RuntimeError, ValueError) as exc:
+            detector_failures.append({"key": key, "error": str(exc)})
+            continue
+
+        detected_index = len(detected_rows)
+        filename = f"{detected_index + 1:02d}_{key}_yunet_face.jpg"
         target = output_dir / filename
         if not cv2.imwrite(str(target), result.image, [int(cv2.IMWRITE_JPEG_QUALITY), 98]):
             raise RuntimeError(f"cannot write face crop: {target}")
-        split = "train" if index < int(train_count) else "validation"
-        rows.append(
+        detected_rows.append(
             {
                 "source_id": f"public_yunet_{key}",
                 "filename": filename,
                 "clean_source_sha256": _sha256(target),
                 "face_bbox_normalized": [0.0, 0.0, 1.0, 1.0],
-                "dataset_split": split,
                 "identity_key": f"public-development:{key}",
                 "license": "US_GOVERNMENT_PUBLIC_DOMAIN",
+                "original_index": int(original_index),
                 "original_filename": candidate.name,
                 "original_sha256": _sha256(candidate),
                 "detector": {
@@ -89,12 +97,25 @@ def prepare(
             }
         )
 
+    required_total = int(train_count) + int(minimum_validation_count)
+    if len(detected_rows) < required_total:
+        raise RuntimeError(
+            f"YuNet accepted only {len(detected_rows)}/{len(resolved)} portraits at score >= "
+            f"{minimum_detector_score}; need at least {required_total}; failures={detector_failures}"
+        )
+
+    rows: list[dict[str, object]] = []
+    for accepted_index, row in enumerate(detected_rows):
+        copied = dict(row)
+        copied["dataset_split"] = "train" if accepted_index < int(train_count) else "validation"
+        rows.append(copied)
+
     train_ids = {str(row["identity_key"]) for row in rows if row["dataset_split"] == "train"}
     validation_ids = {str(row["identity_key"]) for row in rows if row["dataset_split"] == "validation"}
     if train_ids & validation_ids:
         raise RuntimeError("identity leakage in YuNet portrait bank")
     manifest: dict[str, object] = {
-        "version": 1,
+        "version": 2,
         "purpose": "Phase04 YuNet-cropped public real portraits for DEVELOPMENT only",
         "detector": {
             "backend": "OpenCV Zoo YuNet",
@@ -102,6 +123,7 @@ def prepare(
             "asset_sha256": _sha256(yunet_path),
             "minimum_score": float(minimum_detector_score),
             "context_scale": 1.35,
+            "rejected_portraits_are_excluded_without_threshold_relaxation": True,
         },
         "output_size": int(output_size),
         "identity_disjoint": True,
@@ -109,10 +131,14 @@ def prepare(
         "v3_used": False,
         "v4_used": False,
         "counts": {
+            "requested": len(resolved),
+            "accepted": len(rows),
+            "rejected": len(detector_failures),
             "train": sum(row["dataset_split"] == "train" for row in rows),
             "validation": sum(row["dataset_split"] == "validation" for row in rows),
             "total": len(rows),
         },
+        "detector_failures": detector_failures,
         "sources": rows,
     }
     output_manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -129,6 +155,7 @@ def main() -> int:
     parser.add_argument("--output-manifest", required=True, type=Path)
     parser.add_argument("--output-size", type=int, default=128)
     parser.add_argument("--train-count", type=int, default=6)
+    parser.add_argument("--minimum-validation-count", type=int, default=2)
     parser.add_argument("--minimum-detector-score", type=float, default=0.75)
     args = parser.parse_args()
     report = prepare(
@@ -139,9 +166,20 @@ def main() -> int:
         output_manifest=args.output_manifest,
         output_size=args.output_size,
         train_count=args.train_count,
+        minimum_validation_count=args.minimum_validation_count,
         minimum_detector_score=args.minimum_detector_score,
     )
-    print(json.dumps({"counts": report["counts"], "detector": report["detector"]}, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "counts": report["counts"],
+                "detector": report["detector"],
+                "detector_failures": report["detector_failures"],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 
