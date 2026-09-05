@@ -205,7 +205,10 @@ jobs:
           assert report['source']['v3_v4_v5_used'] is False
           assert report['model_pack']['installed_jpeg_route_ready'] is True
           path = report['installed_path']
-          assert path['damage_route'] == 'JPEG_ARTIFACT'
+          assert path['damage_route'] == 'MIXED'
+          assert path['model_route'] == 'JPEG_ARTIFACT'
+          assert len(path['admitted_class_evidence']) >= 2
+          assert path['admitted_class_evidence'][0]['damage_class'] == 'JPEG_ARTIFACT'
           assert path['model']['model_key'] == 'fbcnn'
           assert path['model']['checkpoint_sha256'] == os.environ['FBCNN_WEIGHT_SHA256']
           assert path['model']['fused_to_final'] is False
@@ -217,6 +220,8 @@ jobs:
           print(json.dumps({
               'gate': report['gate'],
               'damage_route': path['damage_route'],
+              'model_route': path['model_route'],
+              'admitted_class_evidence': path['admitted_class_evidence'],
               'model': path['model']['model_key'],
               'checkpoint_sha256': path['model']['checkpoint_sha256'],
               'wrong_person_final_pixels': path['wrong_person_final_pixels'],

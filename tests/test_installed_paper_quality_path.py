@@ -60,6 +60,25 @@ class _DamageSession:
         return [logits]
 
 
+class _MixedDamageSession:
+    def __init__(self, dominant_class: str) -> None:
+        if dominant_class not in {"JPEG_ARTIFACT", "SCRIBBLE"}:
+            raise ValueError(dominant_class)
+        self.dominant_class = dominant_class
+
+    def get_inputs(self):
+        return [_Input()]
+
+    def run(self, output_names, input_feed):
+        del output_names, input_feed
+        logits = np.full((1, len(DAMAGE_CLASSES), 64, 64), -8.0, dtype=np.float32)
+        logits[:, CLASS_TO_INDEX["HEALTHY"], :, :] = 8.0
+        secondary = "SCRIBBLE" if self.dominant_class == "JPEG_ARTIFACT" else "JPEG_ARTIFACT"
+        logits[:, CLASS_TO_INDEX[self.dominant_class], 13:49, 12:52] = 12.0
+        logits[:, CLASS_TO_INDEX[secondary], 4:12, 4:13] = 12.0
+        return [logits]
+
+
 class _ValidationFBCNN:
     key = "fbcnn"
     version = "synthetic-validation-backend"
@@ -398,6 +417,93 @@ def test_jpeg_route_executes_validation_fbcnn_but_never_fuses_nonproduction_pixe
         item for item in result.details["paper_quality_trace"] if item["stage"] == "model_execution"
     )
     assert model_trace["status"] == "VALIDATION_EXECUTED_NOT_FUSED"
+
+
+def test_mixed_dominant_jpeg_executes_only_class_bounded_validation_subroute() -> None:
+    main, _, _ = _images()
+    backend = _ValidationFBCNN()
+    runtime = InstalledPaperQualityRuntime(
+        damage_runtime=DamageMaskRuntime(
+            session=_MixedDamageSession("JPEG_ARTIFACT"),
+            input_size=64,
+        ),
+        model_qualifications={
+            "fbcnn": nonproduction_model_qualification(
+                "fbcnn",
+                "VALIDATION",
+                ("synthetic-installed-route-contract",),
+            )
+        },
+        validation_backend_factories={"fbcnn": lambda: backend},
+    )
+    landmarks = np.asarray(
+        [[36.0, 39.0], [60.0, 39.0], [48.0, 51.0], [40.0, 63.0], [56.0, 63.0]],
+        dtype=np.float32,
+    )
+    workspace = Workspace(
+        primary=main.copy(),
+        metadata={"primary_landmarks5": landmarks, "primary_bbox": (18, 14, 60, 68)},
+    )
+
+    result = runtime.run(workspace, immutable_main=main)
+
+    assert result.details["damage_route"]["damage_kind"] == "MIXED"
+    assert result.details["damage_route"]["source_damage_class"] == "JPEG_ARTIFACT"
+    assert result.details["validation_model_route"]["damage_kind"] == "JPEG_ARTIFACT"
+    assert result.details["validation_model_route"]["mask_pixels"] < result.details["damage_route"]["mask_pixels"]
+    evidence = result.details["damage"]["admitted_class_evidence"]
+    assert [item["damage_class"] for item in evidence] == ["JPEG_ARTIFACT", "SCRIBBLE"]
+    assert backend.load_calls == backend.restore_calls == backend.unload_calls == 1
+    assert [item["model_key"] for item in result.details["models_actually_executed"]] == ["fbcnn"]
+    candidate = result.details["validation_model_candidates"][0]
+    assert candidate["parent_damage_kind"] == "MIXED"
+    assert candidate["route_damage_kind"] == "JPEG_ARTIFACT"
+    assert candidate["route_mask_pixels"] > 0
+    assert result.details["validation_candidates_fused_to_final"] is False
+    assert result.details["generated_pixels"] == 0
+    assert np.array_equal(result.image, main)
+
+
+def test_mixed_nonjpeg_dominant_route_never_constructs_fbcnn() -> None:
+    main, _, _ = _images()
+    constructed: list[_ValidationFBCNN] = []
+
+    def factory():
+        backend = _ValidationFBCNN()
+        constructed.append(backend)
+        return backend
+
+    runtime = InstalledPaperQualityRuntime(
+        damage_runtime=DamageMaskRuntime(
+            session=_MixedDamageSession("SCRIBBLE"),
+            input_size=64,
+        ),
+        model_qualifications={
+            "fbcnn": nonproduction_model_qualification(
+                "fbcnn",
+                "VALIDATION",
+                ("synthetic-installed-route-contract",),
+            )
+        },
+        validation_backend_factories={"fbcnn": factory},
+    )
+    landmarks = np.asarray(
+        [[36.0, 39.0], [60.0, 39.0], [48.0, 51.0], [40.0, 63.0], [56.0, 63.0]],
+        dtype=np.float32,
+    )
+    workspace = Workspace(
+        primary=main.copy(),
+        metadata={"primary_landmarks5": landmarks, "primary_bbox": (18, 14, 60, 68)},
+    )
+
+    result = runtime.run(workspace, immutable_main=main)
+
+    assert result.details["damage_route"]["damage_kind"] == "MIXED"
+    assert result.details["damage_route"]["source_damage_class"] == "SCRIBBLE"
+    assert result.details["validation_model_route"]["damage_kind"] == "MIXED"
+    assert constructed == []
+    assert result.details["models_actually_executed"] == []
+    assert np.array_equal(result.image, main)
 
 
 @pytest.mark.parametrize("damage_class", ["BLUR", "STICKER", "HEALTHY"])

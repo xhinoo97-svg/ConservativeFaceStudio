@@ -21,8 +21,20 @@ def _details() -> dict[str, object]:
         "damage": {
             "dominant_damage_class": "JPEG_ARTIFACT",
             "dominant_confidence": 0.91,
+            "admitted_class_evidence": [
+                {
+                    "damage_class": "JPEG_ARTIFACT",
+                    "pixels": 100,
+                    "admitted_fraction": 1.0,
+                    "mean_confidence": 0.91,
+                }
+            ],
         },
         "damage_route": {"damage_kind": "JPEG_ARTIFACT"},
+        "validation_model_route": {
+            "damage_kind": "JPEG_ARTIFACT",
+            "source_damage_class": "JPEG_ARTIFACT",
+        },
         "models_actually_executed": [
             {
                 "model_key": "fbcnn",
@@ -71,6 +83,7 @@ def test_installed_block_validator_requires_shadow_execution_and_immutable_final
     main = np.full((24, 24, 3), 70, dtype=np.uint8)
     report = validate_installed_block(_details(), block_image=main.copy(), immutable_main=main)
     assert report["damage_route"] == "JPEG_ARTIFACT"
+    assert report["model_route"] == "JPEG_ARTIFACT"
     assert report["wrong_person_final_pixels"] == 0
     assert report["provenance_violations"] == 0
     assert report["healthy_pixels_changed"] == 0

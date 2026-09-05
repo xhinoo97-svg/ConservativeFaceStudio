@@ -11,6 +11,7 @@ from app.candidate_selector_v2 import CandidateSelectionPolicy
 from app.component_bank import ComponentCoverage, build_component_bank
 from app.damage_mask_runtime import DamageMaskResult, DamageMaskRuntime
 from app.damage_router import DamageRoutePlan, plan_damage_route
+from app.damage_taxonomy import CLASS_TO_INDEX, DAMAGE_CLASSES, HEALTHY_INDEX
 from app.execution import Workspace
 from app.face_restorer_adapter import (
     FaceRestorerAdapter,
@@ -97,6 +98,87 @@ def _clamped_crop(
     if right <= left or bottom <= top:
         return None
     return left, top, right - left, bottom - top
+
+
+def _damage_class_evidence(damage: DamageMaskResult) -> list[dict[str, object]]:
+    """Report every admitted class without converting minority labels to noise."""
+    class_map = np.asarray(damage.class_map)
+    confidence = np.asarray(damage.confidence_map)
+    admitted = np.asarray(damage.binary_damage_mask) > 0
+    total = int(np.count_nonzero(admitted))
+    evidence: list[dict[str, object]] = []
+    if total <= 0:
+        return evidence
+    labels, counts = np.unique(class_map[admitted], return_counts=True)
+    for label_raw, count_raw in zip(labels, counts):
+        label = int(label_raw)
+        count = int(count_raw)
+        if label == HEALTHY_INDEX:
+            continue
+        selected = admitted & (class_map == label)
+        evidence.append(
+            {
+                "damage_class": DAMAGE_CLASSES[label],
+                "pixels": count,
+                "admitted_fraction": float(count / total),
+                "mean_confidence": (
+                    float(np.mean(confidence[selected])) if np.any(selected) else 0.0
+                ),
+            }
+        )
+    evidence.sort(key=lambda item: (-int(item["pixels"]), str(item["damage_class"])))
+    return evidence
+
+
+def _validation_execution_route(
+    parent: DamageRoutePlan,
+    damage: DamageMaskResult | None,
+    model_qualifications: Mapping[str, ModelQualification],
+) -> DamageRoutePlan:
+    """Derive a class-bounded validation route from truthful mixed evidence.
+
+    A mixed result must remain MIXED in the product report. For the installed-path
+    validation boundary only, the dominant JPEG class may be isolated so FBCNN is
+    exercised against JPEG-labelled pixels without treating SCRIBBLE (or any other
+    minority class) as JPEG. The candidate remains non-production and cannot be
+    fused by this runtime.
+    """
+    if parent.damage_kind == "JPEG_ARTIFACT":
+        return parent
+    if (
+        parent.damage_kind != "MIXED"
+        or parent.source_damage_class != "JPEG_ARTIFACT"
+        or damage is None
+    ):
+        return parent
+
+    class_map = np.asarray(damage.class_map)
+    admitted = np.asarray(damage.binary_damage_mask) > 0
+    jpeg_pixels = admitted & (class_map == CLASS_TO_INDEX["JPEG_ARTIFACT"])
+    if not np.any(jpeg_pixels):
+        return parent
+    jpeg_binary = np.where(jpeg_pixels, 255, 0).astype(np.uint8)
+    isolated = replace(
+        damage,
+        soft_damage_mask=np.where(
+            jpeg_pixels,
+            np.asarray(damage.soft_damage_mask),
+            0.0,
+        ).astype(np.float32),
+        binary_damage_mask=jpeg_binary,
+        dominant_damage_class="JPEG_ARTIFACT",
+        dominant_confidence=float(np.mean(np.asarray(damage.confidence_map)[jpeg_pixels])),
+        affected_components=tuple(
+            item
+            for item in damage.affected_components
+            if str(item.damage_class).upper() == "JPEG_ARTIFACT"
+        ),
+    )
+    return plan_damage_route(
+        isolated,
+        image_shape=jpeg_binary.shape,
+        model_qualifications=model_qualifications,
+    )
 
 
 def _normalised_sharpness(image: np.ndarray, support: np.ndarray) -> float:
@@ -334,6 +416,8 @@ class InstalledPaperQualityRuntime:
         route: DamageRoutePlan,
         base: np.ndarray,
         bbox: tuple[int, int, int, int],
+        *,
+        parent_damage_kind: str,
     ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[str], dict[str, object]]:
         matching_keys = [
             key
@@ -416,6 +500,9 @@ class InstalledPaperQualityRuntime:
                     "execution_scope": "INSTALLED_PATH_VALIDATION_SHADOW",
                     "fused_to_final": False,
                     "crop_bbox_xywh": [x, y, width, height],
+                    "parent_damage_kind": str(parent_damage_kind),
+                    "route_damage_kind": str(route.damage_kind),
+                    "route_mask_pixels": int(crop_mask_pixels),
                     "candidate_changed_pixels": int(np.count_nonzero(changed)),
                     "candidate_changed_outside_route_pixels": int(np.count_nonzero(outside_route)),
                 }
@@ -433,6 +520,7 @@ class InstalledPaperQualityRuntime:
                 "stage": "model_execution",
                 "status": "VALIDATION_EXECUTED_NOT_FUSED",
                 "damage_kind": route.damage_kind,
+                "parent_damage_kind": str(parent_damage_kind),
                 "model_key": str(candidate.model_key),
                 "checkpoint_sha256": str(candidate.checkpoint_sha256 or ""),
             }
@@ -506,8 +594,18 @@ class InstalledPaperQualityRuntime:
                 int(item.production_qualified) for item in self.model_qualifications.values()
             ),
         })
+        validation_route = _validation_execution_route(
+            route,
+            damage,
+            self.model_qualifications,
+        )
         executed_models, validation_candidates, model_errors, model_trace = (
-            self._run_validation_backend(route, base, bbox)
+            self._run_validation_backend(
+                validation_route,
+                base,
+                bbox,
+                parent_damage_kind=route.damage_kind,
+            )
             if geometry_ok
             else (
                 [],
@@ -638,9 +736,11 @@ class InstalledPaperQualityRuntime:
             "damage": None if damage is None else {
                 "dominant_damage_class": damage.dominant_damage_class,
                 "dominant_confidence": damage.dominant_confidence,
+                "admitted_class_evidence": _damage_class_evidence(damage),
                 "affected_components": [asdict(item) for item in damage.affected_components],
             },
             "damage_route": route.report(),
+            "validation_model_route": validation_route.report(),
             "person_identity_profile": profile_report,
             "component_selections": selections_report,
             "requested_pixels": runtime_result.requested_pixels,
@@ -663,6 +763,7 @@ class InstalledPaperQualityRuntime:
                 "paper_quality_runtime_wired": True,
                 "paper_quality_trace": trace,
                 "paper_quality_damage_route": route.report(),
+                "paper_quality_validation_model_route": validation_route.report(),
                 "paper_quality_person_identity_profile": profile_report,
                 "paper_quality_component_selections": selections_report,
                 "paper_quality_runtime_report": runtime_result.report(),

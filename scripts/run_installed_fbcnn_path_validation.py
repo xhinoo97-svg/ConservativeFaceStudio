@@ -111,8 +111,31 @@ def validate_installed_block(
     if not isinstance(damage, dict) or damage.get("dominant_damage_class") != "JPEG_ARTIFACT":
         raise RuntimeError(f"LR-ASPP did not classify the input as JPEG_ARTIFACT: {damage}")
     route = details.get("damage_route")
-    if not isinstance(route, dict) or route.get("damage_kind") != "JPEG_ARTIFACT":
-        raise RuntimeError(f"Damage router did not select the JPEG route: {route}")
+    if not isinstance(route, dict) or route.get("damage_kind") not in {"JPEG_ARTIFACT", "MIXED"}:
+        raise RuntimeError(f"Damage router did not retain dominant JPEG evidence: {route}")
+    model_route = details.get("validation_model_route")
+    if (
+        not isinstance(model_route, dict)
+        or model_route.get("damage_kind") != "JPEG_ARTIFACT"
+        or model_route.get("source_damage_class") != "JPEG_ARTIFACT"
+    ):
+        raise RuntimeError(f"FBCNN was not bound to a JPEG-only model route: {model_route}")
+    class_evidence = damage.get("admitted_class_evidence")
+    if not isinstance(class_evidence, list) or not any(
+        isinstance(item, dict) and item.get("damage_class") == "JPEG_ARTIFACT"
+        for item in class_evidence
+    ):
+        raise RuntimeError(f"Admitted JPEG class evidence is missing: {class_evidence}")
+    if route.get("damage_kind") == "MIXED":
+        if len(class_evidence) < 2:
+            raise RuntimeError("MIXED route does not report multiple admitted damage classes")
+        parent_pixels = int(route.get("mask_pixels", 0))
+        model_pixels = int(model_route.get("mask_pixels", 0))
+        if not 0 < model_pixels < parent_pixels:
+            raise RuntimeError(
+                "JPEG validation subroute is not a strict subset of the MIXED route: "
+                f"model={model_pixels} parent={parent_pixels}"
+            )
     executed = details.get("models_actually_executed")
     if not isinstance(executed, list) or len(executed) != 1:
         raise RuntimeError("Installed path did not report exactly one executed model")
@@ -166,6 +189,8 @@ def validate_installed_block(
         "damage_class": damage["dominant_damage_class"],
         "damage_confidence": float(damage["dominant_confidence"]),
         "damage_route": route["damage_kind"],
+        "model_route": model_route["damage_kind"],
+        "admitted_class_evidence": list(class_evidence),
         "decision": str(details.get("decision")),
         "model": dict(model),
         "candidate": dict(candidate),
