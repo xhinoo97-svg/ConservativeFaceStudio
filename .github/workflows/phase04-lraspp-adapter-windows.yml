@@ -31,19 +31,21 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-      - name: Install exact Windows CPU runtime
+      - name: Install coherent Windows CPU runtime
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt 'pytest>=8,<9'
           python -m pip install -r requirements-paper-quality-cpu.txt
+          python -m pip check
           python - <<'PY'
-          import numpy, torch, torchvision
-          print({'numpy': numpy.__version__, 'torch': torch.__version__, 'torchvision': torchvision.__version__, 'cuda': torch.cuda.is_available()})
-          assert numpy.__version__.startswith('1.')
-          assert torch.__version__ == '2.1.2+cpu'
-          assert torchvision.__version__ == '0.16.2+cpu'
+          import cv2, numpy, torch, torchvision
+          print({'opencv': cv2.__version__, 'numpy': numpy.__version__, 'torch': torch.__version__, 'torchvision': torchvision.__version__, 'cuda': torch.cuda.is_available()})
+          assert cv2.__version__.startswith('5.')
+          assert numpy.__version__.startswith('2.')
+          assert torch.__version__ == '2.14.0+cpu'
+          assert torchvision.__version__ == '0.29.0+cpu'
           assert torch.cuda.is_available() is False
           PY
       - name: Compile restored LRASPP adapter
