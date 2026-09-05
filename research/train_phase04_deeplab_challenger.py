@@ -95,8 +95,13 @@ def train(
 ) -> dict[str, object]:
     if image_size < 64:
         raise ValueError("image_size must be >= 64")
-    if batch_size < 1 or max_steps < 1:
-        raise ValueError("batch_size and max_steps must be positive")
+    if batch_size < 2:
+        raise ValueError(
+            "batch_size must be >= 2 for DeepLab training because the official ASPP head "
+            "contains BatchNorm over a 1x1 pooled feature map"
+        )
+    if max_steps < 1:
+        raise ValueError("max_steps must be positive")
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -167,6 +172,7 @@ def train(
             "learning_rate": float(learning_rate),
             "seed": int(seed),
             "source_count": len(records),
+            "batchnorm_safe_batch": True,
         },
     }
     torch.save(checkpoint, output)
@@ -178,6 +184,7 @@ def train(
         "matrix_case_count": len(cases),
         "steps": int(max_steps),
         "batch_size": int(batch_size),
+        "batchnorm_safe_batch": True,
         "initial_loss": float(losses[0]),
         "final_loss": float(losses[-1]),
         "minimum_loss": float(min(losses)),
