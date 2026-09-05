@@ -39,6 +39,8 @@ POSITIONS: tuple[str, ...] = (
 )
 SIZES: tuple[str, ...] = ("SMALL", "MEDIUM", "LARGE")
 SEVERITIES: tuple[str, ...] = ("LIGHT", "MEDIUM", "SEVERE")
+TRANSLUCENT_OPACITIES: tuple[str, ...] = ("LOW", "MEDIUM", "HIGH")
+GLOBAL_DAMAGE_TYPES: frozenset[str] = frozenset({"BLUR_GLOBAL", "JPEG_ARTIFACT", "NOISE"})
 
 # Legacy 12-class LR-ASPP can be measured for binary localization on every row.
 # Exact class scoring is only authoritative where the old taxonomy has a direct semantic match.
@@ -76,9 +78,27 @@ class EvaluationCase:
     binary_damage_expected: bool
 
 
+def _positions_for(damage_type: str) -> tuple[str, ...]:
+    return ("GLOBAL",) if damage_type in GLOBAL_DAMAGE_TYPES else POSITIONS
+
+
+def _opacities_for(damage_type: str) -> tuple[str, ...]:
+    if damage_type == "OPAQUE_STICKER":
+        return ("OPAQUE",)
+    if damage_type == "TRANSLUCENT_STICKER":
+        return TRANSLUCENT_OPACITIES
+    return ("N/A",)
+
+
 def build_matrix() -> list[EvaluationCase]:
+    """Build the predeclared Phase04 cross-factorial evaluation matrix.
+
+    Every non-global damage type is evaluated at every facial position, size and
+    severity. Translucent stickers additionally span every opacity level. Global
+    damage types span size and severity at GLOBAL position. HEALTHY remains a
+    dedicated negative-control row.
+    """
     rows: list[EvaluationCase] = []
-    position_index = 0
     for damage_type in EVALUATION_DAMAGE_TYPES:
         if damage_type == "HEALTHY":
             rows.append(
@@ -94,29 +114,53 @@ def build_matrix() -> list[EvaluationCase]:
                 )
             )
             continue
-        for profile_index, (size, severity) in enumerate(zip(SIZES, SEVERITIES), start=1):
-            global_type = damage_type in {"BLUR_GLOBAL", "JPEG_ARTIFACT", "NOISE"}
-            position = "GLOBAL" if global_type else POSITIONS[position_index % len(POSITIONS)]
-            position_index += 1
-            if damage_type == "OPAQUE_STICKER":
-                opacity = "OPAQUE"
-            elif damage_type == "TRANSLUCENT_STICKER":
-                opacity = ("LOW", "MEDIUM", "HIGH")[profile_index - 1]
-            else:
-                opacity = "N/A"
-            rows.append(
-                EvaluationCase(
-                    case_id=f"{damage_type}-{profile_index:03d}",
-                    damage_type=damage_type,
-                    position=position,
-                    size=size,
-                    severity=severity,
-                    opacity=opacity,
-                    expected_legacy_class=LEGACY_CLASS_FOR_TYPE[damage_type],
-                    binary_damage_expected=True,
-                )
-            )
+
+        case_index = 0
+        for position in _positions_for(damage_type):
+            for size in SIZES:
+                for severity in SEVERITIES:
+                    for opacity in _opacities_for(damage_type):
+                        case_index += 1
+                        rows.append(
+                            EvaluationCase(
+                                case_id=f"{damage_type}-{case_index:04d}",
+                                damage_type=damage_type,
+                                position=position,
+                                size=size,
+                                severity=severity,
+                                opacity=opacity,
+                                expected_legacy_class=LEGACY_CLASS_FOR_TYPE[damage_type],
+                                binary_damage_expected=True,
+                            )
+                        )
     return rows
+
+
+def validate_matrix(rows: list[EvaluationCase]) -> dict[str, object]:
+    case_ids = [row.case_id for row in rows]
+    checks: dict[str, bool] = {
+        "case_ids_unique": len(case_ids) == len(set(case_ids)),
+        "healthy_negative_control_present_once": sum(row.damage_type == "HEALTHY" for row in rows) == 1,
+    }
+
+    for damage_type in EVALUATION_DAMAGE_TYPES:
+        subset = [row for row in rows if row.damage_type == damage_type]
+        if damage_type == "HEALTHY":
+            continue
+        expected_positions = set(_positions_for(damage_type))
+        checks[f"{damage_type}_positions_complete"] = {row.position for row in subset} == expected_positions
+        checks[f"{damage_type}_sizes_complete"] = {row.size for row in subset} == set(SIZES)
+        checks[f"{damage_type}_severities_complete"] = {row.severity for row in subset} == set(SEVERITIES)
+        checks[f"{damage_type}_opacities_complete"] = {row.opacity for row in subset} == set(_opacities_for(damage_type))
+        expected_count = (
+            len(_positions_for(damage_type))
+            * len(SIZES)
+            * len(SEVERITIES)
+            * len(_opacities_for(damage_type))
+        )
+        checks[f"{damage_type}_cross_product_complete"] = len(subset) == expected_count
+
+    return {"checks": checks, "passed": all(checks.values())}
 
 
 def binary_metrics(*, true_positive: int, false_positive: int, false_negative: int, true_negative: int) -> dict[str, float | int]:
@@ -184,9 +228,12 @@ def phase04_gate(report: Mapping[str, object]) -> dict[str, object]:
 
 def matrix_payload() -> dict[str, object]:
     rows = build_matrix()
+    validation = validate_matrix(rows)
+    if not validation["passed"]:
+        raise RuntimeError("Phase04 evaluation matrix is incomplete")
     return {
         "phase": "PHASE_04_DAMAGE_MASK",
-        "purpose": "predeclared evaluation matrix; no model scores are fabricated here",
+        "purpose": "predeclared cross-factorial evaluation matrix; no model scores are fabricated here",
         "final_holdout_used": False,
         "v3_used": False,
         "v4_used": False,
@@ -205,8 +252,10 @@ def matrix_payload() -> dict[str, object]:
             "positions": list(POSITIONS) + ["GLOBAL"],
             "sizes": list(SIZES),
             "severities": list(SEVERITIES),
-            "translucent_opacity_levels": ["LOW", "MEDIUM", "HIGH"],
+            "translucent_opacity_levels": list(TRANSLUCENT_OPACITIES),
+            "cross_factorial": True,
         },
+        "matrix_validation": validation,
         "case_count": len(rows),
         "cases": [asdict(row) for row in rows],
     }
