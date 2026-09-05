@@ -22,14 +22,24 @@ from phase04_expanded_damage_generator import apply_expanded_damage  # noqa: E40
 
 
 def _face(size: int = 128) -> np.ndarray:
+    """Deterministic structured QA image with edges/texture in every facial region.
+
+    A purely affine gradient is an invalid blur oracle because normalized blur
+    kernels can preserve affine fields exactly away from borders. This fixture
+    keeps a smooth face-like base while adding bounded multi-scale texture so
+    blur, motion-blur and defocus operations have measurable pixel authority at
+    every declared position.
+    """
     y, x = np.mgrid[0:size, 0:size]
-    return np.dstack(
-        (
-            ((x * 1.5 + y * 0.2) % 256).astype(np.uint8),
-            ((x * 0.5 + y * 1.2) % 256).astype(np.uint8),
-            ((x * 0.8 + y * 0.7) % 256).astype(np.uint8),
-        )
+    checker = (((x // 4) + (y // 4)) % 2).astype(np.float32)
+    fine = (((x * 17 + y * 29 + (x * y) % 31) % 23) - 11).astype(np.float32)
+    radial = (((x - size / 2.0) ** 2 + (y - size / 2.0) ** 2) ** 0.5) % 19
+    channels = (
+        82.0 + x * 0.72 + y * 0.16 + checker * 28.0 + fine * 1.7,
+        74.0 + x * 0.28 + y * 0.66 + checker * 19.0 - fine * 1.3 + radial * 0.7,
+        96.0 + x * 0.44 + y * 0.36 + checker * 24.0 + fine * 1.1 - radial * 0.5,
     )
+    return np.dstack([np.clip(channel, 0, 255).astype(np.uint8) for channel in channels])
 
 
 @pytest.mark.parametrize("case", build_matrix(), ids=lambda case: case.case_id)
@@ -55,7 +65,6 @@ def test_translucent_sticker_has_full_predeclared_opacity_cross_product() -> Non
     assert len(rows) == len(POSITIONS) * len(SIZES) * len(SEVERITIES) * len(TRANSLUCENT_OPACITIES)
     assert {row.opacity for row in rows} == set(TRANSLUCENT_OPACITIES)
 
-    # Every position/size/severity combination must contain all opacity levels exactly once.
     grouped: dict[tuple[str, str, str], set[str]] = {}
     for row in rows:
         key = (row.position, row.size, row.severity)
