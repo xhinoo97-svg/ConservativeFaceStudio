@@ -1,0 +1,54 @@
+name: Phase04 LRASPP Adapter Windows
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - research/damage_mask_lraspp.py
+      - research/damage_mask_lraspp_contract.py
+      - tests/test_phase04_lraspp_adapter.py
+      - requirements.txt
+      - requirements-paper-quality-cpu.txt
+      - .github/workflows/phase04-lraspp-adapter-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lraspp-adapter-contract:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install exact Windows CPU runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt 'pytest>=8,<9'
+          python -m pip install -r requirements-paper-quality-cpu.txt
+          python - <<'PY'
+          import numpy, torch, torchvision
+          print({'numpy': numpy.__version__, 'torch': torch.__version__, 'torchvision': torchvision.__version__, 'cuda': torch.cuda.is_available()})
+          assert numpy.__version__.startswith('1.')
+          assert torch.__version__ == '2.1.2+cpu'
+          assert torchvision.__version__ == '0.16.2+cpu'
+          assert torch.cuda.is_available() is False
+          PY
+      - name: Compile restored LRASPP adapter
+        shell: bash
+        run: python -m compileall -q research/damage_mask_lraspp.py research/damage_mask_lraspp_contract.py
+      - name: Execute LRASPP adapter and frozen contract tests
+        shell: bash
+        run: python -m pytest -q tests/test_phase04_lraspp_adapter.py
