@@ -71,9 +71,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
           python -m pip install -r requirements-paper-quality-cpu.txt
+          python -m pip check
           python - <<'PY'
-          import numpy, onnxruntime, torch, torchvision
+          import cv2, numpy, onnxruntime, torch, torchvision
           versions = {
+              'opencv': cv2.__version__,
               'torch': torch.__version__,
               'torchvision': torchvision.__version__,
               'numpy': numpy.__version__,
@@ -81,8 +83,10 @@ jobs:
               'cuda': torch.cuda.is_available(),
           }
           print(versions)
-          assert int(numpy.__version__.split('.', 1)[0]) == 1
-          assert torchvision.__version__.startswith('0.16.2')
+          assert cv2.__version__.startswith('5.')
+          assert int(numpy.__version__.split('.', 1)[0]) == 2
+          assert torch.__version__ == '2.14.0+cpu'
+          assert torchvision.__version__ == '0.29.0+cpu'
           assert not torch.cuda.is_available()
           PY
 
