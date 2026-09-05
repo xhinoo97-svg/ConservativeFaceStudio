@@ -1,0 +1,91 @@
+name: Phase04 ControlFace Bank Windows
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - research/build_damage_source_bank.py
+      - research/build_phase04_controlface_bank.py
+      - tests/test_phase04_controlface_bank.py
+      - requirements.txt
+      - .github/workflows/phase04-controlface-bank-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlface-development-bank:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install bank dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt 'pytest>=8,<9' 'remotezip>=0.12,<1'
+          python -m pip check
+      - name: Verify deterministic ControlFace bank contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q research/build_phase04_controlface_bank.py tests/test_phase04_controlface_bank.py
+          python -m pytest -q tests/test_phase04_controlface_bank.py
+      - name: Acquire only the pinned identity-disjoint ControlFace members
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/build_phase04_controlface_bank.py \
+            --output-dir .phase04/controlface \
+            --manifest .phase04/evidence/phase04-controlface-bank.json \
+            --output-size 128
+      - name: Verify split, revision, hashes and holdout safety
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          import cv2
+          manifest = json.loads(Path('.phase04/evidence/phase04-controlface-bank.json').read_text(encoding='utf-8'))
+          assert manifest['dataset']['revision'] == 'a03589de1a9e028b2d16fa1eb0e019a6930e817c'
+          assert manifest['dataset']['license'] == 'CC BY 4.0'
+          assert manifest['counts']['train'] == 14
+          assert manifest['counts']['validation'] == 2
+          assert manifest['counts']['total'] == 16
+          assert manifest['identity_disjoint'] is True
+          assert manifest['final_holdout_used'] is False
+          assert manifest['v3_used'] is False and manifest['v4_used'] is False
+          train = set()
+          validation = set()
+          for row in manifest['sources']:
+              path = Path('.phase04/controlface') / row['filename']
+              assert path.is_file()
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == row['clean_source_sha256']
+              image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+              assert image is not None and image.shape == (128, 128, 3)
+              assert row['normalization'] == 'center_square_resize_only_no_generated_pixels'
+              (train if row['dataset_split'] == 'train' else validation).add(row['identity_key'])
+          assert len(train) == 14 and len(validation) == 2 and not (train & validation)
+          print({'counts': manifest['counts'], 'validation': sorted(validation)})
+          PY
+      - name: Upload ControlFace DEVELOPMENT bank evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase04-controlface-bank-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            .phase04/evidence/phase04-controlface-bank.json
+            .phase04/controlface/
