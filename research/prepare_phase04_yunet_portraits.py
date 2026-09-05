@@ -66,6 +66,7 @@ def prepare(
                 output_size=int(output_size),
                 context_scale=1.35,
                 minimum_detector_score=float(minimum_detector_score),
+                detector_max_dimensions=(640, 960, 1280),
             )
         except (RuntimeError, ValueError) as exc:
             detector_failures.append({"key": key, "error": str(exc)})
@@ -90,9 +91,11 @@ def prepare(
                 "detector": {
                     "backend": result.detector_backend,
                     "score": result.detector_score,
+                    "input_scale": result.detector_input_scale,
                     "source_bbox": list(result.source_bbox),
                     "crop_bbox": list(result.crop_bbox),
                     "minimum_score": float(minimum_detector_score),
+                    "max_dimensions": [640, 960, 1280],
                 },
             }
         )
@@ -115,14 +118,15 @@ def prepare(
     if train_ids & validation_ids:
         raise RuntimeError("identity leakage in YuNet portrait bank")
     manifest: dict[str, object] = {
-        "version": 2,
+        "version": 3,
         "purpose": "Phase04 YuNet-cropped public real portraits for DEVELOPMENT only",
         "detector": {
-            "backend": "OpenCV Zoo YuNet",
+            "backend": "OpenCV Zoo YuNet multiscale",
             "asset": str(yunet_path),
             "asset_sha256": _sha256(yunet_path),
             "minimum_score": float(minimum_detector_score),
             "context_scale": 1.35,
+            "max_dimensions": [640, 960, 1280],
             "rejected_portraits_are_excluded_without_threshold_relaxation": True,
         },
         "output_size": int(output_size),
