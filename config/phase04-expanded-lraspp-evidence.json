@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "evidence_tier": "EXPANDED_DEVELOPMENT_MEASUREMENT",
+  "experiment": "phase04_expanded_public_portrait_development_v1",
+  "workflow": {
+    "run_id": 33961309003,
+    "run_number": 7,
+    "head_branch": "integration/final-paper-quality-local",
+    "head_sha": "2692cd2919097e3dcd2f11eb892a2d31baa75e67",
+    "conclusion": "SUCCESS"
+  },
+  "artifact": {
+    "id": 9968067900,
+    "name": "phase04-expanded-damage-7",
+    "archive_digest": "sha256:7f11418b9093aa6dc2bfc800f07a11ed0112ae21191e10986b1ab299b2c25e27"
+  },
+  "model": {
+    "architecture": "LRASPP_MobileNetV3_Large_ONNX",
+    "onnx_sha256": "708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9",
+    "runtime_damage_confidence_threshold": 0.55,
+    "threshold_frozen_before_measurement": true
+  },
+  "data": {
+    "identity_count": 8,
+    "matrix_case_count_per_identity": 1036,
+    "completed_cases": 8288,
+    "expected_cases": 8288,
+    "error_cases": 0,
+    "cross_factorial_matrix": true,
+    "v3_used": false,
+    "v4_used": false,
+    "v5_used": false,
+    "final_holdout_used": false,
+    "training_or_tuning_authorized": false
+  },
+  "binary": {
+    "precision": 0.4530042057575781,
+    "recall": 0.50115006172038,
+    "f1": 0.4758624331788076,
+    "iou": 0.3122175081421863,
+    "false_positive_rate": 0.06168762204196371,
+    "false_negative_rate": 0.49884993827962004
+  },
+  "required_groups": {
+    "STICKER": {"f1": 0.5404884888959811},
+    "SCRIBBLE": {"f1": 0.18909412299333273},
+    "MOTION_BLUR": {"f1": 0.4256175732414439},
+    "BLUR_LOCAL": {"f1": 0.6830043334566921},
+    "CRITICAL_MIN": {"damage_type": "SCRIBBLE_THIN_BLACK", "f1": 0.051585160686865715}
+  },
+  "frozen_phase04_gate": {
+    "binary_precision_min": 0.95,
+    "binary_recall_min": 0.90,
+    "sticker_f1_min": 0.90,
+    "scribble_f1_min": 0.90,
+    "motion_blur_f1_min": 0.85,
+    "local_blur_f1_min": 0.85,
+    "critical_class_f1_must_be_nonzero": true,
+    "passed": false
+  },
+  "runtime": {
+    "provider": "CPUExecutionProvider",
+    "total_inference_seconds": 69.07646370000032,
+    "seconds_per_case": 0.008334515407818571,
+    "network_required_after_model_and_portrait_acquisition": false
+  },
+  "safety": {
+    "model_output_type": "mask_logits_only",
+    "can_modify_image_pixels": false,
+    "wrong_person_final_pixels": 0,
+    "provenance_violations": 0,
+    "restoration_pass_count": 0
+  },
+  "disposition": "DEVELOPMENT_GATE_FAIL_REJECT_LRASPP_FOR_PHASE04_FINAL_DAMAGE_MASK",
+  "production_qualified": false,
+  "next_action": "benchmark_or_train_a_new_damage_mask_challenger_on_identity_disjoint_development_data_without_using_V3_V4_or_final_holdout"
+}
