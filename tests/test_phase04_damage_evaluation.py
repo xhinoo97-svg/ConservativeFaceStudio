@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ MODULE_PATH = ROOT / "research" / "phase04_damage_evaluation.py"
 SPEC = importlib.util.spec_from_file_location("phase04_damage_evaluation_under_test", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 module = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = module
 SPEC.loader.exec_module(module)
 
 
