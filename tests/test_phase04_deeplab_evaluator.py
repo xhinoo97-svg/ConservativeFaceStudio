@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +67,19 @@ def test_validation_manifest_is_fail_closed_for_final_holdout(tmp_path: Path) ->
     )
     with pytest.raises(RuntimeError, match="Final holdout is forbidden"):
         module._validation_records(manifest)
+
+
+def test_binary_truth_is_derived_from_expanded_class_target() -> None:
+    module = _module()
+    target = np.zeros((3, 4), dtype=np.uint8)
+    target[1, 2] = 7
+    truth = module._binary_truth_from_target(target)
+    assert truth.dtype == np.bool_
+    assert int(np.count_nonzero(truth)) == 1
+    assert bool(truth[1, 2]) is True
+    assert bool(truth[0, 0]) is False
+    with pytest.raises(ValueError, match="2D class-index map"):
+        module._binary_truth_from_target(np.zeros((1, 3, 4), dtype=np.uint8))
 
 
 def test_metric_math_matches_binary_confusion() -> None:
