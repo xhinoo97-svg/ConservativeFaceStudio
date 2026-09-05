@@ -74,9 +74,7 @@ jobs:
       - name: Fail closed if generator authority tests failed
         if: steps.generator_tests.outcome != 'success'
         shell: bash
-        run: |
-          echo 'Phase04 generator authority failed; diagnostic artifact was preserved.' >&2
-          exit 1
+        run: exit 1
       - name: Download frozen LRASPP development artifact
         uses: actions/download-artifact@v5
         with:
@@ -107,16 +105,36 @@ jobs:
           assert not payload['failures'], payload
           PY
       - name: Execute 8288-case frozen-threshold ONNX measurement
+        id: evaluator
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
+          mkdir -p .phase04/evaluator
           python research/evaluate_phase04_expanded_damage.py \
             --model .phase04/model/damage_mask_lraspp_dev.onnx \
             --portraits-dir .phase04/public \
             --output .phase04/evidence/phase04-expanded-damage-report.json \
             --threshold "$DAMAGE_THRESHOLD" \
             --image-size 192 \
-            --seed 240905
+            --seed 240905 \
+            > .phase04/evaluator/evaluator.txt 2>&1
+          status=$?
+          printf '%s\n' "$status" > .phase04/evaluator/evaluator-exit.txt
+          cat .phase04/evaluator/evaluator.txt
+          exit "$status"
+      - name: Upload evaluator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase04-evaluator-diagnostics-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: .phase04/evaluator/
+      - name: Fail closed if evaluator runtime failed
+        if: steps.evaluator.outcome != 'success'
+        shell: bash
+        run: exit 1
       - name: Verify measurement completeness without converting a failed quality gate into success
         shell: bash
         run: |
