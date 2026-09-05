@@ -9,6 +9,7 @@ on:
       - research/phase04_expanded_damage_generator.py
       - research/evaluate_phase04_expanded_damage.py
       - tests/test_phase04_expanded_damage_generator.py
+      - tests/test_phase04_damage_evaluation.py
       - scripts/prefetch_public_portraits.py
       - requirements.txt
       - .github/workflows/phase04-expanded-damage-windows.yml
@@ -21,13 +22,15 @@ permissions:
 jobs:
   expanded-development-measurement:
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     env:
       PYTHONPATH: ${{ github.workspace }}
       LRASPP_RUN_ID: 32675225785
       LRASPP_ARTIFACT_NAME: damage-mask-lraspp-dev-1
       LRASPP_ONNX_SHA256: 708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9
       DAMAGE_THRESHOLD: '0.55'
+      MATRIX_CASES_PER_IDENTITY: '1036'
+      IDENTITY_COUNT: '8'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -78,7 +81,7 @@ jobs:
           assert len(payload['resolved']) == 8, payload
           assert not payload['failures'], payload
           PY
-      - name: Execute 416-case frozen-threshold ONNX measurement
+      - name: Execute 8288-case frozen-threshold ONNX measurement
         shell: bash
         run: |
           set -euo pipefail
@@ -97,10 +100,13 @@ jobs:
           import json, os
           from pathlib import Path
           report = json.loads(Path('.phase04/evidence/phase04-expanded-damage-report.json').read_text(encoding='utf-8'))
-          assert report['data']['identity_count'] == 8
-          assert report['data']['matrix_case_count_per_identity'] == 52
-          assert report['data']['completed_cases'] == 416
-          assert report['data']['expected_cases'] == 416
+          identities = int(os.environ['IDENTITY_COUNT'])
+          matrix_cases = int(os.environ['MATRIX_CASES_PER_IDENTITY'])
+          expected = identities * matrix_cases
+          assert report['data']['identity_count'] == identities
+          assert report['data']['matrix_case_count_per_identity'] == matrix_cases
+          assert report['data']['completed_cases'] == expected
+          assert report['data']['expected_cases'] == expected
           assert report['data']['error_cases'] == 0
           assert report['data']['v3_used'] is False
           assert report['data']['v4_used'] is False
@@ -113,6 +119,7 @@ jobs:
               'binary': report['metrics']['binary'],
               'groups': report['metrics']['groups'],
               'gate': report['frozen_phase04_gate'],
+              'completed_cases': report['data']['completed_cases'],
           }, indent=2, sort_keys=True))
           PY
       - name: Upload Phase04 measurement evidence
