@@ -110,7 +110,7 @@ jobs:
             --output .phase04/evidence/phase04-deeplab-smoke.pth \
             --report .phase04/evidence/phase04-deeplab-smoke-report.json \
             --image-size 128 \
-            --batch-size 1 \
+            --batch-size 2 \
             --max-steps 4 \
             --learning-rate 0.0003 \
             --seed 240905
@@ -130,6 +130,7 @@ jobs:
               logits = model(torch.zeros((1, 3, 128, 128), dtype=torch.float32))
           assert tuple(logits.shape) == (1, 18, 128, 128)
           report = json.loads(Path('.phase04/evidence/phase04-deeplab-smoke-report.json').read_text(encoding='utf-8'))
+          assert report['batch_size'] == 2
           assert report['final_holdout_used'] is False
           assert report['v3_used'] is False and report['v4_used'] is False
           assert report['production_qualified'] is False
