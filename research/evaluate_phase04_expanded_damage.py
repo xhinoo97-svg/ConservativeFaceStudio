@@ -47,13 +47,32 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _cascade_classifier(path: Path):
+    """Return a Haar cascade classifier across OpenCV 4.x and 5.x namespaces."""
+    legacy = getattr(cv2, "CascadeClassifier", None)
+    if callable(legacy):
+        return legacy(str(path)), "opencv_legacy_cascade"
+    objdetect = getattr(cv2, "objdetect", None)
+    modern = getattr(objdetect, "CascadeClassifier", None) if objdetect is not None else None
+    if callable(modern):
+        return modern(str(path)), "opencv_objdetect_cascade"
+    return None, "cascade_unavailable"
+
+
 def _square_face_crop(image: np.ndarray, size: int) -> tuple[np.ndarray, str]:
     if image is None or image.size == 0:
         raise ValueError("invalid portrait")
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    cascade_path = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
-    detector = cv2.CascadeClassifier(str(cascade_path))
-    boxes = detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
+    cascade_root = getattr(getattr(cv2, "data", None), "haarcascades", "")
+    cascade_path = Path(cascade_root) / "haarcascade_frontalface_default.xml"
+    detector, detector_api = _cascade_classifier(cascade_path)
+    boxes = ()
+    if detector is not None and cascade_path.is_file():
+        try:
+            if not detector.empty():
+                boxes = detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
+        except (AttributeError, cv2.error):
+            boxes = ()
     h, w = image.shape[:2]
     if len(boxes):
         x, y, bw, bh = max(boxes, key=lambda box: int(box[2]) * int(box[3]))
@@ -65,13 +84,13 @@ def _square_face_crop(image: np.ndarray, size: int) -> tuple[np.ndarray, str]:
         x2 = min(w, int(round(cx + side / 2.0)))
         y2 = min(h, int(round(cy + side / 2.0)))
         crop = image[y1:y2, x1:x2]
-        method = "opencv_haar_largest_face_1p85"
+        method = f"{detector_api}_largest_face_1p85"
     else:
         side = min(h, w)
         x1 = max(0, (w - side) // 2)
         y1 = max(0, (h - side) // 2)
         crop = image[y1 : y1 + side, x1 : x1 + side]
-        method = "center_square_fallback"
+        method = f"center_square_fallback_after_{detector_api}"
     if crop.size == 0:
         raise RuntimeError("empty face crop")
     return cv2.resize(crop, (size, size), interpolation=cv2.INTER_AREA), method
@@ -231,11 +250,7 @@ def evaluate(
     overall = _metrics(overall_counts)
     per_type = {key: _metrics(value) for key, value in sorted(type_counts.items())}
     groups = {key: _metrics(value) for key, value in sorted(group_counts.items())}
-    critical_candidates = [
-        metrics
-        for damage_type, metrics in per_type.items()
-        if damage_type != "HEALTHY"
-    ]
+    critical_candidates = [metrics for damage_type, metrics in per_type.items() if damage_type != "HEALTHY"]
     critical_min = min(critical_candidates, key=lambda item: float(item["f1"]))
     critical_min_type = min(
         (key for key in per_type if key != "HEALTHY"),
