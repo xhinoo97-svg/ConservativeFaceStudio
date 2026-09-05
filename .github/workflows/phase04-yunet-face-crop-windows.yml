@@ -63,7 +63,7 @@ jobs:
       - name: Fetch ten public-domain DEVELOPMENT portraits
         shell: bash
         run: python scripts/prefetch_public_portraits.py --cache .phase04/public --limit 10
-      - name: Build score-gated YuNet face bank without threshold relaxation
+      - name: Build score-gated multiscale YuNet face bank without threshold relaxation
         shell: bash
         run: |
           set -euo pipefail
@@ -95,18 +95,21 @@ jobs:
           assert manifest['final_holdout_used'] is False
           assert manifest['v3_used'] is False and manifest['v4_used'] is False
           assert manifest['detector']['asset_sha256'] == '8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4'
+          assert manifest['detector']['backend'] == 'OpenCV Zoo YuNet multiscale'
+          assert manifest['detector']['max_dimensions'] == [640, 960, 1280]
           assert manifest['detector']['rejected_portraits_are_excluded_without_threshold_relaxation'] is True
           train = set()
           validation = set()
           for row in manifest['sources']:
-              assert row['detector']['backend'] == 'opencv_zoo_yunet'
+              assert row['detector']['backend'] == 'opencv_zoo_yunet_multiscale'
               assert row['detector']['score'] >= 0.75
+              assert 0.0 < row['detector']['input_scale'] <= 1.0
               path = Path('.phase04/yunet_faces') / row['filename']
               image = cv2.imread(str(path), cv2.IMREAD_COLOR)
               assert image is not None and image.shape == (128, 128, 3)
               (train if row['dataset_split'] == 'train' else validation).add(row['identity_key'])
           assert len(train) == 6 and len(validation) >= 2 and not (train & validation)
-          print({'counts': counts, 'scores': [row['detector']['score'] for row in manifest['sources']], 'failures': manifest['detector_failures']})
+          print({'counts': counts, 'scores': [row['detector']['score'] for row in manifest['sources']], 'scales': [row['detector']['input_scale'] for row in manifest['sources']], 'failures': manifest['detector_failures']})
           PY
       - name: Upload YuNet DEVELOPMENT face-bank evidence
         uses: actions/upload-artifact@v6
