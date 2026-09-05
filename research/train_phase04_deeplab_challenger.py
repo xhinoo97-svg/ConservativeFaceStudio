@@ -4,6 +4,7 @@ import argparse
 import json
 import random
 import time
+from collections import Counter
 from pathlib import Path
 
 import cv2
@@ -12,6 +13,7 @@ import torch
 import torch.nn.functional as F
 
 from damage_mask_dataset import SourceRecord, load_face_crop
+from phase04_balanced_sampler import balanced_training_pairs
 from phase04_damage_evaluation import build_matrix
 from phase04_deeplab_challenger import ARCHITECTURE, Phase04DeepLabDamageModel
 from phase04_training_dataset import (
@@ -25,6 +27,8 @@ def _records_for_split(manifest: Path, split: str) -> list[SourceRecord]:
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     if payload.get("final_holdout_used") is True:
         raise RuntimeError("Final holdout is forbidden for Phase04 challenger training")
+    if payload.get("v3_used") is True or payload.get("v4_used") is True:
+        raise RuntimeError("V3/V4 material is forbidden for Phase04 challenger training")
     rows = payload.get("sources")
     if not isinstance(rows, list):
         raise ValueError("source manifest has no sources list")
@@ -113,9 +117,13 @@ def train(
         for record in records
     }
     cases = build_matrix()
-    pairs = [(record.source_id, case_index) for record in records for case_index in range(len(cases))]
-    rng = random.Random(seed)
-    rng.shuffle(pairs)
+    sample_count = int(max_steps) * int(batch_size)
+    training_pairs = balanced_training_pairs(
+        [record.source_id for record in records],
+        case_count=len(cases),
+        seed=int(seed),
+        sample_count=sample_count,
+    )
 
     model = Phase04DeepLabDamageModel(backbone_checkpoint=backbone).train()
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(learning_rate), weight_decay=1e-4)
@@ -124,15 +132,23 @@ def train(
     started = time.perf_counter()
     consumed = 0
     for step in range(max_steps):
-        batch_pairs = []
-        for _ in range(batch_size):
-            batch_pairs.append(pairs[consumed % len(pairs)])
-            consumed += 1
+        batch_pairs = training_pairs[consumed : consumed + batch_size]
+        consumed += batch_size
+        if len(batch_pairs) != batch_size:
+            raise RuntimeError("balanced sampler returned an incomplete training batch")
         images: list[np.ndarray] = []
         targets: list[np.ndarray] = []
-        for local_index, (source_id, case_index) in enumerate(batch_pairs):
+        for local_index, pair in enumerate(batch_pairs):
+            source_id = pair.source_id
+            case_index = int(pair.case_index)
             case = cases[case_index]
-            sample_seed = seed + step * 100_003 + local_index * 1_009 + case_index
+            sample_seed = (
+                int(seed)
+                + step * 100_003
+                + local_index * 1_009
+                + case_index
+                + int(pair.epoch) * 10_000_019
+            )
             sample = build_training_sample(
                 faces[source_id],
                 case,
@@ -155,6 +171,9 @@ def train(
         losses.append(float(loss.detach().cpu()))
 
     elapsed = time.perf_counter() - started
+    unique_case_count = len({int(pair.case_index) for pair in training_pairs})
+    source_sample_counts = Counter(pair.source_id for pair in training_pairs)
+    complete_matrix_epochs = sample_count // len(cases)
     output.parent.mkdir(parents=True, exist_ok=True)
     checkpoint = {
         "architecture": ARCHITECTURE,
@@ -173,6 +192,11 @@ def train(
             "seed": int(seed),
             "source_count": len(records),
             "batchnorm_safe_batch": True,
+            "balanced_full_matrix_sampler": True,
+            "training_sample_count": int(sample_count),
+            "unique_matrix_cases_seen": int(unique_case_count),
+            "complete_matrix_epochs": int(complete_matrix_epochs),
+            "source_sample_counts": dict(sorted(source_sample_counts.items())),
         },
     }
     torch.save(checkpoint, output)
@@ -185,6 +209,11 @@ def train(
         "steps": int(max_steps),
         "batch_size": int(batch_size),
         "batchnorm_safe_batch": True,
+        "balanced_full_matrix_sampler": True,
+        "training_sample_count": int(sample_count),
+        "unique_matrix_cases_seen": int(unique_case_count),
+        "complete_matrix_epochs": int(complete_matrix_epochs),
+        "source_sample_counts": dict(sorted(source_sample_counts.items())),
         "initial_loss": float(losses[0]),
         "final_loss": float(losses[-1]),
         "minimum_loss": float(min(losses)),
