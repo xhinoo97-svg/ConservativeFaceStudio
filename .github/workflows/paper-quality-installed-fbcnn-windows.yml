@@ -221,6 +221,9 @@ jobs:
           assert path['model']['model_key'] == 'fbcnn'
           assert path['model']['checkpoint_sha256'] == os.environ['FBCNN_WEIGHT_SHA256']
           assert path['model']['fused_to_final'] is False
+          assert path['candidate']['candidate_changed_outside_route_pixels'] == 0
+          assert path['candidate']['candidate_changed_pixels'] <= path['candidate']['route_mask_pixels']
+          assert path['candidate']['candidate_generated_mask_pixels'] == path['candidate']['candidate_changed_pixels']
           assert path['wrong_person_final_pixels'] == 0
           assert path['provenance_violations'] == 0
           assert path['healthy_pixels_changed'] == 0
@@ -233,6 +236,8 @@ jobs:
               'admitted_class_evidence': path['admitted_class_evidence'],
               'model': path['model']['model_key'],
               'checkpoint_sha256': path['model']['checkpoint_sha256'],
+              'raw_candidate_changed_outside_route_pixels': path['candidate']['raw_candidate_changed_outside_route_pixels'],
+              'candidate_changed_outside_route_pixels': path['candidate']['candidate_changed_outside_route_pixels'],
               'wrong_person_final_pixels': path['wrong_person_final_pixels'],
               'provenance_violations': path['provenance_violations'],
               'healthy_pixels_changed': path['healthy_pixels_changed'],

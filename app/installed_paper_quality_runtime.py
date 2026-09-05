@@ -16,6 +16,7 @@ from app.execution import Workspace
 from app.face_restorer_adapter import (
     FaceRestorerAdapter,
     FaceRestorerBackend,
+    RestorationCandidate,
     RestorationContext,
 )
 from app.fbcnn_upstream_backend import (
@@ -56,6 +57,53 @@ class InstalledPaperQualityResult:
     provenance_map: np.ndarray
     details: dict[str, object]
     runtime_result: PaperQualityRuntimeResult
+
+
+def _bound_validation_candidate_to_route(
+    candidate: RestorationCandidate,
+    face: np.ndarray,
+    route_mask: np.ndarray,
+) -> dict[str, object]:
+    """Remove all candidate authority outside the audited damage subroute.
+
+    Raw behavior remains measurable in the returned counters. The candidate image
+    and generated mask are then made safe for downstream evaluation: only pixels
+    both declared by the backend and authorised by the route can differ from input.
+    """
+    authority = np.asarray(route_mask) > 0
+    if authority.shape != face.shape[:2]:
+        raise ValueError("Validation route mask must match candidate crop geometry")
+    raw_generated = np.asarray(candidate.generated_mask) > 0
+    raw_changed = np.any(candidate.image != face, axis=2)
+    raw_outside = raw_changed & ~authority
+    raw_generated_outside = raw_generated & ~authority
+    raw_unprovenanced = raw_changed & ~raw_generated
+
+    allowed = authority & raw_generated
+    bounded_image = face.copy()
+    bounded_image[allowed] = candidate.image[allowed]
+    bounded_changed = np.any(bounded_image != face, axis=2)
+    bounded_generated = allowed & bounded_changed
+    candidate.image = bounded_image
+    candidate.generated_mask = bounded_generated.astype(np.uint8) * 255
+
+    return {
+        "route_bounding_applied": bool(np.any(raw_outside) or np.any(raw_generated_outside)),
+        "raw_candidate_changed_pixels": int(np.count_nonzero(raw_changed)),
+        "raw_candidate_generated_mask_pixels": int(np.count_nonzero(raw_generated)),
+        "raw_candidate_changed_outside_route_pixels": int(np.count_nonzero(raw_outside)),
+        "raw_candidate_generated_outside_route_pixels": int(
+            np.count_nonzero(raw_generated_outside)
+        ),
+        "raw_candidate_changed_without_generated_mask_pixels": int(
+            np.count_nonzero(raw_unprovenanced)
+        ),
+        "candidate_changed_pixels": int(np.count_nonzero(bounded_changed)),
+        "candidate_generated_mask_pixels": int(np.count_nonzero(bounded_generated)),
+        "candidate_changed_outside_route_pixels": int(
+            np.count_nonzero(bounded_changed & ~authority)
+        ),
+    }
 
 
 def _binary_mask(value: object, shape: tuple[int, int], label: str) -> np.ndarray:
@@ -490,8 +538,11 @@ class InstalledPaperQualityRuntime:
                 face,
                 context,
             )
-            changed = np.any(candidate.image != face, axis=2)
-            outside_route = changed & ~(route_mask > 0)
+            route_bounding = _bound_validation_candidate_to_route(
+                candidate,
+                face,
+                route_mask,
+            )
             candidate_report = candidate.to_report()
             candidate_report.update(
                 {
@@ -503,8 +554,7 @@ class InstalledPaperQualityRuntime:
                     "parent_damage_kind": str(parent_damage_kind),
                     "route_damage_kind": str(route.damage_kind),
                     "route_mask_pixels": int(crop_mask_pixels),
-                    "candidate_changed_pixels": int(np.count_nonzero(changed)),
-                    "candidate_changed_outside_route_pixels": int(np.count_nonzero(outside_route)),
+                    **route_bounding,
                 }
             )
             executed = {

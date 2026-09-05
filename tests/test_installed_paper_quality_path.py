@@ -413,6 +413,12 @@ def test_jpeg_route_executes_validation_fbcnn_but_never_fuses_nonproduction_pixe
     executed = result.details["models_actually_executed"]
     assert [item["model_key"] for item in executed] == ["fbcnn"]
     assert executed[0]["checkpoint_sha256"] == APPROVED_CHECKPOINT_SHA256
+    candidate = result.details["validation_model_candidates"][0]
+    assert candidate["raw_candidate_changed_outside_route_pixels"] > 0
+    assert candidate["candidate_changed_outside_route_pixels"] == 0
+    assert candidate["candidate_changed_pixels"] <= candidate["route_mask_pixels"]
+    assert candidate["candidate_generated_mask_pixels"] == candidate["candidate_changed_pixels"]
+    assert candidate["route_bounding_applied"] is True
     model_trace = next(
         item for item in result.details["paper_quality_trace"] if item["stage"] == "model_execution"
     )
@@ -510,6 +516,10 @@ def test_mixed_dominant_jpeg_executes_only_class_bounded_validation_subroute() -
     assert candidate["parent_damage_kind"] == "MIXED"
     assert candidate["route_damage_kind"] == "JPEG_ARTIFACT"
     assert candidate["route_mask_pixels"] > 0
+    assert candidate["raw_candidate_changed_outside_route_pixels"] > 0
+    assert candidate["candidate_changed_outside_route_pixels"] == 0
+    assert candidate["candidate_generated_mask_pixels"] == candidate["candidate_changed_pixels"]
+    assert candidate["route_bounding_applied"] is True
     assert result.details["validation_candidates_fused_to_final"] is False
     assert result.details["generated_pixels"] == 0
     assert np.array_equal(result.image, main)

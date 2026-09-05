@@ -46,6 +46,11 @@ def _details() -> dict[str, object]:
         "validation_model_candidates": [
             {
                 "model_key": "fbcnn",
+                "route_mask_pixels": 100,
+                "candidate_changed_pixels": 90,
+                "candidate_generated_mask_pixels": 90,
+                "candidate_changed_outside_route_pixels": 0,
+                "raw_candidate_changed_outside_route_pixels": 50,
                 "resource": {"post_unload": {"process_rss_bytes": 10}},
             }
         ],

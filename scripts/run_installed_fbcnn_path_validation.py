@@ -156,6 +156,17 @@ def validate_installed_block(
     resource = candidate.get("resource")
     if not isinstance(resource, dict) or not isinstance(resource.get("post_unload"), dict):
         raise RuntimeError("FBCNN lifecycle report does not prove the post-unload boundary")
+    route_pixels = int(candidate.get("route_mask_pixels", 0))
+    changed_pixels = int(candidate.get("candidate_changed_pixels", -1))
+    generated_mask_pixels = int(candidate.get("candidate_generated_mask_pixels", -1))
+    if route_pixels <= 0 or not 0 <= changed_pixels <= route_pixels:
+        raise RuntimeError("FBCNN candidate changes are not bounded by the JPEG route")
+    if generated_mask_pixels != changed_pixels:
+        raise RuntimeError("FBCNN candidate changed pixels lack exact generated provenance")
+    if int(candidate.get("candidate_changed_outside_route_pixels", -1)) != 0:
+        raise RuntimeError("FBCNN candidate retained changes outside the JPEG route")
+    if int(candidate.get("raw_candidate_changed_outside_route_pixels", -1)) < 0:
+        raise RuntimeError("FBCNN candidate omitted truthful raw outside-route telemetry")
     if details.get("validation_candidates_fused_to_final") is not False:
         raise RuntimeError("Validation candidates were fused to final pixels")
     if int(details.get("generated_pixels", -1)) != 0:
@@ -294,7 +305,7 @@ def run_validation(
         raise RuntimeError("Timeline did not truthfully attribute FBCNN at Block 8")
 
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "experiment": "paper_quality_installed_fbcnn_windows_validation_v1",
         "scope": "PUBLIC_DEVELOPMENT_INSTALLED_PATH_NO_HOLDOUT",
         "production_qualified": False,
