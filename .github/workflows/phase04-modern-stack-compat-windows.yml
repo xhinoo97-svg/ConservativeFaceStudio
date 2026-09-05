@@ -1,0 +1,109 @@
+name: Phase04 Modern CPU Stack Compatibility Windows
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - requirements.txt
+      - requirements-paper-quality-cpu.txt
+      - research/damage_mask_lraspp.py
+      - research/damage_mask_lraspp_contract.py
+      - .github/workflows/phase04-modern-stack-compat-windows.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  frozen-lraspp-modern-stack:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      LRASPP_RUN_ID: 32675225785
+      LRASPP_ARTIFACT_NAME: damage-mask-lraspp-dev-1
+      EXPECTED_ONNX_SHA256: 708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install coherent NumPy2 OpenCV5 modern CPU stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt 'pytest>=8,<9'
+          python -m pip install torch==2.14.0 torchvision==0.29.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip check
+          python - <<'PY'
+          import cv2, numpy, torch, torchvision
+          print({'opencv': cv2.__version__, 'numpy': numpy.__version__, 'torch': torch.__version__, 'torchvision': torchvision.__version__, 'cuda': torch.cuda.is_available()})
+          assert cv2.__version__.startswith('5.')
+          assert numpy.__version__.startswith('2.')
+          assert torch.__version__ == '2.14.0+cpu'
+          assert torchvision.__version__ == '0.29.0+cpu'
+          assert torch.cuda.is_available() is False
+          PY
+      - name: Download frozen LRASPP development artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ env.LRASPP_ARTIFACT_NAME }}
+          path: .phase04/lraspp
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: xhinoo97-svg/ConservativeFaceStudio
+          run-id: ${{ env.LRASPP_RUN_ID }}
+      - name: Verify frozen LRASPP checkpoint loads unchanged and matches frozen ONNX
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          import numpy as np
+          import onnxruntime as ort
+          import torch
+          from torchvision.models.segmentation import lraspp_mobilenet_v3_large
+
+          root = Path('.phase04/lraspp/research-results/damage-mask-lraspp-v1')
+          checkpoint = root / 'damage_mask_lraspp_dev.pth'
+          onnx = root / 'damage_mask_lraspp_dev.onnx'
+          assert checkpoint.is_file(), checkpoint
+          assert onnx.is_file(), onnx
+          onnx_sha = hashlib.sha256(onnx.read_bytes()).hexdigest()
+          assert onnx_sha == '708c7e9c074b2abf98dc95b8e74b3b76d687a63fb2a54a3e374db0bef37ae3a9', onnx_sha
+
+          payload = torch.load(checkpoint, map_location='cpu', weights_only=False)
+          classes = payload['classes']
+          state = payload['state_dict']
+          network_state = {
+              key[len('network.'):]: value
+              for key, value in state.items()
+              if key.startswith('network.')
+          }
+          model = lraspp_mobilenet_v3_large(weights=None, weights_backbone=None, num_classes=len(classes)).eval()
+          result = model.load_state_dict(network_state, strict=True)
+          assert not result.missing_keys and not result.unexpected_keys, result
+
+          rng = np.random.default_rng(240905)
+          sample = rng.random((1, 3, 192, 192), dtype=np.float32)
+          tensor = torch.from_numpy(sample)
+          mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1,3,1,1)
+          std = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1,3,1,1)
+          with torch.inference_mode():
+              modern = model((tensor - mean) / std)['out'].numpy()
+          session = ort.InferenceSession(str(onnx), providers=['CPUExecutionProvider'])
+          frozen = session.run(['logits'], {'image': sample})[0]
+          max_abs = float(np.max(np.abs(modern - frozen)))
+          mean_abs = float(np.mean(np.abs(modern - frozen)))
+          argmax_equal = bool(np.array_equal(modern.argmax(axis=1), frozen.argmax(axis=1)))
+          print({'checkpoint_classes': len(classes), 'max_abs': max_abs, 'mean_abs': mean_abs, 'argmax_equal': argmax_equal})
+          assert argmax_equal, (max_abs, mean_abs)
+          assert max_abs < 1e-3, max_abs
+          PY
