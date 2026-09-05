@@ -1,8 +1,8 @@
-# Optional Phase03 validation runtime. This file is not part of the production
-# installer until offline packaging, license and physical-EliteBook gates pass.
+# Optional paper-quality CPU runtime. Still excluded from the production installer
+# until model-license, offline-packaging and physical-EliteBook gates pass.
 --extra-index-url https://download.pytorch.org/whl/cpu
-# PyTorch 2.1.2 was built against the NumPy 1.x ABI. Keep the exact compatibility
-# family already exercised by the frozen Phase02 Windows qualification.
-numpy>=1.26,<2; platform_system == "Windows"
-torch==2.1.2+cpu; platform_system == "Windows"
-torchvision==0.16.2+cpu; platform_system == "Windows"
+# OpenCV 5 requires NumPy >=2. The frozen LR-ASPP checkpoint was verified on Windows
+# against this modern CPU stack with unchanged argmax and max |logit delta| < 1e-3.
+numpy>=2,<3; platform_system == "Windows"
+torch==2.14.0+cpu; platform_system == "Windows"
+torchvision==0.29.0+cpu; platform_system == "Windows"
