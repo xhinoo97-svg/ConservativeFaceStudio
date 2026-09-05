@@ -1,0 +1,112 @@
+name: Phase04 YuNet Face Crop Windows
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - app/model_registry.py
+      - app/opencv_zoo_face.py
+      - research/phase04_face_crop.py
+      - research/prepare_phase04_yunet_portraits.py
+      - tests/test_phase04_face_crop.py
+      - scripts/prefetch_public_portraits.py
+      - requirements.txt
+      - .github/workflows/phase04-yunet-face-crop-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  yunet-real-face-crop:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install Windows application test stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt 'pytest>=8,<9'
+          python -m pip check
+      - name: Verify face-crop unit contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q research/phase04_face_crop.py research/prepare_phase04_yunet_portraits.py tests/test_phase04_face_crop.py
+          python -m pytest -q tests/test_phase04_face_crop.py
+      - name: Download YuNet only through frozen product model registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from app.model_registry import download_model, registry_by_key, sha256_path
+          manifest = registry_by_key()['opencv_yunet']
+          target = download_model(manifest, Path('.'), accept_license=True, timeout_seconds=120)
+          digest = sha256_path(target)
+          assert digest == manifest.expected_sha256
+          assert target.stat().st_size <= manifest.max_bytes
+          print({'path': str(target), 'sha256': digest, 'bytes': target.stat().st_size})
+          PY
+      - name: Fetch eight public-domain DEVELOPMENT portraits
+        shell: bash
+        run: python scripts/prefetch_public_portraits.py --cache .phase04/public --limit 8
+      - name: Detect and crop all eight portraits with real YuNet inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/prepare_phase04_yunet_portraits.py \
+            --source-dir .phase04/public \
+            --prefetch-manifest .phase04/public/prefetch-manifest.json \
+            --yunet models/detection/face_detection_yunet_2023mar.onnx \
+            --output-dir .phase04/yunet_faces \
+            --output-manifest .phase04/evidence/phase04-yunet-face-bank.json \
+            --output-size 128 \
+            --train-count 6 \
+            --minimum-detector-score 0.75
+      - name: Verify identity split, detector confidence and crop integrity
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import cv2
+          manifest = json.loads(Path('.phase04/evidence/phase04-yunet-face-bank.json').read_text(encoding='utf-8'))
+          assert manifest['counts'] == {'train': 6, 'validation': 2, 'total': 8}
+          assert manifest['identity_disjoint'] is True
+          assert manifest['final_holdout_used'] is False
+          assert manifest['v3_used'] is False and manifest['v4_used'] is False
+          assert manifest['detector']['asset_sha256'] == '8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4'
+          train = set()
+          validation = set()
+          for row in manifest['sources']:
+              assert row['detector']['backend'] == 'opencv_zoo_yunet'
+              assert row['detector']['score'] >= 0.75
+              path = Path('.phase04/yunet_faces') / row['filename']
+              image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+              assert image is not None and image.shape == (128, 128, 3)
+              (train if row['dataset_split'] == 'train' else validation).add(row['identity_key'])
+          assert len(train) == 6 and len(validation) == 2 and not (train & validation)
+          print({'scores': [row['detector']['score'] for row in manifest['sources']]})
+          PY
+      - name: Upload YuNet DEVELOPMENT face-bank evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase04-yunet-face-bank-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            .phase04/evidence/phase04-yunet-face-bank.json
+            .phase04/yunet_faces/
