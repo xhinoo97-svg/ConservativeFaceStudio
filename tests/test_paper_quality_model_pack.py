@@ -103,14 +103,24 @@ def test_committed_validation_pack_is_exact_and_never_claims_distribution() -> N
     assert damage["weight_terms_state"] == "NOT_EXPLICIT_UPSTREAM_RESEARCH_ONLY"
 
 
-def test_windows_validation_runtime_preserves_phase02_torch_numpy_abi() -> None:
+def test_windows_validation_runtime_uses_verified_numpy2_lraspp_stack() -> None:
     requirements = (
         ROOT / "requirements-paper-quality-cpu.txt"
     ).read_text(encoding="utf-8")
-    assert 'numpy>=1.26,<2; platform_system == "Windows"' in requirements
-    assert 'torch==2.1.2+cpu; platform_system == "Windows"' in requirements
-    assert 'torchvision==0.16.2+cpu; platform_system == "Windows"' in requirements
-    assert requirements.index("numpy>=1.26,<2") < requirements.index("torch==2.1.2+cpu")
+    assert 'numpy>=2,<3; platform_system == "Windows"' in requirements
+    assert 'torch==2.14.0+cpu; platform_system == "Windows"' in requirements
+    assert 'torchvision==0.29.0+cpu; platform_system == "Windows"' in requirements
+    assert requirements.index("numpy>=2,<3") < requirements.index("torch==2.14.0+cpu")
+
+    contract = (ROOT / "research" / "damage_mask_lraspp_contract.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'TRAINING_TORCH_VERSION = "2.1.2+cpu"' in contract
+    assert 'TRAINING_TORCHVISION_VERSION = "0.16.2+cpu"' in contract
+    assert 'TORCH_VERSION = "2.14.0+cpu"' in contract
+    assert 'TORCHVISION_VERSION = "0.29.0+cpu"' in contract
+    assert "RUNTIME_MIGRATION_EVIDENCE_RUN = 33960230064" in contract
+    assert "RUNTIME_MIGRATION_ARGMAX_EQUAL = True" in contract
 
 
 def test_validation_pack_fails_before_block_eight_without_torchvision(
