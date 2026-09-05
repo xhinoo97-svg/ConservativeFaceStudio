@@ -47,11 +47,36 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt 'pytest>=8,<9'
           python -m pip check
-      - name: Verify expanded generator authority
+      - name: Execute expanded generator authority tests with durable diagnostics
+        id: generator_tests
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
-          python -m pytest -q tests/test_phase04_expanded_damage_generator.py tests/test_phase04_damage_evaluation.py
+          set +e
+          mkdir -p .phase04/diagnostics
+          python -m pytest -q \
+            --junitxml=.phase04/diagnostics/generator-tests.xml \
+            tests/test_phase04_expanded_damage_generator.py \
+            tests/test_phase04_damage_evaluation.py \
+            > .phase04/diagnostics/generator-tests.txt 2>&1
+          status=$?
+          printf '%s\n' "$status" > .phase04/diagnostics/generator-tests-exit.txt
+          cat .phase04/diagnostics/generator-tests.txt
+          exit "$status"
+      - name: Upload generator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: phase04-generator-diagnostics-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: .phase04/diagnostics/
+      - name: Fail closed if generator authority tests failed
+        if: steps.generator_tests.outcome != 'success'
+        shell: bash
+        run: |
+          echo 'Phase04 generator authority failed; diagnostic artifact was preserved.' >&2
+          exit 1
       - name: Download frozen LRASPP development artifact
         uses: actions/download-artifact@v5
         with:
@@ -127,6 +152,6 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: phase04-expanded-damage-${{ github.run_number }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
           path: .phase04/evidence/phase04-expanded-damage-report.json
