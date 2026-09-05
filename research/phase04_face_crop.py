@@ -17,6 +17,14 @@ class FaceCropResult:
     crop_bbox: tuple[int, int, int, int]
     detector_score: float
     detector_backend: str
+    detector_input_scale: float
+
+
+@dataclass(frozen=True)
+class _MappedObservation:
+    bbox: tuple[int, int, int, int]
+    score: float
+    input_scale: float
 
 
 class _FaceObservation(Protocol):
@@ -62,6 +70,57 @@ def _context_square(
     return left, top, side, side
 
 
+def _multiscale_observation(
+    image_bgr: np.ndarray,
+    engine: _FaceEngine,
+    *,
+    max_dimensions: tuple[int, ...] = (640, 960, 1280),
+) -> _MappedObservation:
+    height, width = image_bgr.shape[:2]
+    longest = max(int(height), int(width))
+    candidates: list[_MappedObservation] = []
+    attempted_scales: list[float] = []
+
+    for max_dimension in max_dimensions:
+        if int(max_dimension) < 64:
+            raise ValueError("multiscale max dimensions must be >= 64")
+        scale = min(1.0, float(max_dimension) / float(longest))
+        if any(abs(scale - previous) < 1e-6 for previous in attempted_scales):
+            continue
+        attempted_scales.append(scale)
+        if scale < 0.999999:
+            resized = cv2.resize(
+                image_bgr,
+                (max(1, int(round(width * scale))), max(1, int(round(height * scale)))),
+                interpolation=cv2.INTER_AREA,
+            )
+        else:
+            resized = image_bgr
+        try:
+            observation = engine.analyze(resized)
+        except (ValueError, RuntimeError):
+            continue
+        score = float(observation.score)
+        if not np.isfinite(score):
+            continue
+        x, y, w, h = (float(value) for value in observation.bbox)
+        inverse = 1.0 / float(scale)
+        mapped = (
+            int(round(x * inverse)),
+            int(round(y * inverse)),
+            max(1, int(round(w * inverse))),
+            max(1, int(round(h * inverse))),
+        )
+        candidates.append(_MappedObservation(bbox=mapped, score=score, input_scale=float(scale)))
+
+    if not candidates:
+        raise ValueError(
+            "Nessun volto rilevato con YuNet multiscala "
+            f"(max_dimensions={list(max_dimensions)})"
+        )
+    return max(candidates, key=lambda item: (item.score, item.bbox[2] * item.bbox[3]))
+
+
 def crop_main_face(
     image_bgr: np.ndarray,
     engine: _FaceEngine,
@@ -69,6 +128,7 @@ def crop_main_face(
     output_size: int = 256,
     context_scale: float = 1.35,
     minimum_detector_score: float = 0.75,
+    detector_max_dimensions: tuple[int, ...] = (640, 960, 1280),
 ) -> FaceCropResult:
     if image_bgr is None or image_bgr.size == 0:
         raise ValueError("image is empty")
@@ -79,7 +139,11 @@ def crop_main_face(
     if not 0.0 <= float(minimum_detector_score) <= 1.0:
         raise ValueError("minimum_detector_score must be in [0,1]")
 
-    observation = engine.analyze(image_bgr)
+    observation = _multiscale_observation(
+        image_bgr,
+        engine,
+        max_dimensions=tuple(int(value) for value in detector_max_dimensions),
+    )
     score = float(observation.score)
     if not np.isfinite(score) or score < float(minimum_detector_score):
         raise RuntimeError(
@@ -105,7 +169,8 @@ def crop_main_face(
         source_bbox=tuple(int(value) for value in observation.bbox),
         crop_bbox=tuple(int(value) for value in crop_bbox),
         detector_score=score,
-        detector_backend="opencv_zoo_yunet",
+        detector_backend="opencv_zoo_yunet_multiscale",
+        detector_input_scale=float(observation.input_scale),
     )
 
 
