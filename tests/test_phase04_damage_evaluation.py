@@ -15,7 +15,7 @@ sys.modules[SPEC.name] = module
 SPEC.loader.exec_module(module)
 
 
-def test_matrix_covers_every_required_damage_type_and_declared_dimensions() -> None:
+def test_matrix_covers_every_required_damage_type_and_full_cross_product() -> None:
     payload = module.matrix_payload()
     rows = payload["cases"]
     observed_types = {row["damage_type"] for row in rows}
@@ -24,15 +24,31 @@ def test_matrix_covers_every_required_damage_type_and_declared_dimensions() -> N
     assert payload["v3_used"] is False
     assert payload["v4_used"] is False
     assert payload["production_qualified"] is False
-    assert payload["case_count"] == 52
-    assert {row["size"] for row in rows if row["damage_type"] != "HEALTHY"} == set(module.SIZES)
-    assert {row["severity"] for row in rows if row["damage_type"] != "HEALTHY"} == set(module.SEVERITIES)
-    translucent = [row for row in rows if row["damage_type"] == "TRANSLUCENT_STICKER"]
-    assert {row["opacity"] for row in translucent} == {"LOW", "MEDIUM", "HIGH"}
-    positions = {row["position"] for row in rows}
-    for position in module.POSITIONS:
-        assert position in positions
-    assert "GLOBAL" in positions
+    assert payload["coverage"]["cross_factorial"] is True
+    assert payload["matrix_validation"]["passed"] is True
+    assert payload["case_count"] == 1036
+    assert len({row["case_id"] for row in rows}) == len(rows)
+
+    for damage_type in module.EVALUATION_DAMAGE_TYPES:
+        subset = [row for row in rows if row["damage_type"] == damage_type]
+        if damage_type == "HEALTHY":
+            assert len(subset) == 1
+            assert subset[0]["binary_damage_expected"] is False
+            continue
+
+        expected_positions = {"GLOBAL"} if damage_type in module.GLOBAL_DAMAGE_TYPES else set(module.POSITIONS)
+        expected_opacities = set(module._opacities_for(damage_type))
+        expected_count = (
+            len(expected_positions)
+            * len(module.SIZES)
+            * len(module.SEVERITIES)
+            * len(expected_opacities)
+        )
+        assert len(subset) == expected_count
+        assert {row["position"] for row in subset} == expected_positions
+        assert {row["size"] for row in subset} == set(module.SIZES)
+        assert {row["severity"] for row in subset} == set(module.SEVERITIES)
+        assert {row["opacity"] for row in subset} == expected_opacities
 
 
 def test_binary_metrics_include_required_error_rates() -> None:
