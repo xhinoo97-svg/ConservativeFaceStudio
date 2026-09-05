@@ -37,13 +37,49 @@ def test_training_rejects_batch_one_before_loading_data(tmp_path: Path) -> None:
         )
 
 
-def test_weighted_segmentation_loss_is_finite_and_backpropagates() -> None:
+def test_region_balanced_segmentation_loss_is_finite_and_backpropagates() -> None:
     module = _module()
+    assert module.LOSS_VERSION == "region_balanced_ce_binary_focal_dice_v2"
     logits = torch.zeros((2, 18, 8, 8), dtype=torch.float32, requires_grad=True)
     target = torch.zeros((2, 8, 8), dtype=torch.long)
-    target[:, 2:4, 2:4] = 1
-    loss = module._weighted_segmentation_loss(logits, target)
+    target[0, 3, 3] = 5
+    target[1, 2:6, 2:6] = 1
+    loss = module._weighted_segmentation_loss(
+        logits,
+        target,
+        sample_weights=torch.tensor([2.0, 1.0], dtype=torch.float32),
+    )
     assert torch.isfinite(loss)
     loss.backward()
     assert logits.grad is not None
     assert torch.isfinite(logits.grad).all()
+
+
+def test_region_balanced_mean_gives_sparse_damage_equal_region_authority() -> None:
+    module = _module()
+    values = torch.tensor(
+        [
+            [10.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+    sparse = torch.zeros_like(values, dtype=torch.bool)
+    sparse[0, 0] = True
+    result = module._region_balanced_mean(values, sparse)
+    expected = 0.5 * (10.0 + 1.0)
+    assert float(result) == pytest.approx(expected)
+
+
+def test_case_type_weights_counter_matrix_case_frequency_without_extremes() -> None:
+    module = _module()
+    cases = module.build_matrix()
+    weights = module._training_case_type_weights(cases)
+    assert weights["HEALTHY"] == pytest.approx(1.0)
+    assert weights["BLUR_LOCAL"] == pytest.approx(1.0)
+    assert weights["MOTION_BLUR"] == pytest.approx(1.0)
+    assert weights["BLUR_GLOBAL"] == pytest.approx(7.0 ** 0.5)
+    assert weights["JPEG_ARTIFACT"] == pytest.approx(7.0 ** 0.5)
+    assert weights["NOISE"] == pytest.approx(7.0 ** 0.5)
+    assert weights["TRANSLUCENT_STICKER"] == pytest.approx((1.0 / 3.0) ** 0.5)
+    assert 0.5 <= min(weights.values()) <= max(weights.values()) <= 3.0
