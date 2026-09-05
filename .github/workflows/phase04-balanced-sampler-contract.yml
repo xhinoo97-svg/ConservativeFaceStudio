@@ -1,0 +1,33 @@
+name: Phase04 Balanced Sampler Contract
+
+on:
+  push:
+    branches:
+      - integration/final-paper-quality-local
+    paths:
+      - research/phase04_balanced_sampler.py
+      - tests/test_phase04_balanced_sampler.py
+      - .github/workflows/phase04-balanced-sampler-contract.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  balanced-sampler-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install pytest
+        run: python -m pip install 'pytest>=8,<9'
+      - name: Compile balanced sampler
+        run: python -m compileall -q research/phase04_balanced_sampler.py
+      - name: Verify complete deterministic matrix epochs
+        run: python -m pytest -q tests/test_phase04_balanced_sampler.py
