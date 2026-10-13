@@ -4,6 +4,12 @@ Data: 2026-10-13. Branch unico: `integration/final-paper-quality-local`.
 
 Mandato attuale: `docs/AUTONOMOUS_EXECUTION_MANDATE.txt`; prevale sul testo precedente copiato senza modifiche da `meta/project-state:PROJECT_EXECUTION_RULES.md` in `docs/PROJECT_EXECUTION_RULES.md`. Il registro operativo viene mantenuto su questo stesso branch; gli altri restano read-only.
 
+## Stato attuale — 2026-10-13
+
+Branch unico: `integration/final-paper-quality-local`. Gate delle fasi 0, 1, 2 PASS; fase 3 **PARZIALE / BLOCCATA PER FALLBACK 3DDFA**. Avanzamento dei gate del mandato: **3/12 = 25%**, conteggio non ponderato; non è una misura di qualità o completezza del prodotto. Target95 NON_MISURATO; installer finale NON_QUALIFICATO; EliteBook fisico NOT_RUN; RELEASE_READY=FALSE; PROJECT_FINISHED=FALSE.
+
+Le sezioni successive conservano la cronologia. Le affermazioni dell'inventario iniziale sono riferite al suo SHA, non al codice attuale. Nessun branch storico modificato, nessuna PR certificata o merge; V3/V4 intatti, V5 non creato.
+
 ## Fase 0 — inventario riconciliato
 
 SHA di codice inventariato: `dca9b3534dbeffec11a7cee4b3dd8c449a5872d8`. Origine del registro storico: `meta/project-state@b8620b5f1e6d7e70608ce67448a8d506f7e11d4e`.
@@ -106,3 +112,23 @@ Vincolo di licenza individuato per fase 3: [3DDFA_V2 BFM statement](https://gith
 MediaPipe 0.10.35 con bundle ufficiale v1: smoke CPU su foto DEV restituisce realmente 478 punti finiti. L'adapter attuale conserva solo cinque punti: correzione prevista nella fase 3 dopo CI fase 2 verde. Dipendenza Linux `libGLESv2.so.2` mancante risolta localmente con il pacchetto Debian ufficiale estratto in /tmp; non servono CUDA o modifiche al sistema.
 
 PROSSIMO PASSO ESATTO: attendere CI fase 2, conservare i 478 punti e rendere esplicita la chiusura del runtime MediaPipe; bloccare qualificazione fase 3 finché il fallback pose estreme ha licenza compatibile e test reali.
+
+## Fase 2 — CI verde
+
+SHA `136030292c4ce28db9e727c832228269a8797596`; CI [38409276466](https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/38409276466): SUCCESS su Linux e Windows. Gate computazionale della fase 2 PASS, senza qualificazione di qualità.
+
+## Fase 3 — geometria densa, avanzamento parziale
+
+MediaPipe conserva 478 landmark XYZ finiti in `FaceAnalysisResult` e nel metadata del blocco Face/Landmarks. Coordinate x/y in pixel, z in scala relativa alla larghezza, non profondità metrica. La geometria è associata alla stessa faccia YuNet tramite i cinque ancoraggi; non sostituisce embedding SFace, score diretti, pixel, provenance o maschere autorizzate. Nessun trasferimento denso per componente è ancora qualificato.
+
+Pesi ufficiali v1: `face_landmarker.task`, 3,758,596 byte; SHA-256 `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`. Runtime MediaPipe 0.10.35, delegate CPU esplicito. Le model card ufficiali BlazeFace, Face Mesh V2 e Blendshape V2 dichiarano Apache-2.0; prove e URL in `config/session-dense-geometry.json`. Un checksum errato restituisce ERROR senza dichiarare esecuzione; modello assente SKIPPED; geometria non associabile ABSTAIN. Runtime chiuso anche in uscita per errore. Il modello rimane TESTING, non ACTIVE/FALLBACK.
+
+Smoke reale CPU: MAIN 478 punti, reference 478, SFace diretto 1.0; pixel immagine cambiati 0; autorità d'identità cambiata FALSE; modello chiuso TRUE. Ripetizione della pipeline reale MAIN+0/1/3: blocco Face/Landmarks registra PASS con 478 punti in tutti i casi; output 13 record, nessun crash. Foto pubblica adulta e reference duplicate: nessuna qualificazione su pose diverse, reference parziali o dominio completo.
+
+Regressioni mirate: **34 PASS**. Suite completa: **1767 PASS, 0 FAIL, 2 SKIPPED**, 27.83 s. Skip reali Win32 API su Linux; restano testate nella CI Windows. Compile e diff check PASS. Nuova CI: regressioni complete Linux/Windows + smoke MediaPipe/YuNet/SFace reale su Windows CPU; risultati PENDING prima del push.
+
+I due workflow di ricerca Phase04 non vengono riattivati da una modifica al registro condiviso o al solo YAML: conservano workflow_dispatch e trigger sul codice specifico Phase04. Questo evita riaddestrare automaticamente il DeepLab rifiutato durante la fase 3; nessun test, caso, metrica o soglia è stato eliminato. La regressione completa rimane automatica a ogni push.
+
+BLOCCO REALE: `3DDFA_V2@1b6c67601abffc1e9f248b291708aef0e43b55ae` usa `bfm_noneck_v3.pkl`; lo statement upstream lo limita a **only for academic use**. Il prodotto locale per restauro personale non è un uso accademico. Il mandato consente di fermarsi per licenza incompatibile; non viene incluso un asset privo dei diritti richiesti. Anche allineamento denso per componente e qualificazione pose estreme rimangono non eseguiti. Non si passa alle fasi 4–11 prima del gate della fase 3.
+
+PROSSIMO PASSO ESATTO: reperire un fallback per pose estreme con codice e pesi redistribuibili (o licenza BFM valida per questo uso), misurarlo su nuove foto adulte lecite con pose diverse e reference parziali, integrare l'allineamento denso per componente preservando la MAIN e chiudere il gate della fase 3. Poi sviluppare il rilevatore a due teste sotto soglie DEV congelate. Nessuna certificazione V5 autorizzabile finché i prerequisiti non passano.

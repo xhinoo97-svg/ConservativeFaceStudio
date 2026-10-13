@@ -1,0 +1,65 @@
+name: Dense geometry Windows CPU smoke
+
+on:
+  push:
+    branches: [integration/final-paper-quality-local]
+    paths:
+      - app/face_analysis.py
+      - app/dense_geometry.py
+      - app/model_registry.py
+      - app/pretrained_face_handlers.py
+      - scripts/smoke_dense_geometry.py
+      - tests/test_dense_geometry.py
+      - requirements-dense-geometry.txt
+      - .github/workflows/dense-geometry-windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dense-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install CPU geometry runtime
+        run: python -m pip install -r requirements.txt -r requirements-dense-geometry.txt
+      - name: Acquire checksum-verified models and licensed adult development portrait
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          from app.model_registry import download_model, registry_by_key
+          models = registry_by_key()
+          for key in ('opencv_yunet', 'opencv_sface', 'mediapipe_face_landmarker'):
+              download_model(models[key], Path('.'), accept_license=True, timeout_seconds=120)
+          # NASA/Norah Moran; public domain; adult Nicole Mann. DEVELOPMENT only.
+          url = 'https://upload.wikimedia.org/wikipedia/commons/c/cb/Nicole_Mann_Official_Portrait_%28cropped%29.jpg'
+          request = Request(url, headers={'User-Agent': 'ConservativeFaceStudio-development/1.0'})
+          with urlopen(request, timeout=120) as response:
+              payload = response.read()
+          digest = hashlib.sha256(payload).hexdigest()
+          assert digest == 'fa7a99c81c941b528d3c64dab8cb3d8da4ae0a7d3f6165410c7ab8892b75d76b'
+          for path in Path('benchmarks').rglob('*.json'):
+              assert digest not in path.read_text(encoding='utf-8')
+          Path('dense-development-portrait.jpg').write_bytes(payload)
+          PY
+      - name: Measure 478-point MAIN and reference geometry on CPU
+        run: python scripts/smoke_dense_geometry.py --image dense-development-portrait.jpg --report dense-geometry-windows.json
+      - name: Save measured geometry evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dense-geometry-windows-cpu
+          path: dense-geometry-windows.json
+          if-no-files-found: error
+          retention-days: 30

@@ -4,15 +4,15 @@ on:
   push:
     branches:
       - integration/final-paper-quality-local
+    # Shared registry/workflow edits require explicit workflow_dispatch for training.
+    # Automatic research runs remain tied to Phase04 source changes.
     paths:
-      - app/model_registry.py
       - app/opencv_zoo_face.py
       - research/phase04_face_crop.py
       - research/prepare_phase04_yunet_portraits.py
       - tests/test_phase04_face_crop.py
       - scripts/prefetch_public_portraits.py
       - requirements.txt
-      - .github/workflows/phase04-yunet-face-crop-windows.yml
   workflow_dispatch:
 
 permissions:

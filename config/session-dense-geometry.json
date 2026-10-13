@@ -1,0 +1,435 @@
+{
+  "purpose": "development CPU inference; no quality or extreme-pose qualification",
+  "input_sha256": "fa7a99c81c941b528d3c64dab8cb3d8da4ae0a7d3f6165410c7ab8892b75d76b",
+  "seconds": 1.063086762000239,
+  "primary_landmark_count": 478,
+  "reference_landmark_count": 478,
+  "direct_sface_score": 1.0,
+  "image_pixels_changed": 0,
+  "identity_authority_changed": false,
+  "runtime": {
+    "dense_geometry_status": "PASS",
+    "dense_backend": "mediapipe-face-landmarker-cpu",
+    "dense_model": "face_landmarker.task",
+    "dense_model_loaded": true,
+    "dense_model_closed": true,
+    "dense_inference_attempted": true,
+    "dense_geometry_error": null,
+    "dense_geometry_reason": null,
+    "dense_reference_states": [
+      "PASS"
+    ],
+    "dense_landmark_count": 478
+  },
+  "final_holdout_used": false,
+  "production_qualified": false,
+  "date": "2026-10-13",
+  "source": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/cb/Nicole_Mann_Official_Portrait_%28cropped%29.jpg",
+    "source_page": "https://commons.wikimedia.org/wiki/File:Nicole_Mann_Official_Portrait_(cropped).jpg",
+    "license": "Public domain; NASA/Norah Moran",
+    "adult_subject": "Nicole Mann, NASA astronaut",
+    "sha256": "fa7a99c81c941b528d3c64dab8cb3d8da4ae0a7d3f6165410c7ab8892b75d76b",
+    "historical_source_hash_overlap": false,
+    "purpose": "development inference smoke, no training or certification"
+  },
+  "runtime_version": "0.10.35",
+  "model_sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+  "licenses": {
+    "face_mesh": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Face%20Mesh%20V2.pdf",
+    "blazeface": "https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20(Short%20Range).pdf",
+    "blendshape": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Blendshape%20V2.pdf",
+    "all_three_model_cards": "Apache-2.0",
+    "3ddfa_bfm_statement": "https://github.com/cleardusk/3DDFA_V2/blob/1b6c67601abffc1e9f248b291708aef0e43b55ae/bfm/readme.md",
+    "3ddfa_bfm_disposition": "BLOCKED_ACADEMIC_USE_ONLY"
+  },
+  "pipeline_cases": [
+    {
+      "reference_count": 0,
+      "seconds": 2.8860469979999834,
+      "block_count": 13,
+      "output_sha256": "938efebb243e08709829143edb19fff7ea681614d83df52f164d54ec45cb3aab",
+      "direct_identity_scores": [],
+      "face_backend": "opencv-zoo-yunet-sface-cpu",
+      "blocks": [
+        {
+          "key": "import",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "deblur",
+          "engine": "opencv-zoo-nafnet-2025may",
+          "skipped": false,
+          "rollback": false,
+          "abstained": true,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "enhance",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "landmarks",
+          "engine": "opencv-zoo-yunet-sface-cpu",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": "PASS",
+          "dense_landmark_count": 478
+        },
+        {
+          "key": "align",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "occlusion_mask",
+          "engine": "heuristic-plus-reference-consensus",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "region_select",
+          "engine": "single-image-component-bank-abstain",
+          "skipped": false,
+          "rollback": false,
+          "abstained": true,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "inpaint",
+          "engine": "single-image-case-aware-repair",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "fusion",
+          "engine": "single-image-fusion-abstain",
+          "skipped": false,
+          "rollback": false,
+          "abstained": true,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "frontalize",
+          "engine": null,
+          "skipped": true,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "identity_check",
+          "engine": "opencv-zoo-sface-cpu",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "upscale",
+          "engine": "Lanczos4",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "export",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        }
+      ]
+    },
+    {
+      "reference_count": 1,
+      "seconds": 16.93070398499958,
+      "block_count": 13,
+      "output_sha256": "a4da2409b1ccb0dd3701d3e1b5516d123f85be997de2eb32c7b9b173afd1b944",
+      "direct_identity_scores": [
+        1.0
+      ],
+      "face_backend": "opencv-zoo-yunet-sface-cpu",
+      "blocks": [
+        {
+          "key": "import",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "deblur",
+          "engine": "opencv-zoo-nafnet-2025may",
+          "skipped": false,
+          "rollback": false,
+          "abstained": true,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "enhance",
+          "engine": "automatic-reference-photometry-preserve",
+          "skipped": true,
+          "rollback": false,
+          "abstained": true,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "landmarks",
+          "engine": "opencv-zoo-yunet-sface-cpu",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": "PASS",
+          "dense_landmark_count": 478
+        },
+        {
+          "key": "align",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "occlusion_mask",
+          "engine": "heuristic-plus-reference-consensus",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "region_select",
+          "engine": "dmd-inspired-specific-memory",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "inpaint",
+          "engine": "verified-reference-inpaint-abstain",
+          "skipped": false,
+          "rollback": true,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "fusion",
+          "engine": "region-selection-finalized",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "frontalize",
+          "engine": null,
+          "skipped": true,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "identity_check",
+          "engine": "opencv-zoo-sface-cpu",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "upscale",
+          "engine": "Lanczos4",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "export",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        }
+      ]
+    },
+    {
+      "reference_count": 3,
+      "seconds": 20.182812884000214,
+      "block_count": 13,
+      "output_sha256": "a4da2409b1ccb0dd3701d3e1b5516d123f85be997de2eb32c7b9b173afd1b944",
+      "direct_identity_scores": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "face_backend": "opencv-zoo-yunet-sface-cpu",
+      "blocks": [
+        {
+          "key": "import",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "deblur",
+          "engine": "opencv-zoo-nafnet-2025may",
+          "skipped": false,
+          "rollback": false,
+          "abstained": true,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "enhance",
+          "engine": "automatic-reference-photometry-preserve",
+          "skipped": true,
+          "rollback": false,
+          "abstained": true,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "landmarks",
+          "engine": "opencv-zoo-yunet-sface-cpu",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": "PASS",
+          "dense_landmark_count": 478
+        },
+        {
+          "key": "align",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "occlusion_mask",
+          "engine": "heuristic-plus-reference-consensus",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "region_select",
+          "engine": "dmd-inspired-specific-memory",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "inpaint",
+          "engine": "verified-reference-inpaint-abstain",
+          "skipped": false,
+          "rollback": true,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "fusion",
+          "engine": "region-selection-finalized",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "frontalize",
+          "engine": null,
+          "skipped": true,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "identity_check",
+          "engine": "opencv-zoo-sface-cpu",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "upscale",
+          "engine": "Lanczos4",
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        },
+        {
+          "key": "export",
+          "engine": null,
+          "skipped": false,
+          "rollback": false,
+          "abstained": false,
+          "dense_geometry_status": null,
+          "dense_landmark_count": null
+        }
+      ]
+    }
+  ]
+}

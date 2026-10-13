@@ -137,9 +137,10 @@ OFFICIAL_MODELS: tuple[ModelManifest, ...] = (
         destination="models/landmarks/face_landmarker.task",
         source_url="https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
         code_license="Apache-2.0",
-        weights_license="Google MediaPipe model terms",
+        weights_license="Apache-2.0 (official Face Mesh V2 model card)",
         conservative_default=True,
-        max_bytes=100_000_000,
+        expected_sha256="64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+        max_bytes=4_000_000,
         notes="Official pretrained Face Landmarker bundle; preferred dense-landmark backend on CPU when installed.",
     ),
     ModelManifest(

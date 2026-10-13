@@ -63,6 +63,8 @@ def run_smoke(image_path: Path, root: Path, output: Path) -> dict[str, object]:
                 "skipped": item.details.get("skipped", False),
                 "rollback": item.details.get("rolled_back", False),
                 "abstained": item.details.get("abstained", False),
+                "dense_geometry_status": item.details.get("dense_geometry_status"),
+                "dense_landmark_count": item.details.get("dense_landmark_count"),
             } for item in result.results],
         })
         print(f"MAIN+{count}: computational smoke PASS", flush=True)

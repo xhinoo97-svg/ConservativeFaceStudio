@@ -48,6 +48,7 @@ def test_invalid_or_below_threshold_score_has_no_donor_authority(score) -> None:
     )
     assert flags == [True, False]
     assert reasons == ["direct_sface", "rejected"]
+    assert all(type(flag) is bool for flag in flags)
 
 
 def test_direct_threshold_is_inclusive_and_independent_of_cluster_metadata() -> None:

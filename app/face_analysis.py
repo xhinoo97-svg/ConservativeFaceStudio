@@ -7,6 +7,8 @@ from typing import Protocol
 import cv2
 import numpy as np
 
+from app.model_registry import registry_by_key, sha256_path
+
 
 @dataclass(frozen=True)
 class FaceAnalysisResult:
@@ -15,6 +17,7 @@ class FaceAnalysisResult:
     embedding: np.ndarray | None
     backend: str
     landmark_confidence: float = 0.5
+    landmarks478: np.ndarray | None = None
 
 
 class FaceBackend(Protocol):
@@ -92,18 +95,23 @@ class MediaPipeFaceLandmarkerBackend:
         path = Path(model_path).resolve()
         if not path.is_file():
             raise RuntimeError(f"MediaPipe Face Landmarker non trovato: {path}")
+        expected = registry_by_key()["mediapipe_face_landmarker"].expected_sha256
+        if sha256_path(path) != expected:
+            raise RuntimeError("MediaPipe Face Landmarker SHA-256 non valido")
         try:
             import mediapipe as mp
         except ImportError as exc:
             raise RuntimeError("MediaPipe non installato") from exc
 
         self._mp = mp
+        self._closed = False
+        self.model_path = path
         try:
             BaseOptions = mp.tasks.BaseOptions
             FaceLandmarker = mp.tasks.vision.FaceLandmarker
             FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
             options = FaceLandmarkerOptions(
-                base_options=BaseOptions(model_asset_path=str(path)),
+                base_options=BaseOptions(model_asset_path=str(path), delegate=BaseOptions.Delegate.CPU),
                 running_mode=mp.tasks.vision.RunningMode.IMAGE,
                 num_faces=1,
                 min_face_detection_confidence=0.5,
@@ -116,6 +124,34 @@ class MediaPipeFaceLandmarkerBackend:
         except Exception as exc:
             raise RuntimeError(f"Impossibile inizializzare MediaPipe Face Landmarker: {exc}") from exc
 
+    def close(self) -> None:
+        if not self._closed:
+            self._landmarker.close()
+            self._closed = True
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def __enter__(self) -> "MediaPipeFaceLandmarkerBackend":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
+
+    @staticmethod
+    def _dense_points(landmarks, width: int, height: int) -> np.ndarray:
+        if len(landmarks) != 478:
+            raise ValueError("Sono necessari esattamente 478 landmark MediaPipe")
+        # MediaPipe z uses the same normalized scale as x; it is not metric depth.
+        points = np.asarray(
+            [[p.x * width, p.y * height, p.z * width] for p in landmarks], dtype=np.float32
+        )
+        if not np.isfinite(points).all():
+            raise ValueError("Landmark MediaPipe non finiti")
+        points.setflags(write=False)
+        return points
+
     @staticmethod
     def _point(landmarks, indices: tuple[int, ...], width: int, height: int) -> np.ndarray:
         values = np.array(
@@ -125,6 +161,8 @@ class MediaPipeFaceLandmarkerBackend:
         return np.mean(values, axis=0)
 
     def analyze(self, image: np.ndarray) -> FaceAnalysisResult:
+        if self._closed:
+            raise RuntimeError("MediaPipe Face Landmarker già chiuso")
         if image is None or image.size == 0:
             raise ValueError("Immagine non valida")
         if image.ndim == 2:
@@ -140,9 +178,8 @@ class MediaPipeFaceLandmarkerBackend:
             raise ValueError("Nessun volto rilevato")
         landmarks = result.face_landmarks[0]
         h, w = rgb.shape[:2]
-        all_xy = np.array([[item.x * w, item.y * h] for item in landmarks], dtype=np.float32)
-        if all_xy.shape[0] < 292 or not np.isfinite(all_xy).all():
-            raise ValueError("Landmark MediaPipe incompleti")
+        dense = self._dense_points(landmarks, w, h)
+        all_xy = dense[:, :2]
 
         # Stable Face Mesh component indices. Averaging eyelid corners is less noisy
         # than using one vertex, while nose tip and mouth corners remain direct anchors.
@@ -163,7 +200,7 @@ class MediaPipeFaceLandmarkerBackend:
         points = np.vstack((left_eye, right_eye, nose, left_mouth, right_mouth)).astype(np.float32)
         if not _valid_five_points(points, bbox):
             raise ValueError("Geometria MediaPipe non plausibile per il trasferimento strict")
-        return FaceAnalysisResult(bbox, points, None, self.name, 0.92)
+        return FaceAnalysisResult(bbox, points, None, self.name, 0.92, dense)
 
 
 class OpenCVHaarBackend:

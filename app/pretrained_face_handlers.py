@@ -11,6 +11,7 @@ from app.alignment import align_from_points, align_to_reference
 from app.component_bank import build_component_bank, warped_support_mask
 from app.execution import BlockExecutionError, ExecutionResult
 from app.face_analysis import cosine_similarity
+from app.dense_geometry import attach_dense_geometry
 from app.opencv_zoo_face import OpenCVZooFaceEngine
 from app.opencv_semantic_models import FaceParsingEngine
 from app.pipeline import BlockKind, BlockSpec
@@ -29,9 +30,11 @@ def reliability_aware_identity_flags(
     """
     threshold = FACE_MODEL_DEFAULTS.sface_same_identity_cosine
     flags = [
-        score is not None
-        and np.isfinite(float(score))
-        and threshold <= float(score) <= 1.0
+        bool(
+            score is not None
+            and np.isfinite(float(score))
+            and threshold <= float(score) <= 1.0
+        )
         for score in scores
     ]
     reasons = ["direct_sface" if flag else "rejected" for flag in flags]
@@ -173,6 +176,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "face_backend": backend,
                 }
             )
+            dense_details = attach_dense_geometry(executor.workspace, model_paths, primary, refs)
             return ExecutionResult(
                 block.key,
                 executor.workspace.copy_primary(),
@@ -191,6 +195,7 @@ def install_pretrained_face_handlers(executor, model_paths: dict[str, str | Path
                     "reference_identity_reasons": identity_reasons,
                     "reference_bbox_count": int(sum(item is not None for item in executor.workspace.metadata["reference_bboxes"])),
                     "sface_reference_threshold": FACE_MODEL_DEFAULTS.sface_same_identity_cosine,
+                    **dense_details,
                 },
             )
         except Exception as exc:
