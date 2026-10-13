@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-13",
+  "tested_code_sha": "53bde8901f5c4f7a479ba1d20f95841beae41140",
+  "backend": "cpu",
+  "fixture": "synthetic; model inference only, not restoration-quality qualification",
+  "models": {
+    "opencv_yunet": {
+      "key": "opencv_yunet",
+      "path": "/workspace/ConservativeFaceStudio/models/detection/face_detection_yunet_2023mar.onnx",
+      "exists": true,
+      "is_directory": false,
+      "checksum_required": true,
+      "checksum_ok": true,
+      "size_bytes": 232589,
+      "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+    },
+    "opencv_sface": {
+      "key": "opencv_sface",
+      "path": "/workspace/ConservativeFaceStudio/models/identity/face_recognition_sface_2021dec.onnx",
+      "exists": true,
+      "is_directory": false,
+      "checksum_required": true,
+      "checksum_ok": true,
+      "size_bytes": 38696353,
+      "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+    },
+    "opencv_nafnet_deblur": {
+      "key": "opencv_nafnet_deblur",
+      "path": "/workspace/ConservativeFaceStudio/models/deblur/deblurring_nafnet_2025may.onnx",
+      "exists": true,
+      "is_directory": false,
+      "checksum_required": true,
+      "checksum_ok": true,
+      "size_bytes": 91736251,
+      "sha256": "07263f416febecce10193dd648e950b22e397cf521eedab1a114ef77b2bc9587"
+    },
+    "face_parsing_resnet18_onnx": {
+      "key": "face_parsing_resnet18_onnx",
+      "path": "/workspace/ConservativeFaceStudio/models/parsing/resnet18.onnx",
+      "exists": true,
+      "is_directory": false,
+      "checksum_required": true,
+      "checksum_ok": true,
+      "size_bytes": 53205364,
+      "sha256": "0d9bd318e46987c3bdbfacae9e2c0f461cae1c6ac6ea6d43bbe541a91727e33f"
+    },
+    "head_pose_mobilenetv2_onnx": {
+      "key": "head_pose_mobilenetv2_onnx",
+      "path": "/workspace/ConservativeFaceStudio/models/pose/mobilenetv2.onnx",
+      "exists": true,
+      "is_directory": false,
+      "checksum_required": true,
+      "checksum_ok": true,
+      "size_bytes": 8905103,
+      "sha256": "1e902872868e483bd0e4f8f4a8ff2a4d61c2ccbca9dadf748e5479b5cc86a9e9"
+    },
+    "opencv_lama_inpaint": {
+      "key": "opencv_lama_inpaint",
+      "path": "/workspace/ConservativeFaceStudio/models/inpainting/inpainting_lama_2025jan.onnx",
+      "exists": true,
+      "is_directory": false,
+      "checksum_required": true,
+      "checksum_ok": true,
+      "size_bytes": 92591623,
+      "sha256": "7df918ac3921d3daf0aae1d219776cf0dc4e4935f035af81841b40adcf74fdf2"
+    }
+  },
+  "smoke_pass_count": 6,
+  "quality_measured": false,
+  "elitebook_tested": false,
+  "final_holdout_used": false
+}

@@ -22,34 +22,19 @@ def reliability_aware_identity_flags(
     preflight_candidates: Any,
     runtime_order: list[int],
 ) -> tuple[list[bool], list[str]]:
-    """Extend direct MAIN verification only through a cluster bridged to MAIN.
+    """Require a finite direct MAIN/reference biometric score for every donor.
 
-    Cross-reference agreement alone is never authority. Promotion requires both the
-    imported MAIN and at least one directly verified reference in the same frozen
-    preflight identity component.
+    Preflight clusters may rank candidates, but cannot verify identity transitively.
+    Context arguments are retained for existing callers and grant no pixel authority.
     """
     threshold = FACE_MODEL_DEFAULTS.sface_same_identity_cosine
-    flags = [score is not None and float(score) >= threshold for score in scores]
+    flags = [
+        score is not None
+        and np.isfinite(float(score))
+        and threshold <= float(score) <= 1.0
+        for score in scores
+    ]
     reasons = ["direct_sface" if flag else "rejected" for flag in flags]
-    if not isinstance(preflight_candidates, list):
-        return flags, reasons
-    accepted_sources = {
-        int(item.get("source_index"))
-        for item in preflight_candidates
-        if isinstance(item, dict) and bool(item.get("accepted_identity", False)) and item.get("source_index") is not None
-    }
-    main_bridged = 0 in accepted_sources
-    direct_bridge = any(
-        flag and index + 1 < len(runtime_order) and int(runtime_order[index + 1]) in accepted_sources
-        for index, flag in enumerate(flags)
-    )
-    if not (main_bridged and direct_bridge):
-        return flags, reasons
-    for index, flag in enumerate(flags):
-        source = int(runtime_order[index + 1]) if index + 1 < len(runtime_order) else index + 1
-        if not flag and source in accepted_sources:
-            flags[index] = True
-            reasons[index] = "main_bridged_cross_reference_cluster"
     return flags, reasons
 
 

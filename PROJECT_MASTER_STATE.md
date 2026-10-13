@@ -71,3 +71,20 @@ RELEASE_READY=FALSE; PROJECT_FINISHED=FALSE; V3/V4 consumati e intatti; V5 non c
 PROSSIMO PASSO ESATTO: chiudere fase 0 con suite e CI verdi; eliminare l’autorità d’identità transitiva nella fase 1 e rieseguire regressioni mirate e suite completa.
 
 CI d3e1668: run 38406787876 FAIL prima dei job. Causa: contesto `runner.temp` non disponibile in jobs.env. Correzione minima: `github.workspace` per la directory dati dei test. Nessun test o soglia cambiati. CI corretta PENDING.
+
+## Fase 0 — gate chiuso
+
+Commit inventario `d3e1668cb08cdfa0798131395baf3e35f906fe30`; correzione CI `53bde8901f5c4f7a479ba1d20f95841beae41140`.
+CI [38407104002](https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/38407104002): **SUCCESS**, Linux + Windows, suite completa. Fase 0 PASS.
+
+Sei pesi production ora presenti nel checkout ignorato da Git: hash verificati 6/6; smoke con inferenza reale CPU 6/6 PASS. Fixture sintetiche: nessuna metrica di restauro o verifica biometrica reale viene dedotta. Report: `config/session-model-smoke.json`.
+
+## Fase 1 — conformità dell'integrazione
+
+Le integrazioni precedenti rimangono selettive: Track A → `f558ac8`, `21f3a3d`, `7fe71d6`, `e5ea08a`; protocollo generico → `871556b`, `b05e5aa`; Track B → component bank `e7ce058`, damage runtime `f9c539c`, reference-first `0ed9c52`, risorse `ef30cde`, fusion `0d35f89`, timeline `b653a35`, FBCNN `6ea2871`. Origini: SHA dei tre branch riportati nell'inventario. Non vengono ripetuti merge o riscritti branch storici.
+
+Correzione attuale: `app/pretrained_face_handlers.py` richiede score SFace diretto MAIN/reference, finito e compreso fra **0.363 e 1.0**. Un cluster non può promuovere referenze sotto soglia. Il precedente test che autorizzava tale promozione viene sostituito con il contratto più restrittivo del mandato; nuove regressioni per NaN, infinito, score fuori intervallo e soglia inclusiva. Conflitti: nessuno. Decisione: dati preflight consentiti per ranking, mai per autorità biometrica transitiva.
+
+Test mirati: **22 PASS**. Suite completa: **1755 PASS, 0 FAIL, 2 SKIPPED**, 26.16 s. CI del nuovo commit PENDING. Nessuna soglia abbassata, modello promosso o certificazione eseguita.
+
+PROSSIMO PASSO ESATTO: verificare CI fase 1, poi smoke end-to-end MAIN+0/1/3 reference con pesi reali; non chiudere fasi successive con sola evidenza di wiring.
