@@ -69,3 +69,5 @@ Percentuale reale del prodotto finale: NON_MISURATA; il precedente 43/100 è una
 RELEASE_READY=FALSE; PROJECT_FINISHED=FALSE; V3/V4 consumati e intatti; V5 non creato; PR #2 non unita.
 
 PROSSIMO PASSO ESATTO: chiudere fase 0 con suite e CI verdi; eliminare l’autorità d’identità transitiva nella fase 1 e rieseguire regressioni mirate e suite completa.
+
+CI d3e1668: run 38406787876 FAIL prima dei job. Causa: contesto `runner.temp` non disponibile in jobs.env. Correzione minima: `github.workspace` per la directory dati dei test. Nessun test o soglia cambiati. CI corretta PENDING.

@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 30
     env:
       QT_QPA_PLATFORM: offscreen
-      XDG_DATA_HOME: ${{ runner.temp }}/cfs-test-data
+      XDG_DATA_HOME: ${{ github.workspace }}/.test-user-data
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
