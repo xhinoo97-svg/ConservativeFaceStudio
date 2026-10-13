@@ -88,3 +88,21 @@ Correzione attuale: `app/pretrained_face_handlers.py` richiede score SFace diret
 Test mirati: **22 PASS**. Suite completa: **1755 PASS, 0 FAIL, 2 SKIPPED**, 26.16 s. CI del nuovo commit PENDING. Nessuna soglia abbassata, modello promosso o certificazione eseguita.
 
 PROSSIMO PASSO ESATTO: verificare CI fase 1, poi smoke end-to-end MAIN+0/1/3 reference con pesi reali; non chiudere fasi successive con sola evidenza di wiring.
+
+## Fase 1 — gate chiuso
+
+SHA `766989ba5a5855737c648919392c23e752aa28d1`; CI [38408032733](https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/38408032733): **SUCCESS**, Linux + Windows. Fase 1 PASS; il filtro diretto conserva SFace 0.363.
+
+## Fase 2 — gate end-to-end
+
+Script riproducibile `scripts/run_phase02_reference_smoke.py`: richiede una foto e tutti i sei pesi locali con checksum valido; non scarica pesi, non sostituisce modelli con mock. Foto DEV nuova: NASA/Norah Moran, Nicole Mann adulta, pubblico dominio; URL e SHA nel report. Nessuna corrispondenza di hash con fonti dei benchmark storici. Nessun training o holdout.
+
+MAIN+0: 13 record, 4.53 s, output PASS. MAIN+1: 13 record, 22.28 s, output PASS. MAIN+3: 13 record, 23.48 s, output PASS. Referenze duplicate della stessa foto, SFace diretto 1.0; input pulito. Errori runtime 0, immagine/provenienza/archivio esportati e dimensioni preservate. Stati SKIPPED/ABSTAIN/ROLLBACK restano espliciti nel report `config/session-phase02-reference-smoke.json`. Questo è un gate computazionale, non prova rimozione dei danni, qualità, zero wrong-person pixel su identità diverse o matrice finale 0–9.
+
+Compile PASS; suite completa **1755 PASS, 0 FAIL, 2 SKIPPED**, 25.86 s. CI di questa fase PENDING. CPU/RAM di questo smoke non profilate; risultati sul PC fisico NOT_RUN. Enhance reale o ABSTAIN secondo evidenza, nessuna etichetta FBCNN fittizia.
+
+Vincolo di licenza individuato per fase 3: [3DDFA_V2 BFM statement](https://github.com/cleardusk/3DDFA_V2/blob/1b6c67601abffc1e9f248b291708aef0e43b55ae/bfm/readme.md): il modello modificato BFM2009 è **only for academic use**. La licenza MIT del codice non autorizza l'uso del modello nel prodotto richiesto. Non incluso né attivato.
+
+MediaPipe 0.10.35 con bundle ufficiale v1: smoke CPU su foto DEV restituisce realmente 478 punti finiti. L'adapter attuale conserva solo cinque punti: correzione prevista nella fase 3 dopo CI fase 2 verde. Dipendenza Linux `libGLESv2.so.2` mancante risolta localmente con il pacchetto Debian ufficiale estratto in /tmp; non servono CUDA o modifiche al sistema.
+
+PROSSIMO PASSO ESATTO: attendere CI fase 2, conservare i 478 punti e rendere esplicita la chiusura del runtime MediaPipe; bloccare qualificazione fase 3 finché il fallback pose estreme ha licenza compatibile e test reali.
