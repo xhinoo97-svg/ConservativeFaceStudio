@@ -1,0 +1,34 @@
+{
+  "tested_sha": "6ae4f5ffa64c040ccb1dd1ffbbe7a464435d270d",
+  "workflow_run_id": 38411614953,
+  "job_id": 115345126620,
+  "conclusion": "SUCCESS",
+  "artifact_id": 11822086414,
+  "artifact_zip_sha256": "90cf853470ae36aa04be162d8a2c608695689758e925c596b6850df64f6009ce",
+  "measured_report": {
+    "purpose": "development CPU inference; no quality or extreme-pose qualification",
+    "input_sha256": "fa7a99c81c941b528d3c64dab8cb3d8da4ae0a7d3f6165410c7ab8892b75d76b",
+    "seconds": 5.077337399999976,
+    "primary_landmark_count": 478,
+    "reference_landmark_count": 478,
+    "direct_sface_score": 1,
+    "image_pixels_changed": 0,
+    "identity_authority_changed": false,
+    "runtime": {
+      "dense_geometry_status": "PASS",
+      "dense_backend": "mediapipe-face-landmarker-cpu",
+      "dense_model": "face_landmarker.task",
+      "dense_model_loaded": true,
+      "dense_model_closed": true,
+      "dense_inference_attempted": true,
+      "dense_geometry_error": null,
+      "dense_geometry_reason": null,
+      "dense_reference_states": [
+        "PASS"
+      ],
+      "dense_landmark_count": 478
+    },
+    "final_holdout_used": false,
+    "production_qualified": false
+  }
+}

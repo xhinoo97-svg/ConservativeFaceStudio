@@ -132,3 +132,17 @@ I due workflow di ricerca Phase04 non vengono riattivati da una modifica al regi
 BLOCCO REALE: `3DDFA_V2@1b6c67601abffc1e9f248b291708aef0e43b55ae` usa `bfm_noneck_v3.pkl`; lo statement upstream lo limita a **only for academic use**. Il prodotto locale per restauro personale non è un uso accademico. Il mandato consente di fermarsi per licenza incompatibile; non viene incluso un asset privo dei diritti richiesti. Anche allineamento denso per componente e qualificazione pose estreme rimangono non eseguiti. Non si passa alle fasi 4–11 prima del gate della fase 3.
 
 PROSSIMO PASSO ESATTO: reperire un fallback per pose estreme con codice e pesi redistribuibili (o licenza BFM valida per questo uso), misurarlo su nuove foto adulte lecite con pose diverse e reference parziali, integrare l'allineamento denso per componente preservando la MAIN e chiudere il gate della fase 3. Poi sviluppare il rilevatore a due teste sotto soglie DEV congelate. Nessuna certificazione V5 autorizzabile finché i prerequisiti non passano.
+
+## Verifica conclusiva del codice pubblicato
+
+SHA tecnico finale della sessione: `6ae4f5ffa64c040ccb1dd1ffbbe7a464435d270d`. Push e SHA remoto verificati. Nessuna modifica ai branch main, Track A, Track B, protocollo o meta/project-state; diff dei benchmark V3/V4 vuoto.
+
+CI sullo stesso SHA:
+
+- [Integration regression 38411614801](https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/38411614801): SUCCESS, suite completa Linux e Windows.
+- [Dense geometry Windows CPU 38411614953](https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/38411614953): SUCCESS; 478 punti MAIN + 478 reference; 5.0773 s; score SFace diretto 1.0; pixel cambiati dall'analisi 0; modello realmente caricato, eseguito e chiuso. Artifact 11822086414, ZIP SHA-256 `90cf853470ae36aa04be162d8a2c608695689758e925c596b6850df64f6009ce`; report letto dai log ufficiali in `config/session-dense-geometry-windows.json`.
+- [Paper Quality installed FBCNN 38411614908](https://github.com/xhinoo97-svg/ConservativeFaceStudio/actions/runs/38411614908): SUCCESS, percorso Worker reale con pesi verificati e contratto di evidenza installato. Non qualifica il DamageMask storico rifiutato o il prodotto finale.
+
+Ultimo commit di registro: modifica solo documentazione/evidenza, senza codice o pesi. Test del codice: 1767 PASS locali, 2 skip Win32 su Linux, suite Windows verde; smoke reale Windows verde. Nessun installer finale, dataset di training, V5 o test fisico EliteBook prodotto dalla sessione. Nessun valore Target95 dichiarato.
+
+STATO DI ARRESTO AUTORIZZATO DAL MANDATO: fase 3 aperta; fallback 3DDFA/BFM incompatibile con l'uso del prodotto. Fasi 4–11 non avviate nella sessione. PROSSIMO PASSO ESATTO invariato: fallback per pose estreme con licenza compatibile e allineamento denso per componente, seguito dal gate della fase 3.
