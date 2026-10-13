@@ -1,0 +1,77 @@
+CONSERVATIVE FACE STUDIO — MANDATO CODEX AUTONOMO (FINALE)
+
+Repository: xhinoo97-svg/ConservativeFaceStudio
+Branch unico di lavoro: integration/final-paper-quality-local (crealo da main se non esiste)
+Regole complete: docs/PROJECT_EXECUTION_RULES.md (se manca, crealo dal testo delle regole presente in meta/project-state o nei documenti esistenti). Rileggilo alla fine di OGNI fase e verifica la conformità prima di passare alla successiva.
+Registro di stato: PROJECT_MASTER_STATE.md (aggiornalo alla fine di ogni fase).
+
+RUOLO
+Sei il responsabile tecnico unico: architect, ML engineer, tester, Windows release engineer. L'utente non scrive codice: vuole solo un installer Windows unico, offline, funzionante. Lavora in autonomia, senza chiedere conferme per decisioni tecniche reversibili. Fermati solo per: credenziali mancanti, licenza incompatibile, azione irreversibile, test che richiede l'hardware fisico dell'utente.
+
+OBIETTIVO DEL PRODOTTO
+Input: 1 foto MAIN + da 0 a 9 foto di referenza della stessa persona (anche parziali, pose/luci diverse).
+Output: UNA foto finale naturale, senza sticker, emoji, scarabocchi, blur, mosaico o artefatti JPEG, con la stessa identità, posa ed espressione della MAIN. Naso, occhi, bocca, mento e sorriso sani della MAIN non vanno cambiati. I componenti danneggiati si prendono, nell'ordine, da: MAIN osservata, referenza verificata, simmetria, generazione del modello (marcata GENERATED_MODEL_INFERRED), oppure UNRESOLVED. Ogni componente può venire da una referenza diversa (es. naso da ref 2, occhio destro da ref 5, bocca da ref 1).
+Hardware target: HP EliteBook 1030 G3, Intel CPU, 16 GB RAM, senza GPU dedicata. Codice CPU-first, con CUDA usato automaticamente se presente (CUDAExecutionProvider/torch.cuda), altrimenti CPU con thread limitati. Un solo modello pesante in RAM alla volta, scaricato a fine blocco (del, gc.collect(), empty_cache). RAM < 80%.
+Uso: solo su foto proprie o con consenso. Training solo su dataset di adulti con licenza documentata; mai minori, mai scraping da social.
+
+REGOLE IMMUTABILI
+- Soglia SFace 0.363 mai abbassata. Una referenza wrong-person non può mai fornire pixel (wrong-person pixels = 0).
+- Provenienza per pixel registrata; zero violazioni.
+- Non toccare le regioni sane senza un miglioramento misurato.
+- Non risolvere errori disabilitando test, abbassando soglie, usando mock al posto di modelli reali o trasformando errori in PASS.
+- La UI non mostra mai un modello non eseguito: usa SKIPPED/ROLLBACK/ABSTAIN/ERROR veritieri.
+- V3 e V4 sono consumati: non modificarli né rieseguirli. PR #2 non va unita come certificata.
+- Alla fine esiste UNA sola versione: un branch, una configurazione, un model pack, un installer.
+
+ORDINE CRONOLOGICO (non saltare fasi; ogni fase finisce con test verdi, commit, push, CI verde, registro aggiornato)
+
+FASE 0 — Inventario (veloce)
+Leggi il repo, i branch, gli SHA e i documenti. Produci in PROJECT_MASTER_STATE.md una tabella per modello: nei documenti / nel codice / collegato alla pipeline / con peso reale / testato. Elenca il codice morto e i no-op (es. Enhance blend=0.0).
+
+FASE 1 — Unificazione
+Da main crea integration/final-paper-quality-local. Integra in ordine: le correzioni valide di Track A (hotfix/real-world-restoration-v1.1), il protocollo generico (protocol/v5-certification-hardening, senza i marker V4), i moduli Track B (research/paper-quality-local-v2) uno alla volta, con i test dopo ogni gruppo. Niente merge cieco. Registra origine, conflitti e decisioni. I vecchi branch restano read-only.
+Gate: suite di test completa verde.
+
+FASE 2 — Pipeline end-to-end funzionante PRIMA della qualità
+Fai girare tutti e 13 i blocchi (Import, Deblur, Enhance, Face/Landmarks, Align References, Detect Damage, Select Best Regions, Repair/Inpaint, Fusion, Pose, Identity Check, Upscale, Export) con i modelli già presenti. Ogni blocco: input/output reali, gestione errori, rollback, timer, test unitario e di integrazione. Correggi il no-op Enhance.
+Gate: una MAIN + 0, 1 e 3 referenze producono un output senza crash.
+
+FASE 3 — Geometria densa
+YuNet + SFace per rilevamento e identità. MediaPipe Face Landmarker (478 punti) come primario, 3DDFA_V2 (ONNX CPU) per pose estreme. Allinea ogni referenza alla geometria della MAIN, componente per componente, senza frontalizzare l'output.
+
+FASE 4 — Damage detector a due teste
+Testa 1 (overlay): sticker, emoji, scarabocchi, linee, black bar, blocchi opachi → maschera precisa, si rimuove solo l'overlay.
+Testa 2 (degradazione): blur globale/locale/motion/defocus, pixelazione, mosaico, JPEG → instradamento verso FBCNN/NAFNet/Restormer.
+Architettura CPU-friendly (es. LR-ASPP MobileNetV3 o SegFormer-B0) addestrata su degradazioni sintetiche riproducibili + immagini realmente degradate.
+Gate DEV: precisione binaria ≥0.95, recall ≥0.90, F1 sticker ≥0.90, F1 scribble ≥0.90, F1 blur ≥0.85.
+
+FASE 5 — Banca componenti
+Collega davvero alla pipeline PersonalizedReferenceBank, PersonalizedComponentSelector, reference-first repair e fusione per componente. Banche separate: occhio dx/sx, sopracciglio dx/sx, naso, philtrum, bocca, guancia dx/sx, mento, mascella, fronte, contorno. Per ogni referenza: rilevamento, verifica identità, posa, danno, visibilità del componente, allineamento.
+Gate: test con naso, occhio dx, occhio sx e bocca da 4 referenze diverse, con posa ed espressione della MAIN preservate.
+
+FASE 6 — Modelli avanzati (non solo leggeri)
+Qualifica in quest'ordine di priorità: FBCNN, NAFNet, Restormer, GFPGAN 1.4, CodeFormer, GPEN, RestoreFormer++, poi quelli con referenza: DMDNet, RefFaceInpainting, RefineFIR, InstantRestore, ReF-LDM. Clona i repository ufficiali in third_party/ (commit fissato), estrai solo l'architettura, il caricamento dei pesi e il pre/post-processing necessari per il volto, e verifica la parità numerica con l'implementazione ufficiale. Registra per ognuno: repo, commit, licenza del codice e dei pesi, URL, SHA-256, RAM, tempo e qualità sul dominio femminile adulto. Tieni un modello solo se migliora le metriche in modo misurabile.
+
+FASE 7 — Ottimizzazione per l'EliteBook
+Solo sul crop del volto, tiling, ONNX Runtime, OpenVINO (Intel), INT8 con calibrazione dove la parità regge. Due modalità nello stesso installer: LOCAL STANDARD (veloce) e PAPER QUALITY (modelli pesanti, più lenta, ma senza blocchi).
+
+FASE 8 — Training solo dove serve
+Se una metrica resta sotto target: dataset identity-disjoint TRAIN/DEV/VALIDATION/HOLDOUT, adulti con licenza, varietà di tonalità della pelle, età, trucco, occhiali e pose. Pilot da 100–200 identità, poi scala. Fine-tuning o adapter sul modello migliore, tenuto solo se migliora senza peggiorare l'identità. Dopo 3 tentativi falliti sulla stessa famiglia, cambia approccio.
+
+FASE 9 — Matrice di test MAIN + 0…9 referenze
+Per ogni numero di referenze: danni singoli e misti, 3 severità, pose diverse, referenze parziali/sfocate/senza volto/wrong-person/duplicate/corrotte. Report separati per numero di referenze e per tipo di danno.
+Target: accepted_success_rate ≥95% (dove l'informazione reale esiste), nessun sottogruppo <90%, zero errori runtime, astensioni e rollback riportati a parte (non gonfiano il 95%).
+
+FASE 10 — UI e timeline
+Timeline reale dei 13 blocchi: "Blocco 8/13 — Repair con CodeFormer | 4.2s | ETA 2.1s", modello e peso caricati, percentuale totale ponderata sui tempi reali, ETA totale, CPU/RAM, referenza scelta per componente, stati veritieri. UI reattiva (worker thread), annullamento sicuro.
+
+FASE 11 — Release
+Model pack offline con SHA-256 verificati, installer Windows unico (PyInstaller + Inno Setup o equivalente), build e smoke test su runner Windows CI con rete disattivata. Prepara TEST_ELITEBOOK.bat: un doppio clic esegue lo smoke test e la matrice ridotta e scrive report_elitebook.json che l'utente ricaricherà. Se le metriche sono verdi, esegui una sola certificazione V5 su un holdout nuovo, secondo le regole.
+
+GESTIONE ERRORI (sempre)
+Log completo → riproduzione minima → classificazione della causa (codice, dipendenza, peso, hash, preprocessing, memoria, Windows, CI, licenza) → ricerca nell'ordine: paper e repo ufficiale, issue ufficiali, documentazione, poi forum (solo come pista, sempre verificata localmente) → correzione minima → test di regressione → suite completa → CI. Non fermarti a chiedere: risolvi e documenta.
+
+STILE DI LAVORO
+Niente introduzioni né teoria. Commit piccoli e descrittivi. A fine task scrivi in PROJECT_MASTER_STATE.md: fase, SHA, test passati/falliti, metriche, percentuale reale di completamento, PROSSIMO PASSO ESATTO. Non dichiarare mai "finito", "perfetto" o "95%" senza le metriche misurate che lo dimostrano.
+
+INIZIA ORA dalla FASE 0 e prosegui con le fasi successive finché il task lo permette.

@@ -1,0 +1,326 @@
+{
+  "captured_at": "2026-10-13",
+  "source_head": "dca9b3534dbeffec11a7cee4b3dd8c449a5872d8",
+  "branch": "integration/final-paper-quality-local",
+  "remote_branches": [
+    "origin/feature/block-pipeline-v1 f476c6f04b57b658fd152a0a82e5b50cb5afbdbc",
+    "origin/hotfix/real-world-restoration-v1.1 77687b3b171f4e9989fcf486834f2d8b7a52f591",
+    "origin/integration/final-paper-quality-local dca9b3534dbeffec11a7cee4b3dd8c449a5872d8",
+    "origin/main 2767513f95dde2d417e7c6f1faf2357149a1a32f",
+    "origin/meta/project-state b8620b5f1e6d7e70608ce67448a8d506f7e11d4e",
+    "origin/protocol/v5-certification-hardening 268188c5a2540455ff804383cb583b16546b62f1",
+    "origin/release/v1-certified 2767513f95dde2d417e7c6f1faf2357149a1a32f",
+    "origin/research/face-restoration-v2 757a3f60e2f012a1d0b1758c7280bfdd492f33df",
+    "origin/research/paper-quality-local-v2 6d57725aae087bb4a3144d521d91346999f9a4fd"
+  ],
+  "models": [
+    {
+      "key": "opencv_yunet",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "Face/Landmarks; YuNet",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+    },
+    {
+      "key": "opencv_sface",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "Identity; SFace",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+    },
+    {
+      "key": "nafnet_gopro_width32",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "nafnet_sidd_width32",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "restormer_motion_deblur",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "restormer_real_denoise",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "mirnet_fivek_enhance",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "zero_dce_plus",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "mediapipe_face_landmarker",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "bisenet_face_parsing",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "dmdnet",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "lama_big",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "3ddfa_mb1",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "insightface_identity",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "realesrgan_x2plus",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "opencv_nafnet_deblur",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "Deblur; NAFNet",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "07263f416febecce10193dd648e950b22e397cf521eedab1a114ef77b2bc9587"
+    },
+    {
+      "key": "face_parsing_resnet18_onnx",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "semantic support",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "0d9bd318e46987c3bdbfacae9e2c0f461cae1c6ac6ea6d43bbe541a91727e33f"
+    },
+    {
+      "key": "head_pose_mobilenetv2_onnx",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "pose gate",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "1e902872868e483bd0e4f8f4a8ff2a4d61c2ccbca9dadf748e5479b5cc86a9e9"
+    },
+    {
+      "key": "opencv_lama_inpaint",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "generated residual fallback",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "7df918ac3921d3daf0aae1d219776cf0dc4e4935f035af81841b40adcf74fdf2"
+    },
+    {
+      "key": "codeformer_v010",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "1009e537e0c2a07d4cabce6355f53cb66767cd4b4297ec7a4a64ca4b8a5684b7"
+    },
+    {
+      "key": "gfpgan_v13",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "c953a88f2727c85c3d9ae72e2bd4846bbaf59fe6972ad94130e23e7017524a70"
+    },
+    {
+      "key": "restoreformer_v13_asset",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": "07404d446d62ca3d5ed38b1de09a947a1e77d46dbccec961a74d713a8f24ace0"
+    },
+    {
+      "key": "refstar_research",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "instantrestore_research",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "osdface_research",
+      "documented": "model catalog",
+      "code": "manifest; executable loader only where role is stated",
+      "pipeline_role": "NOT_ACTIVE; candidate/catalog only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "fbcnn_color",
+      "documented": "mandate and/or evidence registry",
+      "code": "InstalledPaperQualityRuntime JPEG; development only",
+      "pipeline_role": "InstalledPaperQualityRuntime JPEG; development only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "lraspp_damage_mask",
+      "documented": "mandate and/or evidence registry",
+      "code": "DamageMaskRuntime; rejected development artifact",
+      "pipeline_role": "DamageMaskRuntime; rejected development artifact",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "deeplab_yunet_v2",
+      "documented": "mandate and/or evidence registry",
+      "code": "research only; frozen gate FAIL",
+      "pipeline_role": "research only; frozen gate FAIL",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "gfpgan_v14",
+      "documented": "mandate and/or evidence registry",
+      "code": "research vertical slice only",
+      "pipeline_role": "research vertical slice only",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "gpen_bfr512",
+      "documented": "mandate and/or evidence registry",
+      "code": "pinned upstream entry; no active installed route",
+      "pipeline_role": "pinned upstream entry; no active installed route",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "restoreformer_plus_plus",
+      "documented": "mandate and/or evidence registry",
+      "code": "NOT_PRESENT",
+      "pipeline_role": "NOT_PRESENT",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "reffaceinpainting",
+      "documented": "mandate and/or evidence registry",
+      "code": "NOT_PRESENT",
+      "pipeline_role": "NOT_PRESENT",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "refinefir",
+      "documented": "mandate and/or evidence registry",
+      "code": "NOT_PRESENT",
+      "pipeline_role": "NOT_PRESENT",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    },
+    {
+      "key": "ref_ldm",
+      "documented": "mandate and/or evidence registry",
+      "code": "NOT_PRESENT",
+      "pipeline_role": "NOT_PRESENT",
+      "weight_present": false,
+      "inference_tested_this_session": false,
+      "sha256": null
+    }
+  ],
+  "inference_claims": "NOT_RUN in this session; historical evidence remains candidate-specific",
+  "consumed_holdouts_touched": false
+}

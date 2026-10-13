@@ -1,0 +1,45 @@
+name: Integration regression
+
+on:
+  push:
+    branches: [integration/final-paper-quality-local]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+      XDG_DATA_HOME: ${{ runner.temp }}/cfs-test-data
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install development test dependencies
+        run: python -m pip install -r requirements-integration-tests.txt
+      - name: Compile application and research
+        run: python -m compileall -q app research scripts tests
+      - name: Run full regression suite
+        run: python -m pytest -q --junitxml=integration-pytest.xml
+      - name: Save regression evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: integration-regression-${{ matrix.os }}
+          path: integration-pytest.xml
+          if-no-files-found: error
+          retention-days: 30

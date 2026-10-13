@@ -1,0 +1,6 @@
+# Development gate only; these dependencies are not added to the installer.
+-r requirements.txt
+-r requirements-dev.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0+cpu
+torchvision==0.29.0+cpu
